@@ -4,6 +4,29 @@ What's new in ps5upload, written for humans.
 
 ---
 
+## 4.1.3
+
+Fixes for PS4 backward-compat title resolution, Windows installer deps, and
+several dependency security advisories.
+
+- **Fixed: PS4 BC titles show as bare IDs in the games list.** PS4 titles
+  running under backwards compatibility store their names only in `app.db` —
+  not in the per-title appmeta folder. When sqlite symbols are unavailable
+  (FW 5.10 and 9.60), the payload now falls back to a raw file scan of
+  `app.db`, extracting title names directly from the SQLite B-tree pages.
+  The engine's title resolver now has a three-tier fallback chain:
+  `param.json` → `param.sfo` → `app.db` query.
+- **Fixed: Windows 10 installer missing WebView2 runtime.** The NSIS
+  installer now bundles the WebView2 bootstrapper so first-run on Windows 10
+  no longer silently fails when the Edge WebView2 runtime isn't present.
+- **Fixed: Remote Play error masking + JXR screenshot signature.** Remote
+  Play cancellation no longer masks the real `sceRemoteplayInitialize` error
+  code, and JXR (JPEG XR) screenshots are correctly identified by their
+  file signature rather than relying on extension alone.
+- **Security: dependency updates.** Patched `quinn-proto`, and bumped the
+  engine and frontend dependency groups to clear outstanding Dependabot
+  advisories.
+
 ## 4.1.2
 
 A payload reliability patch. Fixes a helper crash ~5 seconds after install
