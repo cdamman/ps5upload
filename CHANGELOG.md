@@ -4,6 +4,28 @@ What's new in ps5upload, written for humans.
 
 ---
 
+## 4.1.5
+
+Security hardening patch for the system file read feature (4.1.4).
+
+- **Fixed: symlink escape in unsafe-read mode.** The `is_safe_unsafe_read_path`
+  check now restricts reads to the three documented system partitions
+  (`/system`, `/system_data`, `/system_ex`) only. Previously, any absolute
+  path without `..` was accepted in unsafe mode, meaning virtual filesystems
+  like `/dev`, `/proc`, `/kernel` were reachable. Additionally, the check now
+  resolves symlinks via `realpath()` and re-validates the canonical path —
+  a symlink inside `/data` pointing to a forbidden location is rejected,
+  mirroring the same CWE-59 guard used for writable-root operations.
+- **Fixed: `is_unsafe_read_request` whitespace tolerance.** The JSON
+  `"unsafe":true` flag matcher now tolerates whitespace around the colon
+  (e.g. `"unsafe": true`). Previously only the exact no-space form matched;
+  a future client emitting spaced JSON would silently fail to engage
+  unsafe mode.
+- **Fixed: `is_profile_avatar_read_path` dotdot check.** Replaced bare
+  `strstr(p, "..")` with the component-aware `path_has_dotdot_component()`,
+  consistent with the rest of the codebase. Legitimate filenames containing
+  `..` (e.g. `file..bak`) are no longer false-positive rejected.
+
 ## 4.1.4
 
 New: optional system-file read access for the File Browser.
