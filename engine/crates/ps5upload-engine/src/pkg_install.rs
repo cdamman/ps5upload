@@ -29,6 +29,7 @@ use axum::{
 use ps5upload_core::pkg_install::{
     err_code_message, pkg_install, pkg_install_status, InstallPhase, PkgInstallRequest,
     PkgInstallResponse, PkgInstallStatus, APPINST_VIA_LOCAL_FLAG, APPINST_VIA_SHELLUI_FLAG,
+    APPINST_VIA_TIER0_FLAG,
 };
 use ps5upload_pkg::{
     extract_from_ffpkg, inspect_ffpkg, parse_pkg, parse_split_pkg, PkgKind, PkgMetadata,
@@ -1058,7 +1059,9 @@ fn install_synthetic_done_grace_sec() -> u64 {
 fn is_synthetic_done_tier(task_id: Option<i32>) -> bool {
     match task_id {
         Some(tid) if tid >= 0 => {
-            (tid & APPINST_VIA_SHELLUI_FLAG) != 0 || (tid & APPINST_VIA_LOCAL_FLAG) != 0
+            (tid & APPINST_VIA_SHELLUI_FLAG) != 0
+                || (tid & APPINST_VIA_LOCAL_FLAG) != 0
+                || (tid & APPINST_VIA_TIER0_FLAG) != 0
         }
         _ => false,
     }
@@ -1168,15 +1171,24 @@ fn install_verdict(obs: &TrackerObs) -> InstallVerdict {
         return InstallVerdict::Complete;
     }
     // Synthetic-DONE grace: for installs where the payload reported Done
-    // immediately (shellui-rpc / appinst-local tiers), trust the payload's
-    // signal after a grace period. These tiers fire-and-forget — Sony handles
-    // completion in the background, and the user verifies via the PS5's
-    // notification panel. The byte-settle check above may never trip for
-    // local-disk installs (pkg already on disk, no further free-space drop).
+    // immediately (shellui-rpc / appinst-local / tier0-worker tiers), trust
+    // the payload's signal after a grace period. These tiers fire-and-forget
+    // — Sony handles completion in the background, and the user verifies via
+    // the PS5's notification panel. The byte-settle check above may never
+    // trip for local-disk installs (pkg already on disk, no further
+    // free-space drop).
+    //
+    // We accept the grace on BOTH `Some(false)` (verified Absent — common on
+    // extended-storage installs where the mount is namespaced away from our
+    // FS_LIST_DIR view) AND `None` (unverifiable firmware — common on newer
+    // FW like 12.xx where app.db is unreadable). Previously only `Some(false)`
+    // was accepted, which caused installs on unverifiable FW to stall forever
+    // (issue #230 — "stuck on installing" on macOS/FW 12.20).
+    //
     // We still require the grace period so a genuine install failure (Sony
     // returns error shortly after accept) is caught by the stall deadline.
     if let Some(grace) = obs.synthetic_done_grace_sec {
-        if obs.registered == Some(false) && obs.idle_sec >= grace {
+        if obs.registered != Some(true) && obs.idle_sec >= grace {
             return InstallVerdict::Complete;
         }
     }
@@ -2756,6 +2768,18 @@ mod tests {
     }
 
     #[test]
+    fn verdict_synthetic_done_grace_completes_on_unverifiable_fw() {
+        // Issue #230: on firmware where verify_launchable returns None
+        // (Unsupported — e.g. FW 12.20 where app.db is unreadable), the
+        // grace path must STILL fire for synthetic-DONE tiers. Previously
+        // only Some(false) was accepted, causing installs on unverifiable
+        // FW to stall forever ("stuck on installing").
+        let mut o = obs(None, 0, 25_000_000_000, 180);
+        o.synthetic_done_grace_sec = Some(180);
+        assert_eq!(install_verdict(&o), InstallVerdict::Complete);
+    }
+
+    #[test]
     fn verdict_synthetic_done_grace_not_yet_elapsed_stays_installing() {
         // Before the grace period elapses, a synthetic-DONE install that
         // hasn't registered and hasn't settled should stay Installing —
@@ -2768,14 +2792,14 @@ mod tests {
     }
 
     #[test]
-    fn verdict_synthetic_done_grace_inapplicable_when_registered_unsupported() {
-        // If verify_launchable returned Unsupported (None), the grace path
-        // doesn't apply — that's the unverifiable-FW byte-settle path, not
-        // the synthetic-DONE path. With no bytes and idle past startup,
-        // it stalls (byte-settle would complete if fraction >= 0.99).
-        let mut o = obs(None, 0, 25_000_000_000, 180);
+    fn verdict_synthetic_done_grace_stalls_when_not_registered_true() {
+        // If verify_launchable returned Some(true), the install is already
+        // confirmed Complete via the registered check at the top — the grace
+        // path is never reached. This test documents that the grace condition
+        // explicitly excludes Some(true) via `registered != Some(true)`.
+        let mut o = obs(Some(true), 0, 0, 0);
         o.synthetic_done_grace_sec = Some(180);
-        assert_eq!(install_verdict(&o), InstallVerdict::Stalled);
+        assert_eq!(install_verdict(&o), InstallVerdict::Complete);
     }
 
     #[test]
@@ -2797,6 +2821,10 @@ mod tests {
         // appinst-local flag set: synthetic-done.
         assert!(is_synthetic_done_tier(Some(
             APPINST_VIA_LOCAL_FLAG | 0x1234
+        )));
+        // tier0-worker flag set: synthetic-done (issue #230 — was missing).
+        assert!(is_synthetic_done_tier(Some(
+            APPINST_VIA_TIER0_FLAG | 0x1234
         )));
         // Both the base task-id flag + local: still synthetic-done.
         assert!(is_synthetic_done_tier(Some(
