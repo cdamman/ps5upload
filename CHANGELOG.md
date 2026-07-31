@@ -4,6 +4,15 @@ What's new in ps5upload, written for humans.
 
 ---
 
+## 4.1.8
+
+Dependency maintenance — no behavior changes.
+
+- **Upgraded: docker/login-action v4 → v4.5.2** (CI workflow).
+- **Upgraded: mdns-sd 0.20.2 → 0.20.3** (Tauri mDNS discovery).
+- **Upgraded: lucide-react 1.26.0 → 1.27.0** (icon library).
+- **Upgraded: eslint 10.7.0 → 10.8.0** (dev dependency).
+
 ## 4.1.7
 
 Security: upgrade react-router to v8.3.0 (CVE fix) and fix transitive
