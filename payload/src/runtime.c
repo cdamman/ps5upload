@@ -7272,7 +7272,7 @@ static int handle_fs_mkdir(runtime_state_t *state, int client_fd,
 static int is_profile_avatar_read_path(const char *p) {
     static const char PRE[] = "/system_data/priv/cache/profile/0x";
     if (strncmp(p, PRE, sizeof(PRE) - 1) != 0) return 0;
-    if (strstr(p, "..") != NULL) return 0;
+    if (path_has_dotdot_component(p)) return 0;
     size_t n = strlen(p);
     return (n >= 11 && strcmp(p + n - 11, "/avatar.png") == 0) ||
            (n >= 12 && strcmp(p + n - 12, "/picture.png") == 0);
@@ -7284,18 +7284,67 @@ static int is_profile_avatar_read_path(const char *p) {
  * /system_data/priv, /system_ex). This is READ-ONLY — destructive ops
  * (delete, move, chmod, mkdir, copy, write, mount) ignore this flag
  * entirely and always enforce the full allowlist. The dotdot guard still
- * applies, so traversal attacks are still rejected even in unsafe mode. */
+ * applies, so traversal attacks are still rejected even in unsafe mode.
+ *
+ * Tolerates whitespace between the key and value (serde_json emits no
+ * space, but hand-crafted JSON or a future client might). We scan for
+ * the "unsafe" key, skip optional spaces around the colon, and check
+ * for `true`. Fails closed — any parse ambiguity yields 0 (safe mode). */
 static int is_unsafe_read_request(const char *request_body) {
     if (!request_body) return 0;
-    return strstr(request_body, "\"unsafe\":true") != NULL;
+    const char *s = request_body;
+    while ((s = strstr(s, "\"unsafe\"")) != NULL) {
+        const char *q = s + 8; /* skip past "unsafe" */
+        while (*q == ' ' || *q == '\t') q++;
+        if (*q != ':') { s++; continue; }
+        q++;
+        while (*q == ' ' || *q == '\t') q++;
+        if (strncmp(q, "true", 4) == 0) return 1;
+        s++;
+    }
+    return 0;
 }
 
-/* Validate a path for unsafe read mode: must be absolute, no dotdot
- * components, no relative segments. This is the safety net that stays
- * in place even when the writable-root allowlist is bypassed. */
+/* Validate a path for unsafe read mode. This relaxes the writable-root
+ * allowlist so system partitions become readable, but three guards stay:
+ *   (1) Path must be absolute, no dotdot, no relative segments.
+ *   (2) The lexical path must be under one of the known system read-only
+ *       partitions — not /proc, /dev, /kmem, or arbitrary kernel VFS.
+ *   (3) realpath() resolves symlinks; the canonical form must still
+ *       be under an allowed partition. A symlink inside /data that
+ *       points to /dev/kmem is rejected here. (Same CWE-59 guard
+ *       is_path_allowed uses for the writable roots.)
+ *
+ * If the target file doesn't exist yet (realpath returns NULL), we
+ * fall back to the lexical check — reading a non-existent file just
+ * yields fs_read_stat_failed downstream, there's no symlink to follow. */
+static int is_unsafe_read_root_allowed(const char *p) {
+    if (strncmp(p, "/system/",      8) == 0) return 1;
+    if (strncmp(p, "/system_data/", 13) == 0) return 1;
+    if (strncmp(p, "/system_ex/",   11) == 0) return 1;
+    /* Bare roots (no trailing slash) for the list-dir / stat case. */
+    if (strcmp(p, "/system") == 0) return 1;
+    if (strcmp(p, "/system_data") == 0) return 1;
+    if (strcmp(p, "/system_ex") == 0) return 1;
+    return 0;
+}
 static int is_safe_unsafe_read_path(const char *p) {
     if (!p || p[0] != '/') return 0;
     if (path_has_dotdot_component(p)) return 0;
+    if (!is_unsafe_read_root_allowed(p)) return 0;
+    /* Symlink-escape guard: resolve to canonical form and re-check.
+     * Mirrors the realpath guard in is_path_allowed. If the file
+     * doesn't exist yet, realpath fails — no symlink to follow, so
+     * accept the lexical decision (the subsequent stat() will fail). */
+    char resolved[PATH_MAX];
+    if (realpath(p, resolved) == NULL) return 1;
+    if (!is_unsafe_read_root_allowed(resolved)) {
+        fprintf(stderr,
+                "[payload2] is_safe_unsafe_read_path REJECTED: %s resolves "
+                "to %s (symlink escape outside system partitions)\n",
+                p, resolved);
+        return 0;
+    }
     return 1;
 }
 
