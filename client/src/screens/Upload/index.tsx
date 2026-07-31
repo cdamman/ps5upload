@@ -52,7 +52,7 @@ import { hostOf } from "../../lib/addr";
 import { useScrollLock } from "../../lib/useScrollLock";
 import { pushNotification } from "../../state/notifications";
 import { useRosterStore } from "../../state/roster";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { PageHeader, WarningCard, Button, ConsoleChip } from "../../components";
 import { OverflowMenu } from "../../components/OverflowMenu";
 import FfpkgInspectorPanel from "./FfpkgInspectorPanel";

@@ -1,6 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { BrowserRouter } from "react-router-dom";
+import { BrowserRouter } from "react-router";
 import App from "./App";
 import { RootErrorBoundary } from "./components";
 // Import the theme + lang stores before the first render so their
@@ -62,9 +62,8 @@ installAccidentalReloadGuard();
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <RootErrorBoundary>
-      {/* react-router-dom 7 makes the former v7_startTransition /
-          v7_relativeSplatPath future flags the default behavior, so the
-          `future` prop is gone. */}
+      {/* react-router 8 removed the react-router-dom package;
+          imports come from react-router and react-router/dom. */}
       <BrowserRouter>
         <App />
       </BrowserRouter>

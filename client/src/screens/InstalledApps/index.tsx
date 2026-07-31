@@ -17,7 +17,7 @@ import {
   Clock,
 } from "lucide-react";
 
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { openInFileSystem } from "../../state/fsNavigation";
 import { useConnectionStore } from "../../state/connection";
 import {

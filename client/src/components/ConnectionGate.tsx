@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { Gamepad2, PlugZap, ServerCrash } from "lucide-react";
 
 import { useConnectionStore } from "../state/connection";

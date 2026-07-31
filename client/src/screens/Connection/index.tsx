@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { getAppVersion } from "../../lib/appVersion";
 import { isTauriEnv } from "../../lib/tauriEnv";
 import {

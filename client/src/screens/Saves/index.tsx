@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 // useEffect is consumed inside SaveThumbnail below.
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import {
   Save,
   RefreshCw,

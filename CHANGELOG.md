@@ -4,6 +4,21 @@ What's new in ps5upload, written for humans.
 
 ---
 
+## 4.1.7
+
+Security: upgrade react-router to v8.3.0 (CVE fix) and fix transitive
+`brace-expansion` DoS vulnerability.
+
+- **Upgraded: react-router-dom 7.18.1 → react-router 8.3.0.** The
+  `react-router-dom` package was removed in v8; all imports now come
+  from `react-router`. Fixes the high-severity CSRF bypass advisory
+  (GHSA) affecting RSC mode. Our app uses a standard Vite SPA
+  (BrowserRouter + Routes), so the v8 migration was import-only —
+  no API or behavior changes.
+- **Fixed: brace-expansion transitive dependency.** `npm audit fix`
+  bumped the vulnerable `brace-expansion` package (DoS via unbounded
+  expansion).
+
 ## 4.1.6
 
 Fix: pkg install stuck at "installing" on unverifiable firmware (issue #230).

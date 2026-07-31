@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink } from "react-router";
 import { getAppVersion } from "../lib/appVersion";
 import { isTauriEnv } from "../lib/tauriEnv";
 import {

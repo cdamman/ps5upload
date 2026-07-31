@@ -22,7 +22,7 @@ import {
   ExternalLink,
   ALargeSmall,
 } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { useThemeStore, type Theme } from "../../state/theme";
 import {
   useUiScaleStore,

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { Download, X, Loader2, Sparkles } from "lucide-react";
 
 import { useUpdateStore } from "../state/update";

@@ -1,4 +1,4 @@
-import { Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Outlet, useLocation, useNavigate } from "react-router";
 import { useEffect, useRef, useState } from "react";
 import { Lock, Menu, RefreshCw, X } from "lucide-react";
 import Sidebar from "./Sidebar";
