@@ -4,6 +4,22 @@ What's new in ps5upload, written for humans.
 
 ---
 
+## 4.1.6
+
+Fix: pkg install stuck at "installing" on unverifiable firmware (issue #230).
+
+- **Fixed: installs never completed on FW 12.xx.** On firmware where
+  `app.db` is unreadable (FW 12.20+), `verify_launchable` returns
+  `Unsupported` (`None`), which prevented the synthetic-DONE grace
+  period from firing. The install would succeed on the PS5 but the UI
+  showed "installing" indefinitely. The grace verdict now fires on
+  both `None` (unverifiable) and `Some(false)` (not yet registered).
+- **Fixed: Tier-0 worker installs not recognised as synthetic-DONE.**
+  `is_synthetic_done_tier` now includes `APPINST_VIA_TIER0_FLAG`
+  (0x10000000). Installs via the Tier-0 worker path were missing the
+  synthetic-DONE classification, causing the same stuck-at-installing
+  symptom.
+
 ## 4.1.5
 
 Security hardening patch for the system file read feature (4.1.4).
