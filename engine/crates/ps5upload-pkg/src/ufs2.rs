@@ -388,7 +388,11 @@ impl<R: Read + Seek> Ufs2Image<R> {
                     rec_len,
                 });
             }
-            if inode != 0 && name_len > 0 && off + 8 + name_len <= bytes.len() {
+            if inode != 0
+                && name_len > 0
+                && name_len + 8 <= rec_len as usize
+                && off + 8 + name_len <= bytes.len()
+            {
                 let name = String::from_utf8_lossy(&bytes[off + 8..off + 8 + name_len])
                     .trim_end_matches('\0')
                     .to_string();

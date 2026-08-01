@@ -9921,32 +9921,40 @@ static int handle_power_telemetry(runtime_state_t *state, int client_fd,
     int rc_pwc  = p_sceKernelIccGetPowerUpCause
                     ? p_sceKernelIccGetPowerUpCause(&power_up_cause) : -1;
     if (rc_op == 0) {
-        n += snprintf(body + n, sizeof(body) - n,
-                      "operating_seconds=%u\n", op_secs);
+        int w = snprintf(body + n, sizeof(body) > (size_t)n ? sizeof(body) - n : 0,
+                         "operating_seconds=%u\n", op_secs);
+        if (w > 0) n += (size_t)w > sizeof(body) - n ? (int)(sizeof(body) - n) : w;
     } else {
-        n += snprintf(body + n, sizeof(body) - n,
-                      "operating_seconds=err\n");
+        int w = snprintf(body + n, sizeof(body) > (size_t)n ? sizeof(body) - n : 0,
+                         "operating_seconds=err\n");
+        if (w > 0) n += (size_t)w > sizeof(body) - n ? (int)(sizeof(body) - n) : w;
     }
     if (rc_boot == 0) {
-        n += snprintf(body + n, sizeof(body) - n,
-                      "boot_cycles=%u\n", boot_cycles);
+        int w = snprintf(body + n, sizeof(body) > (size_t)n ? sizeof(body) - n : 0,
+                         "boot_cycles=%u\n", boot_cycles);
+        if (w > 0) n += (size_t)w > sizeof(body) - n ? (int)(sizeof(body) - n) : w;
     } else {
-        n += snprintf(body + n, sizeof(body) - n,
-                      "boot_cycles=err\n");
+        int w = snprintf(body + n, sizeof(body) > (size_t)n ? sizeof(body) - n : 0,
+                         "boot_cycles=err\n");
+        if (w > 0) n += (size_t)w > sizeof(body) - n ? (int)(sizeof(body) - n) : w;
     }
     if (rc_therm == 0) {
-        n += snprintf(body + n, sizeof(body) - n,
-                      "thermal_alert_flags=%u\n", (unsigned)thermal_flags);
+        int w = snprintf(body + n, sizeof(body) > (size_t)n ? sizeof(body) - n : 0,
+                         "thermal_alert_flags=%u\n", (unsigned)thermal_flags);
+        if (w > 0) n += (size_t)w > sizeof(body) - n ? (int)(sizeof(body) - n) : w;
     } else {
-        n += snprintf(body + n, sizeof(body) - n,
-                      "thermal_alert_flags=err\n");
+        int w = snprintf(body + n, sizeof(body) > (size_t)n ? sizeof(body) - n : 0,
+                         "thermal_alert_flags=err\n");
+        if (w > 0) n += (size_t)w > sizeof(body) - n ? (int)(sizeof(body) - n) : w;
     }
     if (rc_pwc == 0) {
-        n += snprintf(body + n, sizeof(body) - n,
-                      "power_up_cause=%u\n", (unsigned)power_up_cause);
+        int w = snprintf(body + n, sizeof(body) > (size_t)n ? sizeof(body) - n : 0,
+                         "power_up_cause=%u\n", (unsigned)power_up_cause);
+        if (w > 0) n += (size_t)w > sizeof(body) - n ? (int)(sizeof(body) - n) : w;
     } else {
-        n += snprintf(body + n, sizeof(body) - n,
-                      "power_up_cause=err\n");
+        int w = snprintf(body + n, sizeof(body) > (size_t)n ? sizeof(body) - n : 0,
+                         "power_up_cause=err\n");
+        if (w > 0) n += (size_t)w > sizeof(body) - n ? (int)(sizeof(body) - n) : w;
     }
     pthread_mutex_lock(&state->state_mtx);
     state->command_count += 1;
@@ -13219,47 +13227,13 @@ static int handle_shell_builtin(const char *cmd_in, char **out_text,
         int any_err = 0;
         for (int i = first; i < argc; i++) {
             const char *p = argv[i];
-            /* Trip-wire on system paths. /system + /system_ex +
-             * /preinst + /preinst_ex are all Sony-mounted ro and
-             * recursive rm would just spam errors; refusing here
-             * surfaces an actionable message.
-             *
-             * Normalize p first so `//system/foo` or `/./system/foo`
-             * can't slip past the prefix check. Naive normalize:
-             * collapse leading `//+` and `/./` into `/`. */
-            char norm[1024];
-            {
-                size_t ni = 0;
-                size_t pi = 0;
-                while (p[pi] && ni + 1 < sizeof(norm)) {
-                    if (p[pi] == '/') {
-                        norm[ni++] = '/';
-                        while (p[pi] == '/' ||
-                               (p[pi] == '/' && p[pi+1] == '.' &&
-                                (p[pi+2] == '/' || p[pi+2] == '\0'))) {
-                            if (p[pi] == '/' && p[pi+1] == '.' &&
-                                (p[pi+2] == '/' || p[pi+2] == '\0')) pi += 2;
-                            else pi++;
-                        }
-                    } else {
-                        norm[ni++] = p[pi++];
-                    }
-                }
-                norm[ni] = '\0';
-            }
-            static const char *banned[] = {
-                "/", "/system", "/system_ex", "/preinst", "/preinst_ex",
-            };
-            int refused = 0;
-            for (size_t b = 0; b < sizeof(banned) / sizeof(banned[0]); b++) {
-                size_t bl = strlen(banned[b]);
-                if (strcmp(norm, banned[b]) == 0) { refused = 1; break; }
-                if (strncmp(norm, banned[b], bl) == 0 && norm[bl] == '/') {
-                    refused = 1;
-                    break;
-                }
-            }
-            if (refused) {
+            /* Path safety: delegate to is_path_allowed(), which covers
+             * the writable-root allowlist (e.g. /data, /user, /mnt),
+             * rejects ".." traversal, and catches symlink escapes via
+             * realpath(). This replaces a broken ad-hoc normalizer +
+             * incomplete banned-prefix list that missed /system_data
+             * and /dev, and could be bypassed by /data/../system_ex. */
+            if (!is_path_allowed(p)) {
                 len = shell_appendf(&out, &cap, len,
                                      "rm: %s: refusing to touch system path\n", p);
                 any_err = 1;
@@ -14316,9 +14290,12 @@ static int appdb_raw_scan(runtime_state_t *state, int client_fd,
             if (rn >= rcap - 700) break;
             if (wrote_one) resp[rn++] = ',';
             wrote_one = 1;
-            rn += snprintf(resp + rn, rcap - rn,
+            int w = snprintf(resp + rn, rn < rcap ? (size_t)(rcap - rn) : 0,
                            "{\"title_id\":\"%s\",\"app_id\":0,\"name\":\"%s\"}",
                            tid_esc, name_esc);
+            if (w < 0) break;
+            if ((size_t)w >= (size_t)(rcap - rn)) { rn = rcap; break; }
+            rn += w;
             strncpy(last_tid, tid, sizeof(last_tid) - 1);
             last_tid[sizeof(last_tid) - 1] = '\0';
         }
@@ -14919,7 +14896,10 @@ static int handle_proc_modules(runtime_state_t *state, int client_fd,
     }
     int cap = 64 * 1024;
     int n = 0;
-    n += snprintf(resp + n, cap - n, "{\"modules\":[");
+    {
+        int w = snprintf(resp + n, cap - n, "{\"modules\":[");
+        if (w < 0 || w >= cap - n) { n = cap; } else { n += w; }
+    }
     int wrote_one = 0;
     for (int i = 0; i < count; i++) {
         sce_module_info_t info;
@@ -14932,10 +14912,13 @@ static int handle_proc_modules(runtime_state_t *state, int client_fd,
         if (n >= cap - 200) break;
         if (wrote_one) resp[n++] = ',';
         wrote_one = 1;
-        n += snprintf(resp + n, cap - n,
-                      "{\"handle\":%d,\"name\":\"%s\","
-                      "\"base\":\"%p\",\"code_size\":%zu}",
-                      handles[i], esc_name, info.base_addr, info.code_size);
+        int w = snprintf(resp + n, n < cap ? (size_t)(cap - n) : 0,
+                       "{\"handle\":%d,\"name\":\"%s\","
+                       "\"base\":\"%p\",\"code_size\":%zu}",
+                       handles[i], esc_name, info.base_addr, info.code_size);
+        if (w < 0) break;
+        if ((size_t)w >= (size_t)(cap - n)) { n = cap; break; }
+        n += w;
     }
     if (n < cap - 2) {
         resp[n++] = ']';

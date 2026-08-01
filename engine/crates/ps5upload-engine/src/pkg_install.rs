@@ -2407,7 +2407,13 @@ fn parse_range_header(headers: &HeaderMap, total: u64) -> Result<(u64, u64), ()>
 /// Read a byte range `[start, end]` (inclusive) from the split-pkg
 /// part list, crossing part boundaries as needed.
 fn read_split_range(s: &InstallSession, start: u64, end: u64) -> std::io::Result<Vec<u8>> {
-    let mut out = Vec::with_capacity((end - start + 1) as usize);
+    let want_len = usize::try_from(end - start + 1).map_err(|_| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "range too large for usize",
+        )
+    })?;
+    let mut out = Vec::with_capacity(want_len);
     let mut cursor = start;
 
     // Find the part containing `cursor` and stream until we've covered
@@ -2415,12 +2421,17 @@ fn read_split_range(s: &InstallSession, start: u64, end: u64) -> std::io::Result
     // on a single call.
     let mut prefix = 0u64;
     for (i, part_size) in s.part_sizes.iter().enumerate() {
-        let part_end = prefix + part_size;
+        let part_end = prefix.checked_add(*part_size).ok_or_else(|| {
+            std::io::Error::new(std::io::ErrorKind::InvalidData, "part size overflow")
+        })?;
         if cursor < part_end {
             let local_start = cursor - prefix;
             let want_end_global = end.min(part_end - 1);
             let local_end = want_end_global - prefix;
             let take = local_end - local_start + 1;
+            let take_usize = usize::try_from(take).map_err(|_| {
+                std::io::Error::new(std::io::ErrorKind::InvalidInput, "take too large for usize")
+            })?;
 
             let mut f = std::fs::File::open(&s.parts[i])?;
             f.seek(SeekFrom::Start(local_start))?;
@@ -2428,7 +2439,7 @@ fn read_split_range(s: &InstallSession, start: u64, end: u64) -> std::io::Result
             // (previously allocated `chunk` + `out.extend_from_slice`, using
             // up to 2× PKG_HOST_RESPONSE_BYTES_CAP = 32 MiB per request).
             let old_len = out.len();
-            out.resize(old_len + take as usize, 0);
+            out.resize(old_len + take_usize, 0);
             f.read_exact(&mut out[old_len..])?;
 
             cursor = want_end_global + 1;

@@ -6,12 +6,40 @@ What's new in ps5upload, written for humans.
 
 ## 4.1.8
 
-Dependency maintenance — no behavior changes.
+Dependency maintenance + security hardening from full codebase audit.
 
 - **Upgraded: docker/login-action v4 → v4.5.2** (CI workflow).
 - **Upgraded: mdns-sd 0.20.2 → 0.20.3** (Tauri mDNS discovery).
 - **Upgraded: lucide-react 1.26.0 → 1.27.0** (icon library).
 - **Upgraded: eslint 10.7.0 → 10.8.0** (dev dependency).
+- **Security: replaced `rm` command's broken path normalizer with
+  `is_path_allowed()`.** The old code had a logic bug in its
+  `/./` collapsing logic (the `while` condition was tautological)
+  and an incomplete banned-prefix list missing `/system_data` and
+  `/dev`. A path like `/data/../system_ex/foo` could bypass the
+  system-path refusal. The fix delegates to the same battle-tested
+  `is_path_allowed()` function used by all other destructive
+  operations — it rejects `..` traversal, validates against
+  `realpath()`, and covers all writable roots correctly.
+- **Fixed: `snprintf` truncation overflow in `power_telemetry`,
+  `appdb_raw_scan`, and `proc_modules` handlers.** All three used
+  `n += snprintf(buf + n, cap - n, ...)` without checking whether
+  `snprintf` returned a value larger than the remaining space. If
+  the output was ever truncated, `n` would exceed `cap`, making
+  `cap - n` wrap to a huge value (as `size_t`), causing subsequent
+  writes past the buffer. In practice the current data fits in the
+  buffers, but the pattern was a latent vulnerability.
+- **Fixed: integer overflow in `PackPlanner::record_size`** (engine).
+  `size as usize` silently truncated on 32-bit builds; now uses
+  `usize::try_from` + saturating arithmetic to match the guard in
+  `materialise_body`.
+- **Fixed: overflow in `read_split_range`** (engine). `prefix +
+  part_size` could overflow `u64`; `take as usize` could truncate on
+  32-bit. Now uses `checked_add` and `usize::try_from`.
+- **Fixed: UFS2 directory entry `name_len` could exceed `rec_len`**
+  (pkg parser). A crafted UFS2 image could declare `name_len = 1000`
+  inside a 16-byte record, reading past the record boundary into
+  adjacent entries. Now validates `name_len + 8 <= rec_len`.
 
 ## 4.1.7
 

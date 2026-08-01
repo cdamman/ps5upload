@@ -1603,11 +1603,14 @@ impl PackPlanner {
     }
 
     fn record_size(dest_path: &str, size: u64) -> usize {
-        PACKED_RECORD_PREFIX_LEN + dest_path.len() + size as usize
+        let s = usize::try_from(size).unwrap_or(usize::MAX);
+        PACKED_RECORD_PREFIX_LEN
+            .saturating_add(dest_path.len())
+            .saturating_add(s)
     }
 
     fn would_exceed(&self, rec_size: usize) -> bool {
-        !self.records.is_empty() && self.body_size + rec_size > self.target
+        !self.records.is_empty() && self.body_size.saturating_add(rec_size) > self.target
     }
 
     fn start(&mut self, shard_seq: u64) {
