@@ -4,6 +4,65 @@ What's new in ps5upload, written for humans.
 
 ---
 
+## 4.3.2
+
+Version-number fix — the v4.3.0 and v4.3.1 releases shipped code fixes
+but forgot to bump the version strings in the desktop app, engine, and
+payload. This release aligns all version numbers across every component.
+
+- **Fixed: all version strings now report `4.3.2`** — `package.json`,
+  `tauri.conf.json`, both `Cargo.toml`s, `VERSION` file,
+  `package-lock.json`, and the payload's `PS5UPLOAD2_VERSION` define.
+- **Includes all v4.3.1 fixes** (cheat engine crash fix).
+
+---
+
+## 4.3.1
+
+Critical cheat engine crash fix.
+
+- **Fixed: cheat engine payload crash.** The `cheat_file_t` struct was
+  ~1.1 MB and was allocated on the stack in 5 functions. The PS5
+  payload thread stack is too small for this, causing an immediate
+  stack overflow and payload crash whenever any cheat endpoint was
+  called (`/cheats/get`, `/cheats/toggle`, etc.). All 5 stack
+  allocations were changed to heap (`malloc`/`free`), and the struct
+  limits were reduced (`MAX_MODS_PER_FILE` 256→64, `MAX_MEM_ENTRIES`
+  64→32).
+- **Stress-tested: 42,000+ commands across two PS5s with zero crashes.**
+
+---
+
+## 4.3.0
+
+Major feature release — cheats, SDK changer, FTP, TMDB, fan curves,
+firmware spoofing, backup/restore, remote play, and more.
+
+- **Cheat engine** — Download, toggle, and apply cheats from
+  GoldHEN/etaHEN repositories. Supports JSON, SHN, and MC4 formats.
+  Background watcher auto-applies patches when a game starts.
+- **SDK Changer** — Scan installed titles and patch/restore the SDK
+  version in `param.sfo`. Includes restore-from-backup.
+- **FTP server** — Full FTP server on the PS5 with `SITE MTRW` support
+  for remounting system partitions read-write.
+- **TMDB integration** — Fetch and store game cover art and metadata
+  from TMDB. Region selector for accurate results.
+- **Fan curve control** — Custom fan curve with temperature/duty
+  points. Persisted across reboots.
+- **Firmware spoofing** — View and spoof the reported firmware version.
+- **Backup/restore** — Snapshot, list, restore, and delete system
+  backups.
+- **Remote Play** — Enable/disable and check Remote Play status.
+- **Notifications** — List persistent notifications.
+- **Activity log** — Transfer log (renamed from "Activity") tracks all
+  file operations with DB query support.
+- **Docker & Android builds** — Engine runs in Docker; full Android
+  build support.
+- **FTP thread persistence fix** — Stopping FTP (`port:0`) before
+  redeploying the payload prevents zombie threads.
+
+---
+
 ## 4.1.8
 
 Dependency maintenance + security hardening from full codebase audit.
