@@ -57,8 +57,8 @@
 #define MAX_CHEAT_FILEPATH  300
 #define MAX_TITLE_ID        16
 #define MAX_CHEAT_NAME      256
-#define MAX_MODS_PER_FILE   256
-#define MAX_MEM_ENTRIES     64
+#define MAX_MODS_PER_FILE   64
+#define MAX_MEM_ENTRIES     32
 #define MAX_HEX_BYTES       256
 #define MAX_JSON_BUF        (256 * 1024)
 #define CHEAT_FILE_MAX      (4 * 1024 * 1024)
@@ -1101,21 +1101,26 @@ static void apply_patches_for_game(pid_t pid, intptr_t base,
 
     int total_writes = 0;
     for (int i = 0; i < n; i++) {
-        cheat_file_t cf;
-        if (load_cheat_file(files[i].path, files[i].format, &cf) != 0)
+        cheat_file_t *cf = (cheat_file_t *)malloc(sizeof(cheat_file_t));
+        if (!cf) continue;
+        if (load_cheat_file(files[i].path, files[i].format, cf) != 0) {
+            free(cf);
             continue;
+        }
 
         if (pt_attach(pid) != 0) {
+            free(cf);
             return;
         }
-        for (int m = 0; m < cf.mod_count; m++) {
+        for (int m = 0; m < cf->mod_count; m++) {
             char err[128];
             /* Patches are always-on: turn_on = 1 */
-            if (apply_mod(pid, base, &cf.mods[m], 1, err, sizeof(err)) == 0) {
+            if (apply_mod(pid, base, &cf->mods[m], 1, err, sizeof(err)) == 0) {
                 total_writes++;
             }
         }
         pt_detach(pid, 0);
+        free(cf);
     }
     atomic_store(&g_patches_last, n);
     atomic_fetch_add(&g_patches_total, total_writes);
@@ -1127,25 +1132,29 @@ static void reapply_enabled_for_game(pid_t pid, intptr_t base,
     int n = find_cheat_files(title_id, files, 16, 0 /* cheats */);
 
     for (int i = 0; i < n; i++) {
-        cheat_file_t cf;
-        if (load_cheat_file(files[i].path, files[i].format, &cf) != 0)
+        cheat_file_t *cf = (cheat_file_t *)malloc(sizeof(cheat_file_t));
+        if (!cf) continue;
+        if (load_cheat_file(files[i].path, files[i].format, cf) != 0) {
+            free(cf);
             continue;
-        load_state(title_id, &cf);
+        }
+        load_state(title_id, cf);
 
         int has_enabled = 0;
-        for (int m = 0; m < cf.mod_count; m++) {
-            if (cf.mods[m].enabled) { has_enabled = 1; break; }
+        for (int m = 0; m < cf->mod_count; m++) {
+            if (cf->mods[m].enabled) { has_enabled = 1; break; }
         }
-        if (!has_enabled) continue;
+        if (!has_enabled) { free(cf); continue; }
 
-        if (pt_attach(pid) != 0) return;
-        for (int m = 0; m < cf.mod_count; m++) {
-            if (cf.mods[m].enabled) {
+        if (pt_attach(pid) != 0) { free(cf); return; }
+        for (int m = 0; m < cf->mod_count; m++) {
+            if (cf->mods[m].enabled) {
                 char err[128];
-                apply_mod(pid, base, &cf.mods[m], 1, err, sizeof(err));
+                apply_mod(pid, base, &cf->mods[m], 1, err, sizeof(err));
             }
         }
         pt_detach(pid, 0);
+        free(cf);
         return; /* Only process the first matching file */
     }
 }
@@ -1331,13 +1340,16 @@ int cheats_list_mods(const char *title_id, char *buf, size_t cap,
     int first = 1;
 
     for (int fi = 0; fi < n; fi++) {
-        cheat_file_t cf;
-        if (load_cheat_file(files[fi].path, files[fi].format, &cf) != 0)
+        cheat_file_t *cf = (cheat_file_t *)malloc(sizeof(cheat_file_t));
+        if (!cf) continue;
+        if (load_cheat_file(files[fi].path, files[fi].format, cf) != 0) {
+            free(cf);
             continue;
-        load_state(title_id, &cf);
+        }
+        load_state(title_id, cf);
 
-        for (int mi = 0; mi < cf.mod_count; mi++) {
-            cheat_mod_t *m = &cf.mods[mi];
+        for (int mi = 0; mi < cf->mod_count; mi++) {
+            cheat_mod_t *m = &cf->mods[mi];
             if (!first) jb_raw(&jb, ",");
             first = 0;
 
@@ -1350,6 +1362,7 @@ int cheats_list_mods(const char *title_id, char *buf, size_t cap,
                       m->enabled ? "true" : "false");
             flat++;
         }
+        free(cf);
     }
 
     jb_raw(&jb, "]}");
@@ -1399,36 +1412,46 @@ int cheats_toggle(const char *title_id, int mod_index, int turn_on,
     /* Resolve flat index to file + mod */
     int flat = 0;
     int target_fi = -1, target_mi = -1;
-    cheat_file_t target_cf;
-    memset(&target_cf, 0, sizeof(target_cf));
+    cheat_file_t *target_cf = (cheat_file_t *)malloc(sizeof(cheat_file_t));
+    if (!target_cf) {
+        if (err) snprintf(err, err_cap, "out of memory");
+        return -1;
+    }
+    memset(target_cf, 0, sizeof(*target_cf));
 
     for (int fi = 0; fi < n && target_fi < 0; fi++) {
-        cheat_file_t cf;
-        if (load_cheat_file(files[fi].path, files[fi].format, &cf) != 0)
+        cheat_file_t *cf = (cheat_file_t *)malloc(sizeof(cheat_file_t));
+        if (!cf) continue;
+        if (load_cheat_file(files[fi].path, files[fi].format, cf) != 0) {
+            free(cf);
             continue;
-        for (int mi = 0; mi < cf.mod_count; mi++) {
+        }
+        for (int mi = 0; mi < cf->mod_count; mi++) {
             if (flat == mod_index) {
                 target_fi = fi;
                 target_mi = mi;
-                memcpy(&target_cf, &cf, sizeof(cf));
+                memcpy(target_cf, cf, sizeof(*target_cf));
                 break;
             }
             flat++;
         }
+        free(cf);
     }
 
     if (target_fi < 0) {
+        free(target_cf);
         if (err) snprintf(err, err_cap, "cheat index out of range");
         return -1;
     }
 
-    cheat_mod_t *mod = &target_cf.mods[target_mi];
+    cheat_mod_t *mod = &target_cf->mods[target_mi];
 
     /* Resolve module base */
     intptr_t mod_base = base;
     if (mod->module_name[0]) {
         mod_base = resolve_module_base(pid, mod->module_name);
         if (!mod_base) {
+            free(target_cf);
             if (err) snprintf(err, err_cap,
                               "module \"%s\" is not loaded in the target process",
                               mod->module_name);
@@ -1438,6 +1461,7 @@ int cheats_toggle(const char *title_id, int mod_index, int turn_on,
 
     /* Attach and apply */
     if (pt_attach(pid) != 0) {
+        free(target_cf);
         if (err) snprintf(err, err_cap, "pt_attach failed (errno=%d)", errno);
         return -1;
     }
@@ -1450,10 +1474,11 @@ int cheats_toggle(const char *title_id, int mod_index, int turn_on,
         /* Update persisted state (only for checkbox type) */
         if (strcmp(mod->type, "button") != 0) {
             mod->enabled = turn_on;
-            save_state(title_id, &target_cf, 1);
+            save_state(title_id, target_cf, 1);
         }
     }
 
+    free(target_cf);
     invalidate_rg_cache();
     return rc;
 }
