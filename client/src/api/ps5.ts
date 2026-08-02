@@ -3822,3 +3822,356 @@ export async function notifList(sinceSeq = 0, addr?: string): Promise<Notificati
   });
 }
 
+// ── Cheat engine ─────────────────────────────────────────────────────
+export interface CheatTitle {
+  title_id: string;
+  name: string;
+  running: boolean;
+}
+
+export interface CheatsListResponse {
+  titles: CheatTitle[];
+  game_running: boolean;
+  game_title_id: string;
+}
+
+export interface CheatMod {
+  index: number;
+  name: string;
+  desc: string;
+  type: string;
+  on: boolean;
+}
+
+export interface CheatsGetResponse {
+  mods: CheatMod[];
+  error?: string;
+}
+
+export interface CheatsToggleResponse {
+  ok: boolean;
+  err?: string;
+}
+
+export interface CheatsStatusResponse {
+  enabled: boolean;
+  patches_last: number;
+  patches_total: number;
+  game_running: boolean;
+  game_title_id: string;
+  game_pid: number;
+}
+
+export async function cheatsList(addr?: string): Promise<CheatsListResponse> {
+  return invoke("cheats_list", { req: { addr: addr ?? null } });
+}
+
+export async function cheatsGet(titleId: string, addr?: string): Promise<CheatsGetResponse> {
+  return invoke("cheats_get", { req: { addr: addr ?? null, title_id: titleId } });
+}
+
+export async function cheatsToggle(
+  titleId: string,
+  index: number,
+  on: boolean,
+  addr?: string,
+): Promise<CheatsToggleResponse> {
+  return invoke("cheats_toggle", {
+    req: { addr: addr ?? null, title_id: titleId, index, on },
+  });
+}
+
+export async function cheatsDelete(titleId: string, addr?: string): Promise<{ ok: boolean }> {
+  return invoke("cheats_delete", { req: { addr: addr ?? null, title_id: titleId } });
+}
+
+export async function cheatsReload(addr?: string): Promise<{ ok: boolean }> {
+  return invoke("cheats_reload", { req: { addr: addr ?? null } });
+}
+
+export async function cheatsStatus(addr?: string): Promise<CheatsStatusResponse> {
+  return invoke("cheats_status", { req: { addr: addr ?? null } });
+}
+
+export async function cheatsEngineSet(
+  enabled: boolean,
+  addr?: string,
+): Promise<{ ok: boolean; enabled: boolean }> {
+  return invoke("cheats_engine_set", { req: { addr: addr ?? null, enabled } });
+}
+
+// ── Community cheat repos ───────────────────────────────────────────
+export interface CheatRepo {
+  id: string;
+  name: string;
+  raw_base: string;
+  index_files: string[];
+}
+
+export interface CheatRepoEntry {
+  filename: string;
+  game_title: string;
+  format: string;
+}
+
+export interface CheatRepoSearchResponse {
+  entries: CheatRepoEntry[];
+  error?: string;
+}
+
+export interface CheatDownloadResponse {
+  ok: boolean;
+  path?: string;
+  size?: number;
+  error?: string;
+}
+
+export async function cheatsReposList(): Promise<CheatRepo[]> {
+  return invoke("cheats_repos_list", {});
+}
+
+export async function cheatsReposSearch(
+  query: string,
+): Promise<CheatRepoSearchResponse> {
+  return invoke("cheats_repos_search", { req: { query } });
+}
+
+export async function cheatsReposDownload(
+  repoId: string,
+  filename: string,
+  titleId: string,
+  addr?: string,
+): Promise<CheatDownloadResponse> {
+  return invoke("cheats_repos_download", {
+    req: { addr: addr ?? null, repo_id: repoId, filename, title_id: titleId },
+  });
+}
+
+// ── Activity tracker ─────────────────────────────────────────────────
+export interface ActivityEntry {
+  title_id: string;
+  launches: number;
+  total_seconds: number;
+  last_launch_ts: number;
+  last_seen_ts: number;
+  session_active: boolean;
+}
+
+export interface ActivityGetResponse {
+  titles: ActivityEntry[];
+  current_title: string;
+}
+
+export interface ActivityDbRow {
+  title_id: string;
+  name?: string;
+  total_seconds?: number;
+}
+
+export interface ActivityDbQueryResponse {
+  rows: ActivityDbRow[];
+  source: string;
+  error?: string;
+}
+
+export async function activityGet(addr?: string): Promise<ActivityGetResponse> {
+  return invoke("activity_get", { req: { addr: addr ?? null } });
+}
+
+export async function activityDbQuery(
+  query?: string,
+  addr?: string,
+): Promise<ActivityDbQueryResponse> {
+  return invoke("activity_db_query", {
+    req: { addr: addr ?? null, query: query ?? "recently_played" },
+  });
+}
+
+// ── SDK Changer ──────────────────────────────────────────────────────
+export interface SdkTitle {
+  title_id: string;
+  name: string;
+  sdk_version: string;
+  fw_required: string;
+}
+
+export interface SdkScanResponse {
+  titles: SdkTitle[];
+  error?: string;
+}
+
+export interface SdkPatchResponse {
+  ok: boolean;
+  title_id?: string;
+  target_sdk?: string;
+  error?: string;
+}
+
+export async function sdkScan(addr?: string): Promise<SdkScanResponse> {
+  return invoke("sdk_scan", { req: { addr: addr ?? null } });
+}
+
+export async function sdkPatch(
+  titleId: string,
+  targetSdk: string,
+  addr?: string,
+): Promise<SdkPatchResponse> {
+  return invoke("sdk_patch", {
+    req: { addr: addr ?? null, title_id: titleId, target_sdk: targetSdk },
+  });
+}
+
+export interface SdkRestoreResponse {
+  ok: boolean;
+  title_id?: string;
+  restored?: number;
+  error?: string;
+}
+
+export async function sdkRestore(
+  titleId: string,
+  addr?: string,
+): Promise<SdkRestoreResponse> {
+  return invoke("sdk_restore", {
+    req: { addr: addr ?? null, title_id: titleId },
+  });
+}
+
+// ── TMDB / PlayStation Store metadata ────────────────────────────────
+export interface TmdbFetchResponse {
+  ok: boolean;
+  title_id?: string;
+  error?: string;
+  np_title_id?: string;
+  content_id?: string;
+  name?: string;
+  description?: string;
+  icon?: string;
+  category?: string;
+  publisher?: string;
+  release_date?: string;
+  genre?: string;
+  sku?: string;
+}
+
+export async function tmdbFetch(
+  titleId: string,
+  refresh?: boolean,
+  addr?: string,
+  region?: string,
+): Promise<TmdbFetchResponse> {
+  return invoke("tmdb_fetch", {
+    req: {
+      addr: addr ?? null,
+      title_id: titleId,
+      refresh: refresh ?? false,
+      region: region ?? null,
+    },
+  });
+}
+
+// ── FW Spoof detection ───────────────────────────────────────────────
+export interface FwSpoofStatusResponse {
+  system_sw_version: string;
+  system_sw_raw: string;
+  kernel_release: string;
+  kernel_fw_version: string;
+  kernel_version?: string;
+  spoofed: boolean;
+}
+
+export async function fwSpoofStatus(addr?: string): Promise<FwSpoofStatusResponse> {
+  return invoke("fw_spoof_status", { req: { addr: addr ?? null } });
+}
+
+// ── FTP Server ───────────────────────────────────────────────────────
+export interface FtpStartResponse {
+  ok: boolean;
+  port?: number;
+  root?: string;
+  error?: string;
+}
+
+export interface FtpStatusResponse {
+  running: boolean;
+  port: number;
+  connections: number;
+  root?: string;
+}
+
+export async function ftpStart(
+  params: {
+    port?: number;
+    root?: string;
+    readonly?: boolean;
+    user?: string;
+    pass?: string;
+  },
+  addr?: string,
+): Promise<FtpStartResponse> {
+  return invoke("ftp_start", {
+    req: { addr: addr ?? null, ...params },
+  });
+}
+
+export async function ftpStatus(addr?: string): Promise<FtpStatusResponse> {
+  return invoke("ftp_status", { req: { addr: addr ?? null } });
+}
+
+// ── SMB Browser ──────────────────────────────────────────────────────
+export interface SmbShare {
+  name: string;
+  comment: string;
+  share_type: string;
+}
+
+export interface SmbListSharesResponse {
+  shares: SmbShare[];
+}
+
+export interface SmbDirEntry {
+  name: string;
+  is_dir: boolean;
+  size: number;
+  modified?: string;
+}
+
+export interface SmbListDirResponse {
+  entries: SmbDirEntry[];
+}
+
+export async function smbListShares(
+  server: string,
+  user: string,
+  password?: string,
+): Promise<SmbListSharesResponse> {
+  return invoke("smb_list_shares", {
+    req: { server, user, password: password ?? "" },
+  });
+}
+
+export async function smbListDir(
+  server: string,
+  user: string,
+  share: string,
+  path?: string,
+  password?: string,
+): Promise<SmbListDirResponse> {
+  return invoke("smb_list_dir", {
+    req: { server, user, share, path: path ?? "", password: password ?? "" },
+  });
+}
+
+export async function smbDownloadFile(
+  server: string,
+  user: string,
+  share: string,
+  path: string,
+  destPath: string,
+  password?: string,
+): Promise<number> {
+  return invoke("smb_download_file", {
+    req: { server, user, share, path, dest_path: destPath, password: password ?? "" },
+  });
+}
+

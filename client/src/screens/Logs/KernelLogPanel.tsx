@@ -92,11 +92,11 @@ const CATEGORY_LABEL: Record<Category, string> = {
 };
 
 const CATEGORY_BORDER: Partial<Record<Category, string>> = {
-  ps5upload: "border-l-2 border-l-blue-500",
-  "shellui-crash": "border-l-2 border-l-red-500 bg-red-500/5",
-  "kernel-error": "border-l-2 border-l-red-500 bg-red-500/5",
-  "kstuff-payload": "border-l-2 border-l-amber-500",
-  "etahen-payload": "border-l-2 border-l-amber-500",
+  ps5upload: "border-l-2 border-l-[var(--color-accent)]",
+  "shellui-crash": "border-l-2 border-l-[var(--color-bad)] bg-[var(--color-bad)]/5",
+  "kernel-error": "border-l-2 border-l-[var(--color-bad)] bg-[var(--color-bad)]/5",
+  "kstuff-payload": "border-l-2 border-l-[var(--color-warn)]",
+  "etahen-payload": "border-l-2 border-l-[var(--color-warn)]",
 };
 
 function classify(line: string): Category {
@@ -429,7 +429,7 @@ export default function KernelLogPanel() {
           <button
             type="button"
             onClick={jumpToBottom}
-            className="rounded-md bg-[var(--color-accent)] px-2 py-1 text-xs text-[var(--color-accent-contrast)]"
+            className="rounded-md bg-[var(--color-accent)] px-2 py-1 text-xs text-[var(--color-accent-contrast)] transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
           >
             {tr("klog_jump_bottom", undefined, "Jump to latest")}
           </button>

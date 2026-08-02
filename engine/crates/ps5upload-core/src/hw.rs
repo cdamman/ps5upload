@@ -404,13 +404,25 @@ pub const FAN_THRESHOLD_MAX_C: u8 = 80;
 /// than silently clamped, so the UI can surface "you asked for 30,
 /// we'll use 45" explicitly rather than hide the behavior.
 pub fn hw_set_fan_threshold(addr: &str, threshold_c: u8) -> Result<()> {
+    hw_set_fan_threshold_ex(addr, threshold_c, None)
+}
+
+/// Extended variant that optionally sets the reapply interval alongside
+/// the threshold. When `reapply_sec` is `Some(n)`, the body is
+/// `"threshold reapply_sec"` — the payload parses both and updates the
+/// watcher's interval atomically. `None` sends just `"threshold"`,
+/// preserving backward compatibility with older payloads.
+pub fn hw_set_fan_threshold_ex(addr: &str, threshold_c: u8, reapply_sec: Option<u32>) -> Result<()> {
     if !(FAN_THRESHOLD_MIN_C..=FAN_THRESHOLD_MAX_C).contains(&threshold_c) {
         bail!(
             "threshold {threshold_c}°C is outside the safe range \
              {FAN_THRESHOLD_MIN_C}–{FAN_THRESHOLD_MAX_C}°C"
         );
     }
-    let body = threshold_c.to_string();
+    let body = match reapply_sec {
+        Some(interval) => format!("{threshold_c} {interval}"),
+        None => threshold_c.to_string(),
+    };
     let mut c = Connection::connect(addr)?;
     c.send_frame(FrameType::HwSetFanThreshold, body.as_bytes())?;
     let (hdr, resp) = c.recv_frame()?;

@@ -127,8 +127,16 @@ int hw_guard_try_recover(int sig) {
  * Why 15 s and not faster: the firmware reset happens once per launch
  * transition (not continuously), so any tick smaller than the
  * user-perceptible delay between launch and "fan ramps up" is enough.
- * Going below 5 s would just burn extra ioctls for no thermal gain. */
-#define FAN_REAPPLY_SEC 15
+ * Going below 5 s would just burn extra ioctls for no thermal gain.
+ *
+ * The interval is user-configurable via hw_fan_set_reapply_interval()
+ * (persisted to fan_reapply.conf). Default is 15 s if no persisted
+ * file exists. Clamped to [1, 300] so a misconfigured value can't
+ * disable the watcher (0 would spin-loop) or make it effectively
+ * dormant (>300 s risks a game-launch reset going uncountered). */
+#define FAN_REAPPLY_DEFAULT_SEC  15
+#define FAN_REAPPLY_MIN_SEC       1
+#define FAN_REAPPLY_MAX_SEC     300
 
 /* ── Sony kernel function pointers ───────────────────────────────
  *
@@ -859,6 +867,11 @@ int hw_storage_get_text(char *out, size_t out_cap, size_t *out_written,
  * armed it stays for the payload's lifetime (detached, no join). */
 static atomic_int g_pinned_threshold_c   = 0;
 static atomic_int g_fan_watcher_started  = 0;
+/* Reapply interval in seconds (user-configurable, persisted). Loaded
+ * from fan_reapply.conf at boot, defaults to FAN_REAPPLY_DEFAULT_SEC.
+ * The watcher thread reads this every cycle so a runtime change takes
+ * effect on the next tick without restarting the thread. */
+static atomic_int g_fan_reapply_sec = FAN_REAPPLY_DEFAULT_SEC;
 /* Serializes the (ioctl, pin) sequence inside `hw_fan_set_threshold`.
  *
  * Two concurrent FTX2 callers setting different thresholds could
@@ -896,6 +909,7 @@ void hw_fan_pin_threshold(uint8_t threshold_c) {
  * by a half-written JSON parser. */
 
 #define FAN_PERSIST_PATH PS5UPLOAD2_RUNTIME_ROOT "/fan_threshold.conf"
+#define FAN_REAPPLY_PERSIST_PATH PS5UPLOAD2_RUNTIME_ROOT "/fan_reapply.conf"
 
 /* Returns the persisted threshold, or 0 if no valid file exists.
  * The caller (main) treats 0 as "nothing to restore". */
@@ -927,6 +941,42 @@ static void hw_fan_save_persisted(uint8_t threshold_c) {
     fclose(fp);
 }
 
+/* ── Reapply interval persistence ──────────────────────────────────
+ *
+ * Same trivial one-line-file format as the threshold. Loaded once at
+ * boot from hw_fan_load_reapply_interval (called by main alongside
+ * hw_fan_load_persisted). Saved on every successful call to
+ * hw_fan_set_reapply_interval. */
+
+int hw_fan_load_reapply_interval(void) {
+    FILE *fp = fopen(FAN_REAPPLY_PERSIST_PATH, "r");
+    if (!fp) return FAN_REAPPLY_DEFAULT_SEC;
+    int val = 0;
+    int matched = fscanf(fp, "%d", &val);
+    fclose(fp);
+    if (matched != 1 || val < FAN_REAPPLY_MIN_SEC || val > FAN_REAPPLY_MAX_SEC)
+        return FAN_REAPPLY_DEFAULT_SEC;
+    return val;
+}
+
+static void hw_fan_save_reapply_interval(int seconds) {
+    FILE *fp = fopen(FAN_REAPPLY_PERSIST_PATH, "w");
+    if (!fp) return;
+    fprintf(fp, "%d\n", seconds);
+    fclose(fp);
+}
+
+int hw_fan_reapply_interval(void) {
+    return atomic_load(&g_fan_reapply_sec);
+}
+
+void hw_fan_set_reapply_interval(int seconds) {
+    if (seconds < FAN_REAPPLY_MIN_SEC) seconds = FAN_REAPPLY_MIN_SEC;
+    if (seconds > FAN_REAPPLY_MAX_SEC) seconds = FAN_REAPPLY_MAX_SEC;
+    atomic_store(&g_fan_reapply_sec, seconds);
+    hw_fan_save_reapply_interval(seconds);
+}
+
 /* Forward decl — defined below the setter so it can share the same
  * fd open/ioctl pattern via a static helper. */
 static int hw_fan_apply_locked(uint8_t threshold_c);
@@ -939,9 +989,14 @@ static void *hw_fan_watcher_thread_fn(void *arg) {
     (void)syscall(SYS_thr_set_name, -1, "ps5upload-fan");
 
     for (;;) {
-        /* Sleep in 1 s chunks rather than one 15 s sleep so a future
-         * shutdown signal could break out cheaply if we ever add one. */
-        for (int i = 0; i < FAN_REAPPLY_SEC; i++) sleep(1);
+        /* Sleep in 1 s chunks rather than one long sleep so a future
+         * shutdown signal could break out cheaply if we ever add one.
+         * Read the interval each iteration so a runtime change via
+         * hw_fan_set_reapply_interval() takes effect on the next cycle. */
+        int interval = atomic_load(&g_fan_reapply_sec);
+        if (interval < FAN_REAPPLY_MIN_SEC) interval = FAN_REAPPLY_MIN_SEC;
+        if (interval > FAN_REAPPLY_MAX_SEC) interval = FAN_REAPPLY_MAX_SEC;
+        for (int i = 0; i < interval; i++) sleep(1);
 
         int t = atomic_load(&g_pinned_threshold_c);
         if (t < HW_FAN_THRESHOLD_MIN || t > HW_FAN_THRESHOLD_MAX) {

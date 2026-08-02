@@ -866,6 +866,465 @@ pub async fn notif_list(req: NotifListReq) -> Result<JsonValue, String> {
     get_json(&url).await
 }
 
+// ── Cheat engine ─────────────────────────────────────────────────────
+#[derive(Debug, Deserialize)]
+pub struct CheatsAddrReq {
+    #[serde(default)]
+    pub addr: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CheatsGetReq {
+    #[serde(default)]
+    pub addr: Option<String>,
+    pub title_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CheatsToggleReq {
+    #[serde(default)]
+    pub addr: Option<String>,
+    pub title_id: String,
+    pub index: i32,
+    #[serde(default = "crate::commands::default_true")]
+    pub on: bool,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CheatsDeleteReq {
+    #[serde(default)]
+    pub addr: Option<String>,
+    pub title_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CheatsEngineSetReq {
+    #[serde(default)]
+    pub addr: Option<String>,
+    pub enabled: bool,
+}
+
+#[tauri::command]
+pub async fn cheats_list(req: CheatsAddrReq) -> Result<JsonValue, String> {
+    let base = engine::url();
+    let mut url = format!("{base}/api/ps5/cheats/list");
+    if let Some(ref addr) = req.addr {
+        url.push('?');
+        url.push_str(&format!("addr={}", urlencoding(addr)));
+    }
+    get_json(&url).await
+}
+
+#[tauri::command]
+pub async fn cheats_get(req: CheatsGetReq) -> Result<JsonValue, String> {
+    let base = engine::url();
+    let mut url = format!("{base}/api/ps5/cheats/get");
+    let mut params = Vec::new();
+    if let Some(ref addr) = req.addr {
+        params.push(format!("addr={}", urlencoding(addr)));
+    }
+    params.push(format!("title_id={}", urlencoding(&req.title_id)));
+    if !params.is_empty() {
+        url.push('?');
+        url.push_str(&params.join("&"));
+    }
+    get_json(&url).await
+}
+
+#[tauri::command]
+pub async fn cheats_toggle(req: CheatsToggleReq) -> Result<JsonValue, String> {
+    let base = engine::url();
+    let url = format!("{base}/api/ps5/cheats/toggle");
+    post_json(&url, &serde_json::json!({
+        "addr": req.addr,
+        "title_id": req.title_id,
+        "index": req.index,
+        "on": req.on,
+    }))
+    .await
+}
+
+#[tauri::command]
+pub async fn cheats_delete(req: CheatsDeleteReq) -> Result<JsonValue, String> {
+    let base = engine::url();
+    let mut url = format!("{base}/api/ps5/cheats/delete");
+    let mut params = Vec::new();
+    if let Some(ref addr) = req.addr {
+        params.push(format!("addr={}", urlencoding(addr)));
+    }
+    params.push(format!("title_id={}", urlencoding(&req.title_id)));
+    if !params.is_empty() {
+        url.push('?');
+        url.push_str(&params.join("&"));
+    }
+    get_json(&url).await
+}
+
+#[tauri::command]
+pub async fn cheats_reload(req: CheatsAddrReq) -> Result<JsonValue, String> {
+    let base = engine::url();
+    let mut url = format!("{base}/api/ps5/cheats/reload");
+    if let Some(ref addr) = req.addr {
+        url.push('?');
+        url.push_str(&format!("addr={}", urlencoding(addr)));
+    }
+    get_json(&url).await
+}
+
+#[tauri::command]
+pub async fn cheats_status(req: CheatsAddrReq) -> Result<JsonValue, String> {
+    let base = engine::url();
+    let mut url = format!("{base}/api/ps5/cheats/status");
+    if let Some(ref addr) = req.addr {
+        url.push('?');
+        url.push_str(&format!("addr={}", urlencoding(addr)));
+    }
+    get_json(&url).await
+}
+
+#[tauri::command]
+pub async fn cheats_engine_set(req: CheatsEngineSetReq) -> Result<JsonValue, String> {
+    let base = engine::url();
+    let url = format!("{base}/api/ps5/cheats/engine-set");
+    post_json(&url, &serde_json::json!({
+        "addr": req.addr,
+        "enabled": req.enabled,
+    }))
+    .await
+}
+
+// ── Community cheat repo browse + download ────────────────────────────
+#[derive(Debug, Deserialize)]
+pub struct CheatsRepoSearchReq {
+    #[serde(default)]
+    pub query: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CheatsRepoDownloadReq {
+    #[serde(default)]
+    pub addr: Option<String>,
+    pub repo_id: String,
+    pub filename: String,
+    pub title_id: String,
+}
+
+#[tauri::command]
+pub async fn cheats_repos_list() -> Result<JsonValue, String> {
+    let base = engine::url();
+    let url = format!("{base}/api/ps5/cheats/repos/list");
+    get_json(&url).await
+}
+
+#[tauri::command]
+pub async fn cheats_repos_search(req: CheatsRepoSearchReq) -> Result<JsonValue, String> {
+    let base = engine::url();
+    let url = format!(
+        "{base}/api/ps5/cheats/repos/search?query={}",
+        urlencoding(&req.query)
+    );
+    get_json(&url).await
+}
+
+#[tauri::command]
+pub async fn cheats_repos_download(req: CheatsRepoDownloadReq) -> Result<JsonValue, String> {
+    let base = engine::url();
+    let url = format!("{base}/api/ps5/cheats/repos/download");
+    post_json(&url, &serde_json::json!({
+        "addr": req.addr,
+        "repo_id": req.repo_id,
+        "filename": req.filename,
+        "title_id": req.title_id,
+    }))
+    .await
+}
+
+// ── Activity tracker ─────────────────────────────────────────────────
+#[derive(Debug, Deserialize)]
+pub struct ActivityDbQueryReq {
+    #[serde(default)]
+    pub addr: Option<String>,
+    #[serde(default = "default_db_query")]
+    pub query: String,
+}
+
+fn default_db_query() -> String {
+    "recently_played".to_string()
+}
+
+#[tauri::command]
+pub async fn activity_get(req: CheatsAddrReq) -> Result<JsonValue, String> {
+    let base = engine::url();
+    let mut url = format!("{base}/api/ps5/activity/get");
+    if let Some(ref addr) = req.addr {
+        url.push('?');
+        url.push_str(&format!("addr={}", urlencoding(addr)));
+    }
+    get_json(&url).await
+}
+
+#[tauri::command]
+pub async fn activity_db_query(req: ActivityDbQueryReq) -> Result<JsonValue, String> {
+    let base = engine::url();
+    let mut url = format!("{base}/api/ps5/activity/db-query");
+    let mut params = Vec::new();
+    if let Some(ref addr) = req.addr {
+        params.push(format!("addr={}", urlencoding(addr)));
+    }
+    params.push(format!("query={}", urlencoding(&req.query)));
+    if !params.is_empty() {
+        url.push('?');
+        url.push_str(&params.join("&"));
+    }
+    get_json(&url).await
+}
+
+// ── SDK Changer ──────────────────────────────────────────────────────
+#[derive(Debug, Deserialize)]
+pub struct SdkPatchReq {
+    #[serde(default)]
+    pub addr: Option<String>,
+    pub title_id: String,
+    pub target_sdk: String,
+}
+
+#[tauri::command]
+pub async fn sdk_scan(req: CheatsAddrReq) -> Result<JsonValue, String> {
+    let base = engine::url();
+    let mut url = format!("{base}/api/ps5/sdk/scan");
+    if let Some(ref addr) = req.addr {
+        url.push('?');
+        url.push_str(&format!("addr={}", urlencoding(addr)));
+    }
+    get_json(&url).await
+}
+
+#[tauri::command]
+pub async fn sdk_patch(req: SdkPatchReq) -> Result<JsonValue, String> {
+    let base = engine::url();
+    let url = format!("{base}/api/ps5/sdk/patch");
+    post_json(&url, &serde_json::json!({
+        "addr": req.addr,
+        "title_id": req.title_id,
+        "target_sdk": req.target_sdk,
+    }))
+    .await
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SdkRestoreReq {
+    #[serde(default)]
+    pub addr: Option<String>,
+    pub title_id: String,
+}
+
+#[tauri::command]
+pub async fn sdk_restore(req: SdkRestoreReq) -> Result<JsonValue, String> {
+    let base = engine::url();
+    let url = format!("{base}/api/ps5/sdk/restore");
+    post_json(&url, &serde_json::json!({
+        "addr": req.addr,
+        "title_id": req.title_id,
+    }))
+    .await
+}
+
+// ── TMDB / PlayStation Store metadata ────────────────────────────────
+#[derive(Debug, Deserialize)]
+pub struct TmdbFetchReq {
+    #[serde(default)]
+    pub addr: Option<String>,
+    pub title_id: String,
+    #[serde(default)]
+    pub refresh: bool,
+    #[serde(default)]
+    pub region: Option<String>,
+}
+
+#[tauri::command]
+pub async fn tmdb_fetch(req: TmdbFetchReq) -> Result<JsonValue, String> {
+    let base = engine::url();
+    let mut url = format!("{base}/api/ps5/tmdb/fetch");
+    let mut params = Vec::new();
+    if let Some(ref addr) = req.addr {
+        params.push(format!("addr={}", urlencoding(addr)));
+    }
+    params.push(format!("title_id={}", urlencoding(&req.title_id)));
+    if req.refresh {
+        params.push("refresh=true".to_string());
+    }
+    if let Some(ref region) = req.region {
+        params.push(format!("region={}", urlencoding(region)));
+    }
+    url.push('?');
+    url.push_str(&params.join("&"));
+    get_json(&url).await
+}
+
+// ── FW Spoof detection ───────────────────────────────────────────────
+#[tauri::command]
+pub async fn fw_spoof_status(req: CheatsAddrReq) -> Result<JsonValue, String> {
+    let base = engine::url();
+    let mut url = format!("{base}/api/ps5/fw-spoof/status");
+    if let Some(ref addr) = req.addr {
+        url.push('?');
+        url.push_str(&format!("addr={}", urlencoding(addr)));
+    }
+    get_json(&url).await
+}
+
+// ── FTP Server ───────────────────────────────────────────────────────
+#[derive(Debug, Deserialize)]
+pub struct FtpStartReq {
+    #[serde(default)]
+    pub addr: Option<String>,
+    #[serde(default)]
+    pub port: u16,
+    #[serde(default)]
+    pub root: String,
+    #[serde(default)]
+    pub readonly: bool,
+    #[serde(default)]
+    pub user: String,
+    #[serde(default)]
+    pub pass: String,
+}
+
+#[tauri::command]
+pub async fn ftp_start(req: FtpStartReq) -> Result<JsonValue, String> {
+    let base = engine::url();
+    let url = format!("{base}/api/ps5/ftp/start");
+    post_json(&url, &serde_json::json!({
+        "addr": req.addr,
+        "port": req.port,
+        "root": req.root,
+        "readonly": req.readonly,
+        "user": req.user,
+        "pass": req.pass,
+    }))
+    .await
+}
+
+#[tauri::command]
+pub async fn ftp_status(req: CheatsAddrReq) -> Result<JsonValue, String> {
+    let base = engine::url();
+    let mut url = format!("{base}/api/ps5/ftp/status");
+    if let Some(ref addr) = req.addr {
+        url.push('?');
+        url.push_str(&format!("addr={}", urlencoding(addr)));
+    }
+    get_json(&url).await
+}
+
+// ── SMB Browser ──────────────────────────────────────────────────────
+#[derive(Debug, Deserialize)]
+pub struct SmbListSharesReq {
+    pub server: String,
+    pub user: String,
+    #[serde(default)]
+    pub password: String,
+}
+
+#[tauri::command]
+pub async fn smb_list_shares(req: SmbListSharesReq) -> Result<JsonValue, String> {
+    let base = engine::url();
+    let url = format!("{base}/api/smb/list-shares");
+    let body = serde_json::json!({
+        "server": req.server,
+        "user": req.user,
+        "password": req.password,
+    });
+    post_json(&url, &body).await
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SmbListDirReq {
+    pub server: String,
+    pub user: String,
+    #[serde(default)]
+    pub password: String,
+    pub share: String,
+    #[serde(default)]
+    pub path: String,
+}
+
+#[tauri::command]
+pub async fn smb_list_dir(req: SmbListDirReq) -> Result<JsonValue, String> {
+    let base = engine::url();
+    let url = format!("{base}/api/smb/list-dir");
+    let body = serde_json::json!({
+        "server": req.server,
+        "user": req.user,
+        "password": req.password,
+        "share": req.share,
+        "path": req.path,
+    });
+    post_json(&url, &body).await
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SmbDownloadReq {
+    pub server: String,
+    pub user: String,
+    #[serde(default)]
+    pub password: String,
+    pub share: String,
+    pub path: String,
+    pub dest_path: String,
+}
+
+/// Download a file from an SMB share and save it to `dest_path` (an
+/// absolute path the user picked via the save dialog). The engine
+/// returns raw binary (`application/octet-stream`), so we can't use
+/// `post_json` — we fetch bytes and write them to disk directly.
+#[tauri::command]
+pub async fn smb_download_file(req: SmbDownloadReq) -> Result<u64, String> {
+    let base = engine::url();
+    let url = format!("{base}/api/smb/download");
+    let body = serde_json::json!({
+        "server": req.server,
+        "user": req.user,
+        "password": req.password,
+        "share": req.share,
+        "path": req.path,
+    });
+
+    let client = http_client_long();
+    let resp = client
+        .post(&url)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("engine request failed: {e}"))?;
+
+    let status = resp.status();
+    if !status.is_success() {
+        let text = resp.text().await.unwrap_or_default();
+        let detail = serde_json::from_str::<JsonValue>(&text)
+            .ok()
+            .and_then(|v| v.get("error").and_then(|e| e.as_str()).map(String::from))
+            .unwrap_or(text);
+        return Err(format!("engine HTTP {status}: {detail}"));
+    }
+
+    let bytes = resp
+        .bytes()
+        .await
+        .map_err(|e| format!("read response body: {e}"))?;
+
+    let dest_path = req.dest_path.clone();
+    let written = tokio::task::spawn_blocking(move || {
+        let dest = super::save_dest::resolve_save_dest(&dest_path, "smb-download.bin")?;
+        std::fs::write(dest.as_path(), &bytes)
+            .map_err(|e| format!("write {}: {e}", dest.display()))?;
+        Ok::<u64, String>(bytes.len() as u64)
+    })
+    .await
+    .map_err(|e| format!("download task: {e}"))??;
+
+    Ok(written)
+}
+
 /// Render a 440² crop/fit preview (returns `{ "data_url": "data:image/png;..." }`).
 /// Proxies `/api/profile/avatar/preview`.
 #[tauri::command]

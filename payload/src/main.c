@@ -15,6 +15,7 @@
 #include "hw_guard.h"
 #include "kernel_rw_lock.h"
 #include "hw_info.h"
+#include "wake_watchdog.h"
 
 /* Sony "debugger" / system-process authid. Setting our process's
  * ucred authid to this value grants the credentials Sony's kernel
@@ -473,12 +474,18 @@ int main(void) {
      * the threshold stays at firmware default and the desktop's next
      * fan-set command re-pins it. */
     {
+        /* Restore persisted reapply interval before the watcher starts
+         * so it uses the user's saved value from the first tick. */
+        int reapply_sec = hw_fan_load_reapply_interval();
+        hw_fan_set_reapply_interval(reapply_sec);
+
         int persisted = hw_fan_load_persisted();
         if (persisted >= HW_FAN_THRESHOLD_MIN && persisted <= HW_FAN_THRESHOLD_MAX) {
             const char *err = NULL;
             if (hw_fan_set_threshold((uint8_t)persisted, &err) == 0) {
                 startup_trace("FAN_RESTORED");
-                printf("fan: restored persisted threshold %d°C\n", persisted);
+                printf("fan: restored persisted threshold %d°C (reapply=%ds)\n",
+                       persisted, reapply_sec);
             } else {
                 startup_trace("FAN_RESTORE_FAILED");
                 /* Non-fatal — the watcher is still armed via the pin,
@@ -486,6 +493,17 @@ int main(void) {
             }
         }
     }
+
+    /* Start the rest-mode wake watchdog. Detects when the PS5 wakes
+     * from rest mode (via wall-clock drift) and re-applies ucred
+     * elevation + fan threshold + mount reconciliation. Placed AFTER
+     * the fan restore so the watchdog's re-apply path has a valid pin
+     * to work with on its first wake detection.
+     *
+     * The thread is detached and self-contained — runs for the payload
+     * lifetime with negligible overhead (one sleep(5) per cycle). */
+    start_wake_watchdog();
+    startup_trace("WAKE_WATCHDOG_STARTED");
 
     /* `runtime_reconcile_mounts` is also deliberately not called at
      * startup. It walks `getmntinfo` on potentially-stale entries

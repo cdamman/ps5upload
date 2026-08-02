@@ -121,4 +121,18 @@ void hw_fan_pin_threshold(uint8_t threshold_c);
  * a zero return means "nothing pinned, leave fan at firmware default". */
 int hw_fan_load_persisted(void);
 
+/* Reapply interval — how often the watcher thread re-applies the
+ * pinned fan threshold (in seconds). User-configurable so a power
+ * user who wants faster fan-response during heavy gaming can dial
+ * it down to 5s, or someone who finds the reapply wasteful can push
+ * it up to 60s. Default is 15s. Persisted across reboots. */
+int hw_fan_reapply_interval(void);
+void hw_fan_set_reapply_interval(int seconds);
+
+/* Load the persisted reapply interval from
+ * /data/ps5upload/fan_reapply.conf. Returns the seconds value, or
+ * FAN_REAPPLY_DEFAULT_SEC (15) if no valid persisted file exists.
+ * Call once at boot alongside hw_fan_load_persisted. */
+int hw_fan_load_reapply_interval(void);
+
 #endif /* PS5UPLOAD2_HW_INFO_H */

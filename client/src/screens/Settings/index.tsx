@@ -885,7 +885,7 @@ function SchedulesPanel() {
           type="button"
           onClick={add}
           disabled={!labelDraft.trim() || !/^\d\d:\d\d$/.test(hhmmDraft)}
-          className="rounded-md bg-[var(--color-accent)] px-2 py-1 text-xs text-[var(--color-accent-contrast)] disabled:opacity-50"
+          className="rounded-md bg-[var(--color-accent)] px-2 py-1 text-xs text-[var(--color-accent-contrast)] transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] disabled:opacity-50"
         >
           {tr("schedules_add", undefined, "Add daily")}
         </button>
@@ -1120,7 +1120,7 @@ function BackupRestorePanel() {
           type="button"
           onClick={exportBundle}
           disabled={busy}
-          className="inline-flex items-center gap-1 rounded-md bg-[var(--color-accent)] px-3 py-1.5 text-xs text-[var(--color-accent-contrast)] disabled:opacity-50"
+          className="inline-flex items-center gap-1 rounded-md bg-[var(--color-accent)] px-3 py-1.5 text-xs text-[var(--color-accent-contrast)] transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] disabled:opacity-50"
         >
           {busy ? (
             <Loader2 size={11} className="animate-spin" />

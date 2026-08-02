@@ -58,4 +58,11 @@ int proc_kill(int pid);
  */
 int proc_name_by_pid(int pid, char *out, size_t cap);
 
+/*
+ * Find the first process whose thread-name matches `name` via
+ * sysctl(KERN_PROC_PROC). Returns the pid (>0) on success, -1 if
+ * no match or sysctl fails. No kernel R/W needed.
+ */
+int proc_find_pid_by_name(const char *name);
+
 #endif /* PS5UPLOAD2_PROC_LIST_H */

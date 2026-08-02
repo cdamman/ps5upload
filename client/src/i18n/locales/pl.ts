@@ -2344,12 +2344,62 @@ backup_title: "Kopia zapasowa i przywracanie",
   // SdkChanger extras
 
   // FtpServer extras
+  ftp_title: "Serwer FTP",
+  ftp_subtitle: "Uruchom lekki serwer FTP na PS5 do dostępu do plików",
+  ftp_running: "Serwer FTP uruchomiony",
+  ftp_port: "Port",
+  ftp_connections: "Połączenia",
+  ftp_root: "Katalog główny",
+  ftp_warning: "FTP zapewnia dostęp do plików. Tryb tylko do odczytu jest zalecany.",
+  ftp_port_label: "Port",
+  ftp_root_label: "Katalog główny",
+  ftp_user_label: "Nazwa użytkownika (opcjonalnie)",
+  ftp_pass_label: "Hasło (opcjonalnie)",
+  ftp_readonly: "Tylko do odczytu (zalecane — zapobiega zapisom/usuwaniu)",
+  ftp_start: "Uruchom serwer FTP",
+  ftp_stop: "Zatrzymaj",
 
   // Tmdb extras
+  tmdb_title: "Metadane TMDB",
+  tmdb_subtitle: "Pobierz metadane tytułu z PlayStation Store z pamięci podręcznej PS5",
+  tmdb_not_found: "Tytuł nie znaleziony w PlayStation Store.",
+  tmdb_not_cached: "Brak metadanych w pamięci podręcznej PS5.",
+  tmdb_invalid_id: "Nieprawidłowy format. Oczekiwano CUSA00001_00 lub pełnego content ID (UP9000-CUSA00001_00-LABEL)",
+  tmdb_refresh: "Wymuś odświeżenie",
+  tmdb_fetch: "Pobierz",
 
   // SmbBrowser extras
+  smb_title: "Przeglądarka SMB",
+  smb_subtitle: "Przeglądaj i pobieraj z udziałów SMB2/3 (Windows, Samba, NAS)",
+  smb_server: "Serwer",
+  smb_user: "Nazwa użytkownika",
+  smb_password: "Hasło",
+  smb_connect: "Połącz",
+  smb_up: "W górę",
+  smb_disconnect: "Rozłącz",
+  smb_no_shares: "Brak udziałów",
+  smb_no_shares_desc: "Serwer nie ma dostępnych udziałów",
+  smb_empty: "Pusty katalog",
+  smb_empty_desc: "Ten folder nie zawiera plików",
+  smb_download: "Pobierz",
 
   // FwSpoof extras
+  fw_spoof_title: "Wykrywanie fałszowania oprogramowania",
+  fw_spoof_subtitle: "Wykryj, czy zgłoszona wersja oprogramowania została zmodyfikowana",
+  fw_spoof_detected: "Wykryto fałszowanie",
+  fw_spoof_clean: "Brak fałszowania",
+  fw_spoof_detected_desc: "Zgłoszona wersja oprogramowania nie pasuje do wersji jądra.",
+  fw_spoof_clean_desc: "Zgłoszona wersja oprogramowania wydaje się autentyczna.",
+  fw_spoof_kernel_unknown_warn: "Nie można odczytać wersji jądra — wykrywanie fałszowania może być zawodne.",
+  fw_spoof_details: "Szczegóły",
+  fw_spoof_sw_version: "Wersja oprogramowania systemu",
+  fw_spoof_sw_raw: "Surowa wartość oprogramowania",
+  fw_spoof_kernel: "Wydanie jądra",
+  fw_spoof_kernel_fw: "Wersja oprogramowania jądra",
+  fw_spoof_flag: "Fałszowane",
+  fw_spoof_version_note: "Główna",
+  fw_spoof_minor: "Pomocnicza",
+  fw_spoof_rev: "Rewizja",
 
   // LinuxLoader extras
 

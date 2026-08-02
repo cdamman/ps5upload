@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   MonitorPlay,
   Loader2,
@@ -21,6 +21,7 @@ import { useConnectionStore } from "../../state/connection";
 import { useDocumentVisible } from "../../lib/visibility";
 import { useStaleHostGuard } from "../../lib/staleHostGuard";
 import { transferAddr } from "../../lib/addr";
+import { accountIdToChiakiNumeric } from "../../lib/remoteplay";
 import {
   remoteplayRequest,
   remoteplayStatus,
@@ -42,6 +43,13 @@ export default function RemotePlayScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [copiedAcct, setCopiedAcct] = useState(false);
+  const [copiedChiaki, setCopiedChiaki] = useState(false);
+
+  const chiakiNumeric = useMemo(
+    () => (status?.account_id ? accountIdToChiakiNumeric(status.account_id) : ""),
+    [status?.account_id],
+  );
 
   const isActive =
     status?.state === "starting" || status?.state === "waiting";
@@ -246,8 +254,60 @@ export default function RemotePlayScreen() {
                   "account_id",
                 )}
               </dt>
-              <dd className="font-mono break-all">
-                {status.account_id || "—"}
+              <dd className="space-y-1">
+                {/* Base64 account ID (Chiaki / chiaki-ng) */}
+                <div className="flex items-center gap-2">
+                  <span className="font-mono break-all text-sm">
+                    {status.account_id || "—"}
+                  </span>
+                  {status.account_id && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(status.account_id);
+                          setCopiedAcct(true);
+                          setTimeout(() => setCopiedAcct(false), 2_000);
+                        } catch { /* clipboard unavailable */ }
+                      }}
+                      className="shrink-0 text-[var(--color-muted)]"
+                    >
+                      {copiedAcct ? (
+                        <Check size={12} className="text-[var(--color-good)]" />
+                      ) : (
+                        <Copy size={12} />
+                      )}
+                    </Button>
+                  )}
+                </div>
+                {/* Numeric ID for pxplay / Chiaki classic */}
+                {chiakiNumeric && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-[var(--color-muted)]">pxplay:</span>
+                    <span className="font-mono break-all text-sm text-[var(--color-text)]">
+                      {chiakiNumeric}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(chiakiNumeric);
+                          setCopiedChiaki(true);
+                          setTimeout(() => setCopiedChiaki(false), 2_000);
+                        } catch { /* clipboard unavailable */ }
+                      }}
+                      className="shrink-0 text-[var(--color-muted)]"
+                    >
+                      {copiedChiaki ? (
+                        <Check size={12} className="text-[var(--color-good)]" />
+                      ) : (
+                        <Copy size={12} />
+                      )}
+                    </Button>
+                  </div>
+                )}
               </dd>
               <dt className="flex items-center gap-1 text-[var(--color-muted)]">
                 <Clock size={12} />

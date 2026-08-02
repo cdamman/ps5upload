@@ -368,3 +368,41 @@ int proc_name_by_pid(int pid, char *out, size_t cap) {
     out[i] = '\0';
     return 0;
 }
+
+/* Find the first process whose thread-name matches `name`, via
+ * sysctl(KERN_PROC_PROC). Returns the pid (>0) on success, -1 if no
+ * match or sysctl fails. Same kinfo_proc walk pattern used everywhere
+ * else in this file — no kernel R/W needed. Used by the Remote Play
+ * daemon reset path to locate "SceRemotePlay" before SIGKILL'ing it. */
+int proc_find_pid_by_name(const char *name) {
+    if (!name || !name[0]) return -1;
+
+    int mib[4] = {CTL_KERN, KERN_PROC, KERN_PROC_PROC, 0};
+    size_t buf_size = 0;
+    if (sysctl(mib, 4, NULL, &buf_size, NULL, 0) != 0) return -1;
+    if (buf_size == 0) return -1;
+
+    uint8_t *buf = (uint8_t *)malloc(buf_size);
+    if (!buf) return -1;
+    if (sysctl(mib, 4, buf, &buf_size, NULL, 0) != 0) {
+        free(buf);
+        return -1;
+    }
+
+    int found = -1;
+    for (uint8_t *ptr = buf; ptr < buf + buf_size;) {
+        int ki_structsize = *(int *)ptr;
+        if (ki_structsize <= 0 ||
+            (size_t)(ptr - buf) + (size_t)ki_structsize > buf_size) break;
+        if (ki_structsize <= KINFO_TDNAME_OFFSET) break;
+        pid_t ki_pid = *(pid_t *)&ptr[KINFO_PID_OFFSET];
+        const char *ki_tdname = (const char *)&ptr[KINFO_TDNAME_OFFSET];
+        if (strcmp(ki_tdname, name) == 0) {
+            found = (int)ki_pid;
+            break;
+        }
+        ptr += ki_structsize;
+    }
+    free(buf);
+    return found;
+}

@@ -13,7 +13,7 @@ resolver = "2"
 [workspace.package]
 edition = "2021"
 license = "GPL-3.0-or-later"
-version = "4.1.8"
+version = "4.3.0"
 
 [workspace.dependencies]
 anyhow = "1.0"
@@ -25,3 +25,12 @@ thiserror = "2.0"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal"] }
 tokio-stream = { version = "0.1", features = ["sync"] }
 uuid = { version = "1", features = ["v4"] }
+
+# Speed up debug builds: thinner debug info on macOS, more parallelism.
+[profile.dev]
+split-debuginfo = "unpacked"
+
+# Same for the release engine binary — not a shipped bundle, so trade a
+# little size for faster link times.
+[profile.release]
+debug = false

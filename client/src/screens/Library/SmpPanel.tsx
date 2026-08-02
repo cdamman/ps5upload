@@ -95,7 +95,7 @@ export default function SmpPanel({ mgmtAddr }: { mgmtAddr: string | null }) {
       <div className="flex w-full items-center gap-3 px-4 py-2.5">
         <button
           type="button"
-          className="flex min-w-0 flex-1 items-center gap-3 text-left"
+          className="flex min-w-0 flex-1 items-center gap-3 rounded-sm px-1 py-0.5 text-left transition-colors hover:bg-[var(--color-surface-3)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
           onClick={() => setExpanded((v) => !v)}
           aria-expanded={expanded}
         >
@@ -477,7 +477,7 @@ function SmpAutotuneTable({
                 type="button"
                 onClick={save}
                 disabled={saving}
-                className="rounded-md bg-[var(--color-accent)] px-2 py-0.5 text-xs text-[var(--color-accent-contrast)] disabled:opacity-50"
+                className="rounded-md bg-[var(--color-accent)] px-2 py-0.5 text-xs text-[var(--color-accent-contrast)] transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] disabled:opacity-50"
               >
                 {saving
                   ? tr("smp_autotune_saving", undefined, "Saving…")

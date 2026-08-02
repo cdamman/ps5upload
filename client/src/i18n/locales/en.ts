@@ -2348,12 +2348,62 @@ shortcuts_activate: "Open / activate",
   // SdkChanger extras
 
   // FtpServer extras
+  ftp_title: "FTP Server",
+  ftp_subtitle: "Run a lightweight FTP server on the PS5 for file access",
+  ftp_running: "FTP Server Running",
+  ftp_port: "Port",
+  ftp_connections: "Connections",
+  ftp_root: "Root",
+  ftp_warning: "FTP provides file access. Read-only mode is recommended.",
+  ftp_port_label: "Port",
+  ftp_root_label: "Root Directory",
+  ftp_user_label: "Username (optional)",
+  ftp_pass_label: "Password (optional)",
+  ftp_readonly: "Read-only (recommended — prevents writes/deletes)",
+  ftp_start: "Start FTP Server",
+  ftp_stop: "Stop",
 
   // Tmdb extras
+  tmdb_title: "TMDB Metadata",
+  tmdb_subtitle: "Fetch PlayStation Store title metadata from the PS5 cache",
+  tmdb_not_found: "Title not found on PlayStation Store.",
+  tmdb_not_cached: "No cached metadata on PS5.",
+  tmdb_invalid_id: "Invalid format. Expected CUSA00001_00 or full content ID (UP9000-CUSA00001_00-LABEL)",
+  tmdb_refresh: "Force refresh",
+  tmdb_fetch: "Fetch",
 
   // SmbBrowser extras
+  smb_title: "SMB Browser",
+  smb_subtitle: "Browse and download from SMB2/3 shares (Windows, Samba, NAS)",
+  smb_server: "Server",
+  smb_user: "Username",
+  smb_password: "Password",
+  smb_connect: "Connect",
+  smb_up: "Up",
+  smb_disconnect: "Disconnect",
+  smb_no_shares: "No shares found",
+  smb_no_shares_desc: "The server has no accessible shares",
+  smb_empty: "Empty directory",
+  smb_empty_desc: "This folder contains no files",
+  smb_download: "Download",
 
   // FwSpoof extras
+  fw_spoof_title: "Firmware Spoof Detection",
+  fw_spoof_subtitle: "Detect if the reported firmware version has been modified",
+  fw_spoof_detected: "Spoofing Detected",
+  fw_spoof_clean: "No Spoofing Detected",
+  fw_spoof_detected_desc: "The reported firmware version doesn't match the kernel version.",
+  fw_spoof_clean_desc: "The reported firmware version appears genuine.",
+  fw_spoof_kernel_unknown_warn: "Kernel version could not be read — spoofing detection may be unreliable.",
+  fw_spoof_details: "Details",
+  fw_spoof_sw_version: "System SW Version",
+  fw_spoof_sw_raw: "Raw SW Value",
+  fw_spoof_kernel: "Kernel Release",
+  fw_spoof_kernel_fw: "Kernel FW Version",
+  fw_spoof_flag: "Spoofed",
+  fw_spoof_version_note: "Major",
+  fw_spoof_minor: "Minor",
+  fw_spoof_rev: "Revision",
 
   // LinuxLoader extras
 

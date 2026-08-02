@@ -86,7 +86,7 @@ function useCommands(close: () => void): Command[] {
       nav("/payloads?tab=send", "payloads_tab_send", "Send file", [
         "send payload",
       ]),
-      nav("/activity", "activity", "Activity"),
+      nav("/activity", "transfer_log", "Transfer Log"),
       nav("/stats", "stats", "Stats"),
       nav("/logs", "logs", "Logs"),
       nav("/logs?tab=kernel", "logs_tab_kernel", "Kernel log", [

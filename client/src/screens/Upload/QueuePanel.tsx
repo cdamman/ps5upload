@@ -339,7 +339,7 @@ function ConsoleGroup({
         <button
           type="button"
           onClick={() => setCollapsed((c) => !c)}
-          className="flex min-w-0 items-center gap-2 text-left"
+          className="flex min-w-0 items-center gap-2 rounded-sm px-1 py-0.5 text-left transition-colors hover:bg-[var(--color-surface-3)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
           title={
             collapsed
               ? tr("queue_group_expand", undefined, "Show this console's queue")

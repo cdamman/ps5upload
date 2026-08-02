@@ -36,6 +36,7 @@
 mod engine_log;
 mod local_fs;
 mod pkg_install;
+mod smb;
 #[cfg(feature = "webui")]
 mod webui;
 
@@ -67,7 +68,7 @@ use ps5upload_core::{
     },
     game_meta::{parse_param_json_bytes, parse_param_sfo_bytes},
     hw::{
-        drive_sensors, hw_info, hw_power, hw_set_fan_threshold, hw_storage, hw_temps, proc_list,
+        drive_sensors, hw_info, hw_power, hw_set_fan_threshold_ex, hw_storage, hw_temps, proc_list,
         DriveSensorList, HwInfo, HwPower, HwStorage, HwTemps, ProcList,
     },
     process_mgr::{process_kill, process_list, ProcessKillAck, ProcessListResult},
@@ -1935,10 +1936,18 @@ async fn ps5_hw_power(
 #[derive(Debug, serde::Deserialize)]
 struct TimeSyncReq {
     addr: Option<String>,
-    /// Target wall-clock time as unix seconds (UTC). Caller usually
-    /// passes their own PC's clock; we pass it straight through to
-    /// the payload.
+    /// Target wall-clock time as unix seconds (UTC). Used when
+    /// `use_ntp` is false (or absent). Ignored when `use_ntp` is true.
     target_unix_seconds: i64,
+    /// When true, the engine queries an NTP server (Cloudflare/Google/
+    /// pool.ntp.org) for the current time instead of using the client-
+    /// provided `target_unix_seconds`. This avoids PC-clock drift and
+    /// is the recommended mode for accurate time sync.
+    #[serde(default)]
+    use_ntp: bool,
+    /// Optional custom NTP server. Defaults to Cloudflare → Google →
+    /// pool.ntp.org → Windows (first success wins).
+    ntp_server: Option<String>,
 }
 
 #[derive(Debug, serde::Serialize)]
@@ -1977,9 +1986,37 @@ async fn ps5_time_sync_route(
     Json(req): Json<TimeSyncReq>,
 ) -> impl IntoResponse {
     let addr = mgmt_addr_or_default(req.addr, &state.default_ps5_addr);
-    let target = req.target_unix_seconds;
+
+    // Resolve the target time: either from NTP or from the client-provided value.
+    let target = if req.use_ntp {
+        let custom = req.ntp_server.clone();
+        let ntp_result = tokio::task::spawn_blocking(move || {
+            let servers: Vec<&str> = match &custom {
+                Some(s) => vec![s.as_str()],
+                None => ps5upload_core::sys_time::DEFAULT_NTP_SERVERS.to_vec(),
+            };
+            ps5upload_core::sys_time::ntp_query_unix_seconds(&servers)
+        })
+        .await
+        .map_err(anyhow::Error::from)
+        .and_then(|r| r);
+        match ntp_result {
+            Ok(ts) => ts,
+            Err(e) => {
+                return json_err(
+                    StatusCode::BAD_GATEWAY,
+                    format!("NTP query failed: {e:#}"),
+                )
+                .into_response();
+            }
+        }
+    } else {
+        req.target_unix_seconds
+    };
+
+    let target_final = target;
     let r: Result<PsTimeSetResult, anyhow::Error> =
-        tokio::task::spawn_blocking(move || ps5_time_set(&addr, target))
+        tokio::task::spawn_blocking(move || ps5_time_set(&addr, target_final))
             .await
             .map_err(anyhow::Error::from)
             .and_then(|r| r);
@@ -2374,6 +2411,10 @@ async fn ps5_smp_status(
 struct FanThresholdReq {
     addr: Option<String>,
     threshold_c: u8,
+    /// Optional fan reapply interval in seconds (1–300). When present,
+    /// the payload updates the watcher thread's tick interval AND
+    /// persists it to fan_reapply.conf. Absent = leave interval unchanged.
+    reapply_sec: Option<u32>,
 }
 
 /// POST /api/ps5/hw/fan-threshold
@@ -2387,17 +2428,20 @@ async fn ps5_hw_set_fan_threshold(
 ) -> impl IntoResponse {
     let addr = mgmt_addr_or_default(q.addr, &state.default_ps5_addr);
     let threshold = q.threshold_c;
-    crate::log_info!("hw_set_fan_threshold: addr={addr} threshold_c={threshold}");
-    match tokio::task::spawn_blocking(move || hw_set_fan_threshold(&addr, threshold))
-        .await
-        .map_err(anyhow::Error::from)
-        .and_then(|r| r)
+    let reapply = q.reapply_sec;
+    crate::log_info!("hw_set_fan_threshold: addr={addr} threshold_c={threshold} reapply_sec={reapply:?}");
+    match tokio::task::spawn_blocking(move || {
+        hw_set_fan_threshold_ex(&addr, threshold, reapply)
+    })
+    .await
+    .map_err(anyhow::Error::from)
+    .and_then(|r| r)
     {
         Ok(()) => {
-            crate::log_info!("hw_set_fan_threshold ok: threshold_c={threshold}");
+            crate::log_info!("hw_set_fan_threshold ok: threshold_c={threshold} reapply_sec={reapply:?}");
             (
                 StatusCode::OK,
-                Json(serde_json::json!({ "ok": true, "threshold_c": threshold })),
+                Json(serde_json::json!({ "ok": true, "threshold_c": threshold, "reapply_sec": reapply })),
             )
                 .into_response()
         }
@@ -4552,6 +4596,436 @@ async fn notif_list_handler(
     }
 }
 
+// ── v4.2: Cheat engine handlers ──────────────────────────────────────
+#[derive(Deserialize)]
+struct CheatsAddrQuery {
+    addr: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct CheatsGetQuery {
+    addr: Option<String>,
+    title_id: String,
+}
+
+#[derive(Deserialize)]
+struct CheatsDeleteQuery {
+    addr: Option<String>,
+    title_id: String,
+}
+
+#[derive(Deserialize)]
+struct CheatsToggleReq {
+    addr: Option<String>,
+    title_id: String,
+    index: i32,
+    #[serde(default = "default_true")]
+    on: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+#[derive(Deserialize)]
+struct CheatsEngineSetReq {
+    addr: Option<String>,
+    enabled: bool,
+}
+
+async fn cheats_list_handler(
+    State(state): State<AppState>,
+    Query(q): Query<CheatsAddrQuery>,
+) -> impl IntoResponse {
+    let addr = mgmt_addr_or_default(q.addr, &state.default_ps5_addr);
+    let r = tokio::task::spawn_blocking(move || ps5upload_core::cheats::cheats_list(&addr))
+        .await
+        .map_err(anyhow::Error::from)
+        .and_then(|r| r);
+    match r {
+        Ok(result) => (StatusCode::OK, Json(result)).into_response(),
+        Err(e) => json_err(StatusCode::BAD_GATEWAY, format!("{e:#}")).into_response(),
+    }
+}
+
+async fn cheats_get_handler(
+    State(state): State<AppState>,
+    Query(q): Query<CheatsGetQuery>,
+) -> impl IntoResponse {
+    let addr = mgmt_addr_or_default(q.addr, &state.default_ps5_addr);
+    let title_id = q.title_id;
+    let r = tokio::task::spawn_blocking(move || {
+        ps5upload_core::cheats::cheats_get(&addr, &title_id)
+    })
+    .await
+    .map_err(anyhow::Error::from)
+    .and_then(|r| r);
+    match r {
+        Ok(result) => (StatusCode::OK, Json(result)).into_response(),
+        Err(e) => json_err(StatusCode::BAD_GATEWAY, format!("{e:#}")).into_response(),
+    }
+}
+
+async fn cheats_toggle_handler(
+    State(state): State<AppState>,
+    Json(req): Json<CheatsToggleReq>,
+) -> impl IntoResponse {
+    let addr = mgmt_addr_or_default(req.addr, &state.default_ps5_addr);
+    let title_id = req.title_id;
+    let index = req.index;
+    let on = req.on;
+    let r = tokio::task::spawn_blocking(move || {
+        ps5upload_core::cheats::cheats_toggle(&addr, &title_id, index, on)
+    })
+    .await
+    .map_err(anyhow::Error::from)
+    .and_then(|r| r);
+    match r {
+        Ok(result) => (StatusCode::OK, Json(result)).into_response(),
+        Err(e) => json_err(StatusCode::BAD_GATEWAY, format!("{e:#}")).into_response(),
+    }
+}
+
+async fn cheats_delete_handler(
+    State(state): State<AppState>,
+    Query(q): Query<CheatsDeleteQuery>,
+) -> impl IntoResponse {
+    let addr = mgmt_addr_or_default(q.addr, &state.default_ps5_addr);
+    let title_id = q.title_id;
+    let r = tokio::task::spawn_blocking(move || {
+        ps5upload_core::cheats::cheats_delete(&addr, &title_id)
+    })
+    .await
+    .map_err(anyhow::Error::from)
+    .and_then(|r| r);
+    match r {
+        Ok(ok) => (StatusCode::OK, Json(serde_json::json!({ "ok": ok }))).into_response(),
+        Err(e) => json_err(StatusCode::BAD_GATEWAY, format!("{e:#}")).into_response(),
+    }
+}
+
+async fn cheats_reload_handler(
+    State(state): State<AppState>,
+    Query(q): Query<CheatsAddrQuery>,
+) -> impl IntoResponse {
+    let addr = mgmt_addr_or_default(q.addr, &state.default_ps5_addr);
+    let r = tokio::task::spawn_blocking(move || ps5upload_core::cheats::cheats_reload(&addr))
+        .await
+        .map_err(anyhow::Error::from)
+        .and_then(|r| r);
+    match r {
+        Ok(ok) => (StatusCode::OK, Json(serde_json::json!({ "ok": ok }))).into_response(),
+        Err(e) => json_err(StatusCode::BAD_GATEWAY, format!("{e:#}")).into_response(),
+    }
+}
+
+async fn cheats_status_handler(
+    State(state): State<AppState>,
+    Query(q): Query<CheatsAddrQuery>,
+) -> impl IntoResponse {
+    let addr = mgmt_addr_or_default(q.addr, &state.default_ps5_addr);
+    let r = tokio::task::spawn_blocking(move || ps5upload_core::cheats::cheats_status(&addr))
+        .await
+        .map_err(anyhow::Error::from)
+        .and_then(|r| r);
+    match r {
+        Ok(result) => (StatusCode::OK, Json(result)).into_response(),
+        Err(e) => json_err(StatusCode::BAD_GATEWAY, format!("{e:#}")).into_response(),
+    }
+}
+
+async fn cheats_engine_set_handler(
+    State(state): State<AppState>,
+    Json(req): Json<CheatsEngineSetReq>,
+) -> impl IntoResponse {
+    let addr = mgmt_addr_or_default(req.addr, &state.default_ps5_addr);
+    let enabled = req.enabled;
+    let r = tokio::task::spawn_blocking(move || {
+        ps5upload_core::cheats::cheats_engine_set(&addr, enabled)
+    })
+    .await
+    .map_err(anyhow::Error::from)
+    .and_then(|r| r);
+    match r {
+        Ok(result) => (StatusCode::OK, Json(result)).into_response(),
+        Err(e) => json_err(StatusCode::BAD_GATEWAY, format!("{e:#}")).into_response(),
+    }
+}
+
+/* ── Community cheat repo browse + download ─────────────────────── */
+
+#[derive(Deserialize)]
+struct CheatsRepoSearchQuery {
+    #[serde(default)]
+    query: String,
+}
+
+async fn cheats_repos_list_handler(
+    State(_state): State<AppState>,
+) -> impl IntoResponse {
+    let repos = ps5upload_core::cheats::cheat_repos();
+    (StatusCode::OK, Json(repos)).into_response()
+}
+
+async fn cheats_repos_search_handler(
+    State(_state): State<AppState>,
+    Query(q): Query<CheatsRepoSearchQuery>,
+) -> impl IntoResponse {
+    let r = tokio::task::spawn_blocking(move || {
+        ps5upload_core::cheats::cheats_repo_search(&q.query)
+    })
+    .await
+    .map_err(anyhow::Error::from)
+    .and_then(|r| r);
+    match r {
+        Ok(result) => (StatusCode::OK, Json(result)).into_response(),
+        Err(e) => json_err(StatusCode::BAD_GATEWAY, format!("{e:#}")).into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+struct CheatsRepoDownloadReq {
+    addr: Option<String>,
+    repo_id: String,
+    filename: String,
+    title_id: String,
+}
+
+async fn cheats_repos_download_handler(
+    State(state): State<AppState>,
+    Json(req): Json<CheatsRepoDownloadReq>,
+) -> impl IntoResponse {
+    let addr = mgmt_addr_or_default(req.addr, &state.default_ps5_addr);
+    let r = tokio::task::spawn_blocking(move || {
+        ps5upload_core::cheats::cheats_repo_download(&addr, &req.repo_id, &req.filename, &req.title_id)
+    })
+    .await
+    .map_err(anyhow::Error::from)
+    .and_then(|r| r);
+    match r {
+        Ok(result) => (StatusCode::OK, Json(result)).into_response(),
+        Err(e) => json_err(StatusCode::BAD_GATEWAY, format!("{e:#}")).into_response(),
+    }
+}
+
+/* ── Activity tracker ─────────────────────────────────────────────── */
+
+#[derive(Deserialize)]
+struct ActivityDbQueryParams {
+    addr: Option<String>,
+    #[serde(default = "default_db_query")]
+    query: String,
+}
+
+fn default_db_query() -> String {
+    "recently_played".to_string()
+}
+
+async fn activity_get_handler(
+    State(state): State<AppState>,
+    Query(q): Query<CheatsAddrQuery>,
+) -> impl IntoResponse {
+    let addr = mgmt_addr_or_default(q.addr, &state.default_ps5_addr);
+    let r = tokio::task::spawn_blocking(move || ps5upload_core::activity::activity_get(&addr))
+        .await
+        .map_err(anyhow::Error::from)
+        .and_then(|r| r);
+    match r {
+        Ok(result) => (StatusCode::OK, Json(result)).into_response(),
+        Err(e) => json_err(StatusCode::BAD_GATEWAY, format!("{e:#}")).into_response(),
+    }
+}
+
+async fn activity_db_query_handler(
+    State(state): State<AppState>,
+    Query(q): Query<ActivityDbQueryParams>,
+) -> impl IntoResponse {
+    let addr = mgmt_addr_or_default(q.addr, &state.default_ps5_addr);
+    let query = q.query;
+    let r = tokio::task::spawn_blocking(move || {
+        ps5upload_core::activity::activity_db_query(&addr, &query)
+    })
+    .await
+    .map_err(anyhow::Error::from)
+    .and_then(|r| r);
+    match r {
+        Ok(result) => (StatusCode::OK, Json(result)).into_response(),
+        Err(e) => json_err(StatusCode::BAD_GATEWAY, format!("{e:#}")).into_response(),
+    }
+}
+
+/* ── SDK Changer ──────────────────────────────────────────────────── */
+
+async fn sdk_scan_handler(
+    State(state): State<AppState>,
+    Query(q): Query<CheatsAddrQuery>,
+) -> impl IntoResponse {
+    let addr = mgmt_addr_or_default(q.addr, &state.default_ps5_addr);
+    let r = tokio::task::spawn_blocking(move || ps5upload_core::sdk_changer::sdk_scan(&addr))
+        .await
+        .map_err(anyhow::Error::from)
+        .and_then(|r| r);
+    match r {
+        Ok(result) => (StatusCode::OK, Json(result)).into_response(),
+        Err(e) => json_err(StatusCode::BAD_GATEWAY, format!("{e:#}")).into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+struct SdkPatchReq {
+    addr: Option<String>,
+    title_id: String,
+    target_sdk: String,
+}
+
+async fn sdk_patch_handler(
+    State(state): State<AppState>,
+    Json(req): Json<SdkPatchReq>,
+) -> impl IntoResponse {
+    let addr = mgmt_addr_or_default(req.addr, &state.default_ps5_addr);
+    let title_id = req.title_id;
+    let target_sdk = req.target_sdk;
+    let r = tokio::task::spawn_blocking(move || {
+        ps5upload_core::sdk_changer::sdk_patch(&addr, &title_id, &target_sdk)
+    })
+    .await
+    .map_err(anyhow::Error::from)
+    .and_then(|r| r);
+    match r {
+        Ok(result) => (StatusCode::OK, Json(result)).into_response(),
+        Err(e) => json_err(StatusCode::BAD_GATEWAY, format!("{e:#}")).into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+struct SdkRestoreReq {
+    addr: Option<String>,
+    title_id: String,
+}
+
+async fn sdk_restore_handler(
+    State(state): State<AppState>,
+    Json(req): Json<SdkRestoreReq>,
+) -> impl IntoResponse {
+    let addr = mgmt_addr_or_default(req.addr, &state.default_ps5_addr);
+    let title_id = req.title_id;
+    let r = tokio::task::spawn_blocking(move || {
+        ps5upload_core::sdk_changer::sdk_restore(&addr, &title_id)
+    })
+    .await
+    .map_err(anyhow::Error::from)
+    .and_then(|r| r);
+    match r {
+        Ok(result) => (StatusCode::OK, Json(result)).into_response(),
+        Err(e) => json_err(StatusCode::BAD_GATEWAY, format!("{e:#}")).into_response(),
+    }
+}
+
+/* ── TMDB / PlayStation Store metadata ────────────────────────────── */
+
+#[derive(Deserialize)]
+struct TmdbFetchReq {
+    addr: Option<String>,
+    title_id: String,
+    #[serde(default)]
+    refresh: bool,
+    /// Optional region prefix (e.g. "UP9000" for US) to narrow the
+    /// PS Store search instead of brute-forcing all 24 known prefixes.
+    #[serde(default)]
+    region: Option<String>,
+}
+
+async fn tmdb_fetch_handler(
+    State(state): State<AppState>,
+    Query(q): Query<TmdbFetchReq>,
+) -> impl IntoResponse {
+    let addr = mgmt_addr_or_default(q.addr, &state.default_ps5_addr);
+    let title_id = q.title_id;
+    let refresh = q.refresh;
+    let region = q.region;
+    let r = tokio::task::spawn_blocking(move || {
+        ps5upload_core::tmdb::tmdb_fetch(&addr, &title_id, refresh, region.as_deref())
+    })
+    .await
+    .map_err(anyhow::Error::from)
+    .and_then(|r| r);
+    match r {
+        Ok(result) => (StatusCode::OK, Json(result)).into_response(),
+        Err(e) => json_err(StatusCode::BAD_GATEWAY, format!("{e:#}")).into_response(),
+    }
+}
+
+/* ── FW Spoof detection ──────────────────────────────────────────── */
+
+async fn fw_spoof_status_handler(
+    State(state): State<AppState>,
+    Query(q): Query<CheatsAddrQuery>,
+) -> impl IntoResponse {
+    let addr = mgmt_addr_or_default(q.addr, &state.default_ps5_addr);
+    let r = tokio::task::spawn_blocking(move || ps5upload_core::fw_spoof::fw_spoof_status(&addr))
+        .await
+        .map_err(anyhow::Error::from)
+        .and_then(|r| r);
+    match r {
+        Ok(result) => (StatusCode::OK, Json(result)).into_response(),
+        Err(e) => json_err(StatusCode::BAD_GATEWAY, format!("{e:#}")).into_response(),
+    }
+}
+
+/* ── FTP Server ──────────────────────────────────────────────────── */
+
+#[derive(Deserialize)]
+struct FtpStartReq {
+    addr: Option<String>,
+    #[serde(default)]
+    port: u16,
+    #[serde(default)]
+    root: String,
+    #[serde(default)]
+    readonly: bool,
+    #[serde(default)]
+    user: String,
+    #[serde(default)]
+    pass: String,
+}
+
+async fn ftp_start_handler(
+    State(state): State<AppState>,
+    Json(req): Json<FtpStartReq>,
+) -> impl IntoResponse {
+    let addr = mgmt_addr_or_default(req.addr, &state.default_ps5_addr);
+    let core_req = ps5upload_core::ftp::FtpStartRequest {
+        port: req.port,
+        root: req.root,
+        readonly: req.readonly,
+        user: req.user,
+        pass: req.pass,
+    };
+    let r = tokio::task::spawn_blocking(move || ps5upload_core::ftp::ftp_start(&addr, &core_req))
+        .await
+        .map_err(anyhow::Error::from)
+        .and_then(|r| r);
+    match r {
+        Ok(result) => (StatusCode::OK, Json(result)).into_response(),
+        Err(e) => json_err(StatusCode::BAD_GATEWAY, format!("{e:#}")).into_response(),
+    }
+}
+
+async fn ftp_status_handler(
+    State(state): State<AppState>,
+    Query(q): Query<CheatsAddrQuery>,
+) -> impl IntoResponse {
+    let addr = mgmt_addr_or_default(q.addr, &state.default_ps5_addr);
+    let r = tokio::task::spawn_blocking(move || ps5upload_core::ftp::ftp_status(&addr))
+        .await
+        .map_err(anyhow::Error::from)
+        .and_then(|r| r);
+    match r {
+        Ok(result) => (StatusCode::OK, Json(result)).into_response(),
+        Err(e) => json_err(StatusCode::BAD_GATEWAY, format!("{e:#}")).into_response(),
+    }
+}
+
 async fn profile_avatar_preview_handler(Json(req): Json<ProfilePreviewReq>) -> impl IntoResponse {
     let mode = ps5upload_core::profile::SquareMode::parse(req.mode.as_deref().unwrap_or("crop"));
     let path = req.image_path;
@@ -6556,6 +7030,28 @@ async fn run(cfg: EngineConfig) -> anyhow::Result<()> {
         .route("/api/ps5/hw/fan-curve", post(fan_curve_set_handler))
         .route("/api/ps5/hw/fan-curve/get", get(fan_curve_get_handler))
         .route("/api/ps5/notif/list", get(notif_list_handler))
+        .route("/api/ps5/cheats/list", get(cheats_list_handler))
+        .route("/api/ps5/cheats/get", get(cheats_get_handler))
+        .route("/api/ps5/cheats/toggle", post(cheats_toggle_handler))
+        .route("/api/ps5/cheats/delete", get(cheats_delete_handler))
+        .route("/api/ps5/cheats/reload", get(cheats_reload_handler))
+        .route("/api/ps5/cheats/status", get(cheats_status_handler))
+        .route("/api/ps5/cheats/engine-set", post(cheats_engine_set_handler))
+        .route("/api/ps5/cheats/repos/list", get(cheats_repos_list_handler))
+        .route("/api/ps5/cheats/repos/search", get(cheats_repos_search_handler))
+        .route("/api/ps5/cheats/repos/download", post(cheats_repos_download_handler))
+        .route("/api/ps5/activity/get", get(activity_get_handler))
+        .route("/api/ps5/activity/db-query", get(activity_db_query_handler))
+        .route("/api/ps5/sdk/scan", get(sdk_scan_handler))
+        .route("/api/ps5/sdk/patch", post(sdk_patch_handler))
+        .route("/api/ps5/sdk/restore", post(sdk_restore_handler))
+        .route("/api/ps5/tmdb/fetch", get(tmdb_fetch_handler))
+        .route("/api/ps5/fw-spoof/status", get(fw_spoof_status_handler))
+        .route("/api/ps5/ftp/start", post(ftp_start_handler))
+        .route("/api/ps5/ftp/status", get(ftp_status_handler))
+        .route("/api/smb/list-shares", post(smb::smb_list_shares))
+        .route("/api/smb/list-dir", post(smb::smb_list_dir))
+        .route("/api/smb/download", post(smb::smb_download_file))
         .route("/api/ps5/saves/list", get(ps5_saves_list))
         .route("/api/ps5/screenshots/list", get(ps5_screenshots_list))
         .route("/api/ps5/videos/list", get(ps5_videos_list))
@@ -7205,5 +7701,36 @@ mod helpers_tests {
             }
             _ => panic!("expected Failed state"),
         }
+    }
+}
+
+#[cfg(test)]
+mod cheats_route_tests {
+    use super::*;
+
+    #[test]
+    fn cheats_toggle_req_deserializes_with_default_on() {
+        let json = r#"{"title_id":"CUSA00001","index":0}"#;
+        let req: CheatsToggleReq = serde_json::from_str(json).unwrap();
+        assert_eq!(req.title_id, "CUSA00001");
+        assert_eq!(req.index, 0);
+        assert!(req.on, "on should default to true");
+    }
+
+    #[test]
+    fn cheats_toggle_req_deserializes_explicit_off() {
+        let json = r#"{"title_id":"CUSA00002","index":3,"on":false}"#;
+        let req: CheatsToggleReq = serde_json::from_str(json).unwrap();
+        assert_eq!(req.title_id, "CUSA00002");
+        assert_eq!(req.index, 3);
+        assert!(!req.on);
+    }
+
+    #[test]
+    fn cheats_engine_set_req_deserializes() {
+        let json = r#"{"enabled":true}"#;
+        let req: CheatsEngineSetReq = serde_json::from_str(json).unwrap();
+        assert!(req.enabled);
+        assert!(req.addr.is_none());
     }
 }

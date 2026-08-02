@@ -495,7 +495,7 @@ export default function SearchScreen() {
                 {tr("search_export_json", undefined, "Export JSON")}
               </button>
             </div>
-            <ul className="grid gap-1">
+            <ul className="grid max-h-[60vh] gap-1 overflow-y-auto">
               {result.hits.map((h, i) => {
                 const Icon = h.kind === "dir" ? Folder : FileIcon;
                 return (

@@ -593,15 +593,99 @@ pub enum FrameType {
     /// Ack: `{"ok":bool,"err":".."}`.
     NotifSend = 240,
     NotifSendAck = 241,
-    // Frame numbers 184-187, 192-195, 200-239, and 242-245 were allocated
-    // during v4 scaffolding for features that were never finished (they
-    // returned "not implemented") or were SKIP in FEATURE-GAP-ANALYSIS.md
-    // (save resign, activity tracker, cheats, SDK changer, FTP/SMB servers,
-    // TMDB, firmware spoof, Linux/plugin loaders, fpkg-guard, garlic). They
-    // were removed in v4; the numbers are left unallocated rather than
-    // reused, so any stale payload/client that still sends them gets a clean
-    // UnknownFrameType error. The same applies to 224-229 (Game Dumper /
-    // pkg-zone / PSN Fake Sign-In — piracy / account fraud).
+    // ── Cheat engine (v4.2) ───────────────────────────────────────────
+    /// List all titles that have cheat files installed.
+    /// Req: empty. Ack: `{"titles":[{"title_id":"CUSA00000","name":"..",
+    ///   "running":bool}],"game_running":bool,"game_title_id":"CUSA00000"}`.
+    CheatsList = 200,
+    CheatsListAck = 201,
+    /// List all mods for a title.
+    /// Req: `{"title_id":"CUSA00000"}`.
+    /// Ack: `{"mods":[{"index":N,"name":"..","desc":"..","on":bool,
+    ///   "type":"json|shn|patch"}]}`.
+    CheatsGet = 202,
+    CheatsGetAck = 203,
+    /// Toggle a mod on/off.
+    /// Req: `{"title_id":"CUSA00000","index":N,"on":bool}`.
+    /// Ack: `{"ok":bool,"err":".."}`.
+    CheatsToggle = 204,
+    CheatsToggleAck = 205,
+    /// Delete all cheat files for a title.
+    /// Req: `{"title_id":"CUSA00000"}`.
+    /// Ack: `{"ok":bool}`.
+    CheatsDelete = 206,
+    CheatsDeleteAck = 207,
+    /// Force re-scan + re-apply patches and active cheats.
+    /// Req: empty. Ack: `{"ok":bool}`.
+    CheatsReload = 208,
+    CheatsReloadAck = 209,
+    /// Engine status.
+    /// Req: empty. Ack: `{"enabled":bool,"patches_last":N,
+    ///   "patches_total":N,"game_running":bool,"game_title_id":"..",
+    ///   "game_pid":N}`.
+    CheatsStatus = 210,
+    CheatsStatusAck = 211,
+    /// Enable/disable the cheat engine master flag.
+    /// Req: `{"enabled":bool}`. Ack: `{"ok":bool,"enabled":bool}`.
+    CheatsEngineSet = 212,
+    CheatsEngineSetAck = 213,
+    // ── Activity Tracker (v4.3) ────────────────────────────────────────
+    /// Get self-tracked play time + launch counts.
+    /// Req: `{}`. Ack: `{"titles":[{"title_id":"..","launches":N,
+    ///   "total_seconds":N,"last_played":N,"active":bool}],"now_ts":N}`.
+    ActivityGet = 192,
+    ActivityGetAck = 193,
+    /// Query Sony's sl2_log.db / app.db for historical play data.
+    /// Req: `{"query":"recently_played|play_time"}`.
+    /// Ack: `{"rows":[...],"source":"sl2_log|app_db"}`.
+    ActivityDbQuery = 194,
+    ActivityDbQueryAck = 195,
+
+    // ── SDK Version Changer (v4.3) ─────────────────────────────────────
+    /// Scan installed titles for SDK version + FW requirement.
+    /// Req: `{}`. Ack: `{"titles":[{"title_id":"..","name":"..",
+    ///   "sdk_version":"0x..","fw_required":"..","path":".."}]}`.
+    SdkScan = 214,
+    SdkScanAck = 215,
+    /// Patch a title's SDK version down.
+    /// Req: `{"title_id":"..","target_sdk":"0x.."}`.
+    /// Ack: `{"ok":bool,"err":".."}`.
+    SdkPatch = 216,
+    SdkPatchAck = 217,
+    /// Restore a title's files from `.bak` backups created by patch.
+    /// Req: `{"title_id":".."}`.
+    /// Ack: `{"ok":bool,"restored":N,"error":".."}`.
+    SdkRestore = 218,
+    SdkRestoreAck = 219,
+
+    // ── TMDB / PlayStation Store Metadata (v4.3) ───────────────────────
+    /// Fetch title metadata from store.playstation.com (cached 30d).
+    /// Req: `{"title_id":"CUSA..","refresh":bool}`.
+    /// Ack: `{"ok":bool,"data":{...},"cached":bool}`.
+    TmdbFetch = 222,
+    TmdbFetchAck = 223,
+    /// Store fetched metadata into the payload cache.
+    /// Req: `{"title_id":"CUSA..","json":"{...}"}`.
+    /// Ack: `{"ok":bool}`.
+    TmdbStore = 228,
+    TmdbStoreAck = 229,
+
+    // ── FTP Server (v4.3) ──────────────────────────────────────────────
+    /// Start/stop the embedded FTP server.
+    /// Req: `{"port":N,"root":"/","readonly":bool,"user":"..","pass":".."}`.
+    /// port=0 stops. Ack: `{"ok":bool,"port":N,"err":".."}`.
+    FtpStart = 224,
+    FtpStartAck = 225,
+    /// Query FTP server status.
+    /// Req: `{}`. Ack: `{"running":bool,"port":N,"connections":N}`.
+    FtpStatus = 226,
+    FtpStatusAck = 227,
+
+    // ── Firmware Spoof Detection (v4.3) ────────────────────────────────
+    /// Query firmware spoof status.
+    /// Req: `{}`. Ack: `{"running":bool,"real_fw":"..","spoofed_fw":".."}`.
+    FwSpoofStatus = 232,
+    FwSpoofStatusAck = 233,
 }
 
 impl FrameType {
@@ -781,6 +865,40 @@ impl FrameType {
             197 => Ok(Self::HwFanCurveSetAck),
             198 => Ok(Self::NotifList),
             199 => Ok(Self::NotifListAck),
+            200 => Ok(Self::CheatsList),
+            201 => Ok(Self::CheatsListAck),
+            202 => Ok(Self::CheatsGet),
+            203 => Ok(Self::CheatsGetAck),
+            204 => Ok(Self::CheatsToggle),
+            205 => Ok(Self::CheatsToggleAck),
+            206 => Ok(Self::CheatsDelete),
+            207 => Ok(Self::CheatsDeleteAck),
+            208 => Ok(Self::CheatsReload),
+            209 => Ok(Self::CheatsReloadAck),
+            210 => Ok(Self::CheatsStatus),
+            211 => Ok(Self::CheatsStatusAck),
+            212 => Ok(Self::CheatsEngineSet),
+            213 => Ok(Self::CheatsEngineSetAck),
+            192 => Ok(Self::ActivityGet),
+            193 => Ok(Self::ActivityGetAck),
+            194 => Ok(Self::ActivityDbQuery),
+            195 => Ok(Self::ActivityDbQueryAck),
+            214 => Ok(Self::SdkScan),
+            215 => Ok(Self::SdkScanAck),
+            216 => Ok(Self::SdkPatch),
+            217 => Ok(Self::SdkPatchAck),
+            218 => Ok(Self::SdkRestore),
+            219 => Ok(Self::SdkRestoreAck),
+            222 => Ok(Self::TmdbFetch),
+            223 => Ok(Self::TmdbFetchAck),
+            228 => Ok(Self::TmdbStore),
+            229 => Ok(Self::TmdbStoreAck),
+            224 => Ok(Self::FtpStart),
+            225 => Ok(Self::FtpStartAck),
+            226 => Ok(Self::FtpStatus),
+            227 => Ok(Self::FtpStatusAck),
+            232 => Ok(Self::FwSpoofStatus),
+            233 => Ok(Self::FwSpoofStatusAck),
             240 => Ok(Self::NotifSend),
             241 => Ok(Self::NotifSendAck),
             246 => Ok(Self::HwFanCurveGet),
@@ -1316,6 +1434,20 @@ mod tests {
             FrameType::HwFanCurveGetAck,
             FrameType::NotifList,
             FrameType::NotifListAck,
+            FrameType::CheatsList,
+            FrameType::CheatsListAck,
+            FrameType::CheatsGet,
+            FrameType::CheatsGetAck,
+            FrameType::CheatsToggle,
+            FrameType::CheatsToggleAck,
+            FrameType::CheatsDelete,
+            FrameType::CheatsDeleteAck,
+            FrameType::CheatsReload,
+            FrameType::CheatsReloadAck,
+            FrameType::CheatsStatus,
+            FrameType::CheatsStatusAck,
+            FrameType::CheatsEngineSet,
+            FrameType::CheatsEngineSetAck,
             FrameType::NotifSend,
             FrameType::NotifSendAck,
         ];
@@ -1545,6 +1677,22 @@ mod tests {
         assert_eq!(FrameType::RemotePlayStatus as u16, 189);
         assert_eq!(FrameType::HwFanCurveSet as u16, 196);
         assert_eq!(FrameType::NotifList as u16, 198);
+        assert_eq!(FrameType::CheatsList as u16, 200);
+        assert_eq!(FrameType::CheatsEngineSetAck as u16, 213);
+        assert_eq!(FrameType::ActivityGet as u16, 192);
+        assert_eq!(FrameType::ActivityDbQueryAck as u16, 195);
+        assert_eq!(FrameType::SdkScan as u16, 214);
+        assert_eq!(FrameType::SdkPatchAck as u16, 217);
+        assert_eq!(FrameType::SdkRestore as u16, 218);
+        assert_eq!(FrameType::SdkRestoreAck as u16, 219);
+        assert_eq!(FrameType::TmdbFetch as u16, 222);
+        assert_eq!(FrameType::TmdbFetchAck as u16, 223);
+        assert_eq!(FrameType::TmdbStore as u16, 228);
+        assert_eq!(FrameType::TmdbStoreAck as u16, 229);
+        assert_eq!(FrameType::FtpStart as u16, 224);
+        assert_eq!(FrameType::FtpStatusAck as u16, 227);
+        assert_eq!(FrameType::FwSpoofStatus as u16, 232);
+        assert_eq!(FrameType::FwSpoofStatusAck as u16, 233);
         assert_eq!(FrameType::NotifSend as u16, 240);
         assert_eq!(FrameType::NotifSendAck as u16, 241);
         assert_eq!(FrameType::HwFanCurveGet as u16, 246);

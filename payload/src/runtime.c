@@ -38,6 +38,12 @@
 #include "remoteplay.h"
 #include "fan_curve.h"
 #include "notif.h"
+#include "cheats.h"
+#include "activity.h"
+#include "sdk_changer.h"
+#include "tmdb.h"
+#include "fw_spoof.h"
+#include "ftp_server.h"
 #include "sys_time.h"
 #include "sys_registry.h"
 #include "profile.h"
@@ -391,13 +397,48 @@ extern int posix_fallocate(int fd, off_t offset, off_t len);
 #define FTX2_FRAME_NOTIF_LIST_ACK        199u
 #define FTX2_FRAME_NOTIF_SEND            240u
 #define FTX2_FRAME_NOTIF_SEND_ACK        241u
-/* Frame numbers 184-187, 192-195, 200-239 and 242-245 were allocated during
- * v4 scaffolding for features that were never finished (save resign, activity
- * tracker, cheats, SDK changer, FTP/SMB, TMDB, firmware spoof, Linux/plugin
- * loaders, fpkg-guard, garlic) or were SKIP per FEATURE-GAP-ANALYSIS.md
- * (incl. 224-229: Game Dumper / pkg-zone / PSN Fake Sign-In — piracy/account
- * fraud). They were removed in v4; the numbers are left unallocated so any
- * stale peer that still sends them gets a clean UnknownFrameType error. */
+/* v4.2: Cheat engine */
+#define FTX2_FRAME_CHEATS_LIST           200u
+#define FTX2_FRAME_CHEATS_LIST_ACK       201u
+#define FTX2_FRAME_CHEATS_GET            202u
+#define FTX2_FRAME_CHEATS_GET_ACK        203u
+#define FTX2_FRAME_CHEATS_TOGGLE         204u
+#define FTX2_FRAME_CHEATS_TOGGLE_ACK     205u
+#define FTX2_FRAME_CHEATS_DELETE         206u
+#define FTX2_FRAME_CHEATS_DELETE_ACK     207u
+#define FTX2_FRAME_CHEATS_RELOAD         208u
+#define FTX2_FRAME_CHEATS_RELOAD_ACK     209u
+#define FTX2_FRAME_CHEATS_STATUS         210u
+#define FTX2_FRAME_CHEATS_STATUS_ACK     211u
+#define FTX2_FRAME_CHEATS_ENGINE_SET     212u
+#define FTX2_FRAME_CHEATS_ENGINE_SET_ACK 213u
+/* v4.3: Activity tracker */
+#define FTX2_FRAME_ACTIVITY_GET          192u
+#define FTX2_FRAME_ACTIVITY_GET_ACK      193u
+#define FTX2_FRAME_ACTIVITY_DB_QUERY     194u
+#define FTX2_FRAME_ACTIVITY_DB_QUERY_ACK 195u
+/* v4.3: SDK version changer */
+#define FTX2_FRAME_SDK_SCAN              214u
+#define FTX2_FRAME_SDK_SCAN_ACK          215u
+#define FTX2_FRAME_SDK_PATCH             216u
+#define FTX2_FRAME_SDK_PATCH_ACK         217u
+#define FTX2_FRAME_SDK_RESTORE           218u
+#define FTX2_FRAME_SDK_RESTORE_ACK       219u
+/* v4.3: TMDB / PlayStation Store metadata */
+#define FTX2_FRAME_TMDB_FETCH            222u
+#define FTX2_FRAME_TMDB_FETCH_ACK        223u
+#define FTX2_FRAME_TMDB_STORE            228u
+#define FTX2_FRAME_TMDB_STORE_ACK        229u
+/* v4.3: FTP server */
+#define FTX2_FRAME_FTP_START             224u
+#define FTX2_FRAME_FTP_START_ACK         225u
+#define FTX2_FRAME_FTP_STATUS            226u
+#define FTX2_FRAME_FTP_STATUS_ACK        227u
+/* v4.3: Firmware spoof detection */
+#define FTX2_FRAME_FWSPOOF_STATUS        232u
+#define FTX2_FRAME_FWSPOOF_STATUS_ACK    233u
+/* Frame numbers 184-187 and 242-245 remain unallocated (removed v4
+ * scaffolding). 228-231 reserved for future SMB/Network features. */
 /* Where we place mount points. Scoped under /mnt/ps5upload/ so it
  * never collides with mount paths owned by other utilities. */
 #define FS_MOUNT_BASE "/mnt/ps5upload"
@@ -774,6 +815,21 @@ static uint64_t extract_json_uint64_field(const char *json, const char *field) {
      * "no value" path is taken instead. */
     if (errno == ERANGE) return 0;
     return val;
+}
+
+static int extract_json_bool_field(const char *json, const char *field,
+                                   int *out) {
+    char needle[64];
+    const char *pos = NULL;
+    if (!json || !field || !out) return -1;
+    snprintf(needle, sizeof(needle), "\"%s\":", field);
+    pos = strstr(json, needle);
+    if (!pos) return -1;
+    pos += strlen(needle);
+    while (*pos == ' ' || *pos == '\t') pos++;
+    if (strncmp(pos, "true", 4) == 0) { *out = 1; return 0; }
+    if (strncmp(pos, "false", 5) == 0) { *out = 0; return 0; }
+    return -1;
 }
 
 /* ── TX ID helpers ───────────────────────────────────────────────────────────── */
@@ -1751,6 +1807,12 @@ int runtime_init(runtime_state_t *state) {
     backup_init();
     remoteplay_init();
     notif_init();
+    cheats_init();
+    activity_init();
+    sdk_changer_init();
+    tmdb_init();
+    fw_spoof_init();
+    ftp_server_init();
     if (runtime_load_tx_entries(state) != 0) {
         fprintf(stderr, "[payload2] failed to load tx entries from %s\n", PS5UPLOAD2_TX_DIR);
         return -1;
@@ -10328,6 +10390,418 @@ static int handle_notif_send(runtime_state_t *state, int client_fd,
                       resp, strlen(resp));
 }
 
+/* ── Cheat engine handlers ──────────────────────────────────────────── */
+
+#define CHEATS_TITLE_ID_LEN 32u
+#define CHEATS_JSON_BUF_SZ  (64u * 1024u)
+
+static void cheat_inc_cmd_count(runtime_state_t *state) {
+    pthread_mutex_lock(&state->state_mtx);
+    state->command_count += 1;
+    pthread_mutex_unlock(&state->state_mtx);
+}
+
+static int handle_cheats_list(runtime_state_t *state, int client_fd,
+                               uint64_t trace_id) {
+    if (!state) return -1;
+    char *buf = malloc(CHEATS_JSON_BUF_SZ);
+    if (!buf) {
+        const char *e = "{\"titles\":[]}";
+        return send_frame(client_fd, FTX2_FRAME_CHEATS_LIST_ACK, 0,
+                          trace_id, e, strlen(e));
+    }
+    size_t written = 0;
+    cheats_list_titles(buf, CHEATS_JSON_BUF_SZ, &written);
+    cheat_inc_cmd_count(state);
+    int rc = send_frame(client_fd, FTX2_FRAME_CHEATS_LIST_ACK, 0, trace_id,
+                        buf, (uint64_t)written);
+    free(buf);
+    return rc;
+}
+
+static int handle_cheats_get(runtime_state_t *state, int client_fd,
+                              uint64_t trace_id, const char *body) {
+    if (!state) return -1;
+    char title_id[CHEATS_TITLE_ID_LEN] = {0};
+    if (body) extract_json_string_field(body, "title_id",
+                                        title_id, sizeof(title_id));
+    char *buf = malloc(CHEATS_JSON_BUF_SZ);
+    if (!buf) {
+        const char *e = "{\"mods\":[],\"error\":\"oom\"}";
+        return send_frame(client_fd, FTX2_FRAME_CHEATS_GET_ACK, 0,
+                          trace_id, e, strlen(e));
+    }
+    size_t written = 0;
+    if (title_id[0]) {
+        cheats_list_mods(title_id, buf, CHEATS_JSON_BUF_SZ, &written);
+    } else {
+        const char *e = "{\"mods\":[],\"error\":\"title_id_required\"}";
+        free(buf);
+        return send_frame(client_fd, FTX2_FRAME_CHEATS_GET_ACK, 0,
+                          trace_id, e, strlen(e));
+    }
+    cheat_inc_cmd_count(state);
+    int rc = send_frame(client_fd, FTX2_FRAME_CHEATS_GET_ACK, 0, trace_id,
+                        buf, (uint64_t)written);
+    free(buf);
+    return rc;
+}
+
+static int handle_cheats_toggle(runtime_state_t *state, int client_fd,
+                                 uint64_t trace_id, const char *body) {
+    if (!state) return -1;
+    if (!body) {
+        const char *e = "{\"ok\":false,\"err\":\"body_required\"}";
+        return send_frame(client_fd, FTX2_FRAME_CHEATS_TOGGLE_ACK, 0,
+                          trace_id, e, strlen(e));
+    }
+    char title_id[CHEATS_TITLE_ID_LEN] = {0};
+    extract_json_string_field(body, "title_id",
+                              title_id, sizeof(title_id));
+    int mod_index = (int)extract_json_uint64_field(body, "index");
+    int turn_on = 1;
+    /* Check for "on": true/false first, fall back to "turn_on" */
+    int bval = 0;
+    if (extract_json_bool_field(body, "on", &bval) == 0) {
+        turn_on = bval;
+    }
+
+    char err[256] = {0};
+    int rc = cheats_toggle(title_id, mod_index, turn_on,
+                           err, sizeof(err));
+    cheat_inc_cmd_count(state);
+
+    char resp[512];
+    int len;
+    if (rc == 0) {
+        len = snprintf(resp, sizeof(resp),
+                       "{\"ok\":true,\"title_id\":\"%s\",\"index\":%d,"
+                       "\"on\":%s}",
+                       title_id, mod_index, turn_on ? "true" : "false");
+    } else {
+        char err_esc[300];
+        size_t ei = 0;
+        for (const char *s = err; *s && ei + 2 < sizeof(err_esc); s++) {
+            if (*s == '"' || *s == '\\') { err_esc[ei++]='\\'; err_esc[ei++]=*s; }
+            else if (*s == '\n') { err_esc[ei++]='\\'; err_esc[ei++]='n'; }
+            else err_esc[ei++] = *s;
+        }
+        err_esc[ei] = '\0';
+        len = snprintf(resp, sizeof(resp),
+                       "{\"ok\":false,\"err\":\"%s\"}", err_esc);
+    }
+    return send_frame(client_fd, FTX2_FRAME_CHEATS_TOGGLE_ACK, 0, trace_id,
+                      resp, (uint64_t)(len > 0 ? len : 0));
+}
+
+static int handle_cheats_delete(runtime_state_t *state, int client_fd,
+                                 uint64_t trace_id, const char *body) {
+    if (!state) return -1;
+    char title_id[CHEATS_TITLE_ID_LEN] = {0};
+    if (body) extract_json_string_field(body, "title_id",
+                                        title_id, sizeof(title_id));
+    char err[256] = {0};
+    int rc = cheats_delete(title_id, err, sizeof(err));
+    cheat_inc_cmd_count(state);
+    const char *resp = (rc == 0) ? "{\"ok\":true}" : "{\"ok\":false}";
+    return send_frame(client_fd, FTX2_FRAME_CHEATS_DELETE_ACK, 0, trace_id,
+                      resp, strlen(resp));
+}
+
+static int handle_cheats_reload(runtime_state_t *state, int client_fd,
+                                 uint64_t trace_id) {
+    if (!state) return -1;
+    char err[256] = {0};
+    int rc = cheats_reload(err, sizeof(err));
+    cheat_inc_cmd_count(state);
+    const char *resp = (rc == 0) ? "{\"ok\":true}" : "{\"ok\":false}";
+    return send_frame(client_fd, FTX2_FRAME_CHEATS_RELOAD_ACK, 0, trace_id,
+                      resp, strlen(resp));
+}
+
+static int handle_cheats_status(runtime_state_t *state, int client_fd,
+                                 uint64_t trace_id) {
+    if (!state) return -1;
+    char buf[512];
+    size_t written = 0;
+    cheats_status_json(buf, sizeof(buf), &written);
+    cheat_inc_cmd_count(state);
+    return send_frame(client_fd, FTX2_FRAME_CHEATS_STATUS_ACK, 0, trace_id,
+                      buf, (uint64_t)written);
+}
+
+static int handle_cheats_engine_set(runtime_state_t *state, int client_fd,
+                                     uint64_t trace_id, const char *body) {
+    if (!state) return -1;
+    int enabled = 0;
+    if (body) {
+        int bval = 0;
+        if (extract_json_bool_field(body, "enabled", &bval) == 0) {
+            enabled = bval;
+        }
+    }
+    cheats_engine_set_enabled(enabled);
+    cheat_inc_cmd_count(state);
+    const char *resp = enabled
+        ? "{\"ok\":true,\"enabled\":true}"
+        : "{\"ok\":true,\"enabled\":false}";
+    return send_frame(client_fd, FTX2_FRAME_CHEATS_ENGINE_SET_ACK, 0,
+                      trace_id, resp, strlen(resp));
+}
+
+/* ── Activity tracker handlers ──────────────────────────────────────── */
+#define ACTIVITY_JSON_BUF_SZ  (128u * 1024u)
+
+static int handle_activity_get(runtime_state_t *state, int client_fd,
+                                uint64_t trace_id) {
+    if (!state) return -1;
+    char *buf = malloc(ACTIVITY_JSON_BUF_SZ);
+    if (!buf) {
+        const char *e = "{\"titles\":[]}";
+        return send_frame(client_fd, FTX2_FRAME_ACTIVITY_GET_ACK, 0,
+                          trace_id, e, strlen(e));
+    }
+    size_t written = 0;
+    activity_get_json(buf, ACTIVITY_JSON_BUF_SZ, &written);
+    cheat_inc_cmd_count(state);
+    int rc = send_frame(client_fd, FTX2_FRAME_ACTIVITY_GET_ACK, 0,
+                        trace_id, buf, (uint64_t)written);
+    free(buf);
+    return rc;
+}
+
+static int handle_activity_db_query(runtime_state_t *state, int client_fd,
+                                     uint64_t trace_id, const char *body) {
+    if (!state) return -1;
+    char query[64] = {0};
+    if (body) {
+        extract_json_string_field(body, "query", query, sizeof(query));
+    }
+    if (!query[0]) {
+        strncpy(query, "recently_played", sizeof(query) - 1);
+        query[sizeof(query) - 1] = '\0';
+    }
+    char *buf = malloc(ACTIVITY_JSON_BUF_SZ);
+    if (!buf) {
+        const char *e = "{\"rows\":[],\"error\":\"oom\"}";
+        return send_frame(client_fd, FTX2_FRAME_ACTIVITY_DB_QUERY_ACK, 0,
+                          trace_id, e, strlen(e));
+    }
+    size_t written = 0;
+    activity_db_query_json(query, buf, ACTIVITY_JSON_BUF_SZ, &written);
+    cheat_inc_cmd_count(state);
+    int rc = send_frame(client_fd, FTX2_FRAME_ACTIVITY_DB_QUERY_ACK, 0,
+                        trace_id, buf, (uint64_t)written);
+    free(buf);
+    return rc;
+}
+
+/* ── SDK Changer handlers ───────────────────────────────────────────── */
+#define SDK_JSON_BUF_SZ  (64u * 1024u)
+
+static int handle_sdk_scan(runtime_state_t *state, int client_fd,
+                            uint64_t trace_id) {
+    if (!state) return -1;
+    char *buf = malloc(SDK_JSON_BUF_SZ);
+    if (!buf) {
+        const char *e = "{\"titles\":[]}";
+        return send_frame(client_fd, FTX2_FRAME_SDK_SCAN_ACK, 0,
+                          trace_id, e, strlen(e));
+    }
+    size_t written = 0;
+    sdk_changer_scan(buf, SDK_JSON_BUF_SZ, &written);
+    cheat_inc_cmd_count(state);
+    int rc = send_frame(client_fd, FTX2_FRAME_SDK_SCAN_ACK, 0,
+                        trace_id, buf, (uint64_t)written);
+    free(buf);
+    return rc;
+}
+
+static int handle_sdk_patch(runtime_state_t *state, int client_fd,
+                             uint64_t trace_id, const char *body) {
+    if (!state) return -1;
+    if (!body) {
+        const char *e = "{\"ok\":false,\"error\":\"body_required\"}";
+        return send_frame(client_fd, FTX2_FRAME_SDK_PATCH_ACK, 0,
+                          trace_id, e, strlen(e));
+    }
+    char title_id[32] = {0};
+    char target_sdk[32] = {0};
+    extract_json_string_field(body, "title_id", title_id, sizeof(title_id));
+    extract_json_string_field(body, "target_sdk", target_sdk, sizeof(target_sdk));
+
+    if (!title_id[0] || !target_sdk[0]) {
+        const char *e = "{\"ok\":false,\"error\":\"title_id_and_target_sdk_required\"}";
+        return send_frame(client_fd, FTX2_FRAME_SDK_PATCH_ACK, 0,
+                          trace_id, e, strlen(e));
+    }
+
+    char err[256] = {0};
+    int rc = sdk_changer_patch(title_id, target_sdk, err, sizeof(err));
+    cheat_inc_cmd_count(state);
+
+    char resp[512];
+    if (rc == 0) {
+        snprintf(resp, sizeof(resp), "{\"ok\":true,\"title_id\":\"%s\",\"target_sdk\":\"%s\"}",
+                 title_id, target_sdk);
+    } else {
+        snprintf(resp, sizeof(resp), "{\"ok\":false,\"error\":\"%s\"}",
+                 err[0] ? err : "patch_failed");
+    }
+    return send_frame(client_fd, FTX2_FRAME_SDK_PATCH_ACK, 0,
+                      trace_id, resp, strlen(resp));
+}
+
+static int handle_sdk_restore(runtime_state_t *state, int client_fd,
+                               uint64_t trace_id, const char *body) {
+    if (!state) return -1;
+    if (!body) {
+        const char *e = "{\"ok\":false,\"error\":\"body_required\"}";
+        return send_frame(client_fd, FTX2_FRAME_SDK_RESTORE_ACK, 0,
+                          trace_id, e, strlen(e));
+    }
+    char title_id[32] = {0};
+    extract_json_string_field(body, "title_id", title_id, sizeof(title_id));
+
+    if (!title_id[0]) {
+        const char *e = "{\"ok\":false,\"error\":\"title_id_required\"}";
+        return send_frame(client_fd, FTX2_FRAME_SDK_RESTORE_ACK, 0,
+                          trace_id, e, strlen(e));
+    }
+
+    char err[256] = {0};
+    int restored = 0;
+    int rc = sdk_changer_restore(title_id, &restored, err, sizeof(err));
+    cheat_inc_cmd_count(state);
+
+    char resp[512];
+    if (rc == 0) {
+        snprintf(resp, sizeof(resp),
+                 "{\"ok\":true,\"title_id\":\"%s\",\"restored\":%d,\"error\":\"%s\"}",
+                 title_id, restored,
+                 (rc == 0 && restored > 0) ? "" : (err[0] ? err : ""));
+    } else {
+        snprintf(resp, sizeof(resp), "{\"ok\":false,\"error\":\"%s\"}",
+                 err[0] ? err : "restore_failed");
+    }
+    return send_frame(client_fd, FTX2_FRAME_SDK_RESTORE_ACK, 0,
+                      trace_id, resp, strlen(resp));
+}
+
+/* ── TMDB handlers ─────────────────────────────────────────────────── */
+#define TMDB_JSON_BUF_SZ  (64u * 1024u)
+
+static int handle_tmdb_fetch(runtime_state_t *state, int client_fd,
+                              uint64_t trace_id, const char *body) {
+    if (!state) return -1;
+    char title_id[32] = {0};
+    int refresh = 0;
+    if (body) {
+        extract_json_string_field(body, "title_id", title_id, sizeof(title_id));
+        extract_json_bool_field(body, "refresh", &refresh);
+    }
+    if (!title_id[0]) {
+        const char *e = "{\"ok\":false,\"error\":\"title_id_required\"}";
+        return send_frame(client_fd, FTX2_FRAME_TMDB_FETCH_ACK, 0,
+                          trace_id, e, strlen(e));
+    }
+    char *buf = malloc(TMDB_JSON_BUF_SZ);
+    if (!buf) {
+        const char *e = "{\"ok\":false,\"error\":\"oom\"}";
+        return send_frame(client_fd, FTX2_FRAME_TMDB_FETCH_ACK, 0,
+                          trace_id, e, strlen(e));
+    }
+    size_t written = 0;
+    tmdb_fetch(title_id, refresh, buf, TMDB_JSON_BUF_SZ, &written);
+    cheat_inc_cmd_count(state);
+    int rc = send_frame(client_fd, FTX2_FRAME_TMDB_FETCH_ACK, 0,
+                        trace_id, buf, (uint64_t)written);
+    free(buf);
+    return rc;
+}
+
+static int handle_tmdb_store(runtime_state_t *state, int client_fd,
+                              uint64_t trace_id, const char *body) {
+    if (!state) return -1;
+    char title_id[32] = {0};
+    char *json = malloc(TMDB_JSON_BUF_SZ);
+    if (!json) {
+        const char *e = "{\"ok\":false,\"error\":\"oom\"}";
+        return send_frame(client_fd, FTX2_FRAME_TMDB_STORE_ACK, 0,
+                          trace_id, e, strlen(e));
+    }
+    size_t json_len = 0;
+    if (body) {
+        extract_json_string_field(body, "title_id", title_id, sizeof(title_id));
+        extract_json_string_field(body, "json", json, TMDB_JSON_BUF_SZ);
+        json_len = strlen(json);
+    }
+    if (!title_id[0] || json_len == 0) {
+        free(json);
+        const char *e = "{\"ok\":false,\"error\":\"title_id_and_json_required\"}";
+        return send_frame(client_fd, FTX2_FRAME_TMDB_STORE_ACK, 0,
+                          trace_id, e, strlen(e));
+    }
+    int rc_store = tmdb_store(title_id, json, json_len);
+    free(json);
+    const char *resp = rc_store == 0
+        ? "{\"ok\":true}" : "{\"ok\":false,\"error\":\"store_failed\"}";
+    return send_frame(client_fd, FTX2_FRAME_TMDB_STORE_ACK, 0,
+                      trace_id, resp, strlen(resp));
+}
+
+/* ── FW Spoof status handler ───────────────────────────────────────── */
+static int handle_fw_spoof_status(runtime_state_t *state, int client_fd,
+                                   uint64_t trace_id) {
+    if (!state) return -1;
+    char buf[1024];
+    size_t written = 0;
+    fw_spoof_status(buf, sizeof(buf), &written);
+    cheat_inc_cmd_count(state);
+    return send_frame(client_fd, FTX2_FRAME_FWSPOOF_STATUS_ACK, 0,
+                      trace_id, buf, (uint64_t)written);
+}
+
+/* ── FTP Server handlers ──────────────────────────────────────────── */
+static int handle_ftp_start(runtime_state_t *state, int client_fd,
+                             uint64_t trace_id, const char *body) {
+    if (!state) return -1;
+    int port = 2121;
+    char root[256] = "/";
+    int readonly = 0;
+    char user[64] = {0};
+    char pass[64] = {0};
+    if (body) {
+        char needle[32];
+        snprintf(needle, sizeof(needle), "\"port\":");
+        if (strstr(body, needle)) {
+            port = (int)extract_json_uint64_field(body, "port");
+        }
+        extract_json_string_field(body, "root", root, sizeof(root));
+        extract_json_bool_field(body, "readonly", &readonly);
+        extract_json_string_field(body, "user", user, sizeof(user));
+        extract_json_string_field(body, "pass", pass, sizeof(pass));
+    }
+    char resp[512];
+    size_t written = 0;
+    ftp_server_start(port, root, readonly, user[0] ? user : NULL,
+                     pass[0] ? pass : NULL, resp, sizeof(resp), &written);
+    cheat_inc_cmd_count(state);
+    return send_frame(client_fd, FTX2_FRAME_FTP_START_ACK, 0,
+                      trace_id, resp, (uint64_t)written);
+}
+
+static int handle_ftp_status(runtime_state_t *state, int client_fd,
+                              uint64_t trace_id) {
+    if (!state) return -1;
+    char resp[256];
+    size_t written = 0;
+    ftp_server_status(resp, sizeof(resp), &written);
+    cheat_inc_cmd_count(state);
+    return send_frame(client_fd, FTX2_FRAME_FTP_STATUS_ACK, 0,
+                      trace_id, resp, (uint64_t)written);
+}
+
 /* ── Fan curve get handler ───────────────────────────────────────────── */
 static int handle_fan_curve_get(runtime_state_t *state, int client_fd,
                                  uint64_t trace_id) {
@@ -15077,18 +15551,30 @@ static int handle_hw_set_fan_threshold(runtime_state_t *state, int client_fd,
     if (!state) return -1;
 
     uint8_t threshold = 65;  /* Sony's approximate default. */
-    if (body_len > 0 && body_len < 16) {
-        char buf[16];
+    /* Optional reapply interval in seconds. If present in the body
+     * (as the second integer), update the watcher's interval too.
+     * Backward compat: a body with just the threshold ("65") leaves
+     * the interval unchanged. */
+    int has_reapply = 0;
+    int reapply_sec = 0;
+    if (body_len > 0 && body_len < 32) {
+        char buf[32];
         memcpy(buf, body, (size_t)body_len);
         buf[body_len] = '\0';
-        /* atoi is fine here — we only trust it for extracting the
-         * numeric portion; hw_fan_set_threshold clamps the result,
-         * so a non-numeric payload just degrades to 45 °C. */
-        int parsed = atoi(buf);
-        if (parsed > 0 && parsed < 255) {
+        /* Parse "threshold" or "threshold reapply_sec". hw_fan_set_threshold
+         * clamps the threshold so a non-numeric payload degrades to a
+         * safe default rather than being rejected. */
+        int parsed = 0;
+        int second = 0;
+        int matched = sscanf(buf, "%d %d", &parsed, &second);
+        if (matched >= 1 && parsed > 0 && parsed < 255) {
             threshold = (uint8_t)parsed;
         }
-    } else if (body_len >= 16) {
+        if (matched >= 2 && second > 0) {
+            has_reapply = 1;
+            reapply_sec = second;
+        }
+    } else if (body_len >= 32) {
         static const char err[] = "body_too_long";
         return send_frame(client_fd, FTX2_FRAME_ERROR, 0, trace_id,
                           err, (uint64_t)(sizeof(err) - 1));
@@ -15099,6 +15585,13 @@ static int handle_hw_set_fan_threshold(runtime_state_t *state, int client_fd,
         const char *reason = err_reason ? err_reason : "fan_set_failed";
         return send_frame(client_fd, FTX2_FRAME_ERROR, 0, trace_id,
                           reason, (uint64_t)strlen(reason));
+    }
+    /* Update reapply interval if the caller provided one. Done AFTER
+     * the threshold set so a bad interval value doesn't prevent the
+     * threshold from being applied. hw_fan_set_reapply_interval
+     * clamps to [1, 300] and persists to fan_reapply.conf. */
+    if (has_reapply) {
+        hw_fan_set_reapply_interval(reapply_sec);
     }
     pthread_mutex_lock(&state->state_mtx);
     state->command_count += 1;
@@ -16661,6 +17154,10 @@ static int handle_binary_frame(runtime_state_t *state, int client_fd,
          * `g_ucred_elevation_rc` is defined in main.c. */
         extern volatile int g_ucred_elevation_rc;
         const int ucred_elevated = (g_ucred_elevation_rc == 0) ? 1 : 0;
+        /* Fan threshold + reapply interval for the client UI. Both are
+         * read from atomics in hw_info.c so this is lock-free. */
+        int fan_pinned = hw_fan_pinned_threshold();
+        int fan_reapply = hw_fan_reapply_interval();
         len = snprintf(body, sizeof(body),
                        "{\"version\":\"%s\","
                        "\"ps5_kernel\":\"%s\","
@@ -16673,7 +17170,12 @@ static int handle_binary_frame(runtime_state_t *state, int client_fd,
                        /* Multi-stream capability: how many parallel transfer
                         * connections this payload will service concurrently.
                         * Absent on old payloads → engine treats it as 1. */
-                       "\"max_transfer_streams\":%d}",
+                       "\"max_transfer_streams\":%d,"
+                       /* Fan state: pinned threshold (0 = not set) and the
+                        * reapply interval in seconds. Lets the client display
+                        * current settings without a separate round-trip. */
+                       "\"fan_threshold\":%d,"
+                       "\"fan_reapply_sec\":%d}",
                        PS5UPLOAD2_VERSION,
                        kernel_version_esc,
                        (unsigned long long)snap_instance_id,
@@ -16687,7 +17189,9 @@ static int handle_binary_frame(runtime_state_t *state, int client_fd,
                        (unsigned long long)snap_last_seq,
                        (unsigned long long)snap_recovered,
                        ucred_elevated ? "true" : "false",
-                       PS5UPLOAD2_TRANSFER_STREAMS_ADVERTISED);
+                       PS5UPLOAD2_TRANSFER_STREAMS_ADVERTISED,
+                       fan_pinned,
+                       fan_reapply);
         /* Truncation-safe: if the fields ever grow past `body`, clamp
          * rather than emit a body_len that drives send_frame to read
          * past the stack buffer. The JSON is still valid-on-arrival
@@ -17521,6 +18025,63 @@ abort_done:
     }
     if (hdr.frame_type == FTX2_FRAME_NOTIF_SEND) {
         return handle_notif_send(state, client_fd, hdr.trace_id, request_body);
+    }
+    /* ── Cheat engine ── */
+    if (hdr.frame_type == FTX2_FRAME_CHEATS_LIST) {
+        return handle_cheats_list(state, client_fd, hdr.trace_id);
+    }
+    if (hdr.frame_type == FTX2_FRAME_CHEATS_GET) {
+        return handle_cheats_get(state, client_fd, hdr.trace_id, request_body);
+    }
+    if (hdr.frame_type == FTX2_FRAME_CHEATS_TOGGLE) {
+        return handle_cheats_toggle(state, client_fd, hdr.trace_id, request_body);
+    }
+    if (hdr.frame_type == FTX2_FRAME_CHEATS_DELETE) {
+        return handle_cheats_delete(state, client_fd, hdr.trace_id, request_body);
+    }
+    if (hdr.frame_type == FTX2_FRAME_CHEATS_RELOAD) {
+        return handle_cheats_reload(state, client_fd, hdr.trace_id);
+    }
+    if (hdr.frame_type == FTX2_FRAME_CHEATS_STATUS) {
+        return handle_cheats_status(state, client_fd, hdr.trace_id);
+    }
+    if (hdr.frame_type == FTX2_FRAME_CHEATS_ENGINE_SET) {
+        return handle_cheats_engine_set(state, client_fd, hdr.trace_id, request_body);
+    }
+    /* ── Activity tracker ── */
+    if (hdr.frame_type == FTX2_FRAME_ACTIVITY_GET) {
+        return handle_activity_get(state, client_fd, hdr.trace_id);
+    }
+    if (hdr.frame_type == FTX2_FRAME_ACTIVITY_DB_QUERY) {
+        return handle_activity_db_query(state, client_fd, hdr.trace_id, request_body);
+    }
+    /* ── SDK Changer ── */
+    if (hdr.frame_type == FTX2_FRAME_SDK_SCAN) {
+        return handle_sdk_scan(state, client_fd, hdr.trace_id);
+    }
+    if (hdr.frame_type == FTX2_FRAME_SDK_PATCH) {
+        return handle_sdk_patch(state, client_fd, hdr.trace_id, request_body);
+    }
+    if (hdr.frame_type == FTX2_FRAME_SDK_RESTORE) {
+        return handle_sdk_restore(state, client_fd, hdr.trace_id, request_body);
+    }
+    /* ── TMDB ── */
+    if (hdr.frame_type == FTX2_FRAME_TMDB_FETCH) {
+        return handle_tmdb_fetch(state, client_fd, hdr.trace_id, request_body);
+    }
+    if (hdr.frame_type == FTX2_FRAME_TMDB_STORE) {
+        return handle_tmdb_store(state, client_fd, hdr.trace_id, request_body);
+    }
+    /* ── FW Spoof ── */
+    if (hdr.frame_type == FTX2_FRAME_FWSPOOF_STATUS) {
+        return handle_fw_spoof_status(state, client_fd, hdr.trace_id);
+    }
+    /* ── FTP Server ── */
+    if (hdr.frame_type == FTX2_FRAME_FTP_START) {
+        return handle_ftp_start(state, client_fd, hdr.trace_id, request_body);
+    }
+    if (hdr.frame_type == FTX2_FRAME_FTP_STATUS) {
+        return handle_ftp_status(state, client_fd, hdr.trace_id);
     }
     if (hdr.frame_type == FTX2_FRAME_HW_FAN_CURVE_GET) {
         return handle_fan_curve_get(state, client_fd, hdr.trace_id);

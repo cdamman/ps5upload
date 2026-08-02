@@ -1,0 +1,149 @@
+//! Activity tracker proxy: get play-time stats and query the app/sl2 databases.
+
+use anyhow::{bail, Result};
+use ftx2_proto::FrameType;
+use serde::{Deserialize, Serialize};
+
+use crate::connection::Connection;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ActivityEntry {
+    #[serde(default)]
+    pub title_id: String,
+    #[serde(default)]
+    pub launches: u64,
+    #[serde(default)]
+    pub total_seconds: u64,
+    #[serde(default)]
+    pub last_launch_ts: i64,
+    #[serde(default)]
+    pub last_seen_ts: i64,
+    #[serde(default)]
+    pub session_active: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ActivityGetResponse {
+    #[serde(default)]
+    pub titles: Vec<ActivityEntry>,
+    #[serde(default)]
+    pub current_title: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ActivityDbRow {
+    #[serde(default)]
+    pub title_id: String,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub total_seconds: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ActivityDbQueryResponse {
+    #[serde(default)]
+    pub rows: Vec<ActivityDbRow>,
+    #[serde(default)]
+    pub source: String,
+    #[serde(default)]
+    pub error: Option<String>,
+}
+
+fn send_recv(
+    addr: &str,
+    req_type: FrameType,
+    ack_type: FrameType,
+    body: Option<&[u8]>,
+) -> Result<Vec<u8>> {
+    let mut c = Connection::connect(addr)?;
+    let empty: Vec<u8> = Vec::new();
+    let body = body.unwrap_or(&empty);
+    c.send_frame(req_type, body)?;
+    let (hdr, resp) = c.recv_frame()?;
+    let ft = hdr.frame_type().unwrap_or(FrameType::Error);
+    if ft == FrameType::Error {
+        bail!(
+            "payload rejected {:?}: {}",
+            req_type,
+            String::from_utf8_lossy(&resp)
+        );
+    }
+    if ft != ack_type {
+        bail!("expected {:?}, got {:?}", ack_type, ft);
+    }
+    Ok(resp)
+}
+
+pub fn activity_get(addr: &str) -> Result<ActivityGetResponse> {
+    let resp = send_recv(
+        addr,
+        FrameType::ActivityGet,
+        FrameType::ActivityGetAck,
+        None,
+    )?;
+    Ok(serde_json::from_slice(&resp)?)
+}
+
+pub fn activity_db_query(addr: &str, query: &str) -> Result<ActivityDbQueryResponse> {
+    let body = serde_json::json!({ "query": query });
+    let resp = send_recv(
+        addr,
+        FrameType::ActivityDbQuery,
+        FrameType::ActivityDbQueryAck,
+        Some(&serde_json::to_vec(&body)?),
+    )?;
+    Ok(serde_json::from_slice(&resp)?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn deserialize_activity_get() {
+        let json = r#"{
+            "titles": [
+                {"title_id":"CUSA00001","launches":5,"total_seconds":3600,
+                 "last_launch_ts":1700000000,"last_seen_ts":1700003600,
+                 "session_active":false}
+            ],
+            "current_title": "CUSA00002"
+        }"#;
+        let resp: ActivityGetResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(resp.titles.len(), 1);
+        assert_eq!(resp.titles[0].title_id, "CUSA00001");
+        assert_eq!(resp.titles[0].launches, 5);
+        assert_eq!(resp.current_title, "CUSA00002");
+    }
+
+    #[test]
+    fn deserialize_activity_get_empty() {
+        let json = r#"{}"#;
+        let resp: ActivityGetResponse = serde_json::from_str(json).unwrap();
+        assert!(resp.titles.is_empty());
+    }
+
+    #[test]
+    fn deserialize_db_query() {
+        let json = r#"{
+            "rows": [
+                {"title_id":"CUSA00001","name":"Game A"},
+                {"title_id":"CUSA00002","name":"Game B","total_seconds":7200}
+            ],
+            "source": "app_db"
+        }"#;
+        let resp: ActivityDbQueryResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(resp.rows.len(), 2);
+        assert_eq!(resp.source, "app_db");
+        assert!(resp.error.is_none());
+    }
+
+    #[test]
+    fn deserialize_db_query_error() {
+        let json = r#"{"rows":[],"source":"none","error":"cannot open db"}"#;
+        let resp: ActivityDbQueryResponse = serde_json::from_str(json).unwrap();
+        assert!(resp.rows.is_empty());
+        assert_eq!(resp.error.as_deref(), Some("cannot open db"));
+    }
+}

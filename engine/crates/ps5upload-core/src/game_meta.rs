@@ -523,7 +523,7 @@ mod tests {
         buf.extend_from_slice(&(entries.len() as u32).to_le_bytes());
         // Index entries.
         let mut key_off = 0u16;
-        for (i, (k, v)) in entries.iter().enumerate() {
+        for (i, (k, _v)) in entries.iter().enumerate() {
             let (data_off, data_len) = data_entries[i];
             buf.extend_from_slice(&key_off.to_le_bytes()); // key offset
             buf.extend_from_slice(&0x0204u16.to_le_bytes()); // format: utf-8 normal

@@ -39,6 +39,13 @@ const BackupScreen = lazy(() => import("./screens/Backup"));
 const RemotePlayScreen = lazy(() => import("./screens/RemotePlay"));
 const FanCurveScreen = lazy(() => import("./screens/FanCurve"));
 const NotificationsScreen = lazy(() => import("./screens/Notifications"));
+const CheatsScreen = lazy(() => import("./screens/Cheats"));
+const GameActivityScreen = lazy(() => import("./screens/GameActivity"));
+const SdkChangerScreen = lazy(() => import("./screens/SdkChanger"));
+const TmdbScreen = lazy(() => import("./screens/Tmdb"));
+const FwSpoofScreen = lazy(() => import("./screens/FwSpoof"));
+const FtpServerScreen = lazy(() => import("./screens/FtpServer"));
+const SmbBrowserScreen = lazy(() => import("./screens/SmbBrowser"));
 const PayloadsScreen = lazy(() => import("./screens/Payloads"));
 const NanoDnsScreen = lazy(() => import("./screens/NanoDns"));
 const FirstRunScreen = lazy(() => import("./screens/FirstRun"));
@@ -201,6 +208,62 @@ export default function App() {
           element={
             <Suspense fallback={<ScreenLoader />}>
               <NotificationsScreen />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/cheats"
+          element={
+            <Suspense fallback={<ScreenLoader />}>
+              <CheatsScreen />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/game-activity"
+          element={
+            <Suspense fallback={<ScreenLoader />}>
+              <GameActivityScreen />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/sdk-changer"
+          element={
+            <Suspense fallback={<ScreenLoader />}>
+              <SdkChangerScreen />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/tmdb"
+          element={
+            <Suspense fallback={<ScreenLoader />}>
+              <TmdbScreen />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/fw-spoof"
+          element={
+            <Suspense fallback={<ScreenLoader />}>
+              <FwSpoofScreen />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/ftp-server"
+          element={
+            <Suspense fallback={<ScreenLoader />}>
+              <FtpServerScreen />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/smb-browser"
+          element={
+            <Suspense fallback={<ScreenLoader />}>
+              <SmbBrowserScreen />
             </Suspense>
           }
         />

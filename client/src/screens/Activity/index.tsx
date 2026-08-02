@@ -71,7 +71,7 @@ export default function ActivityScreen() {
     <div className="p-6">
       <PageHeader
         icon={ActivityIcon}
-        title={tr("activity_title", undefined, "Activity")}
+        title={tr("transfer_log_title", undefined, "Transfer Log")}
         description={tr(
           "activity_description",
           undefined,

@@ -5,6 +5,25 @@
 # Env: PS5UPLOAD_ENGINE_PORT (19113), PS5_ADDR (192.168.137.2:9113),
 #      PS5UPLOAD_ALLOW_IP (comma-separated IPs allowed past the loopback guard).
 #
+# IMPORTANT for Docker Desktop (macOS/Windows): the engine's loopback guard
+# rejects requests that don't come from 127.0.0.1/::1. Docker's port-forwarding
+# NATs connections through the VM bridge, so the container sees a bridge IP
+# (e.g. 172.17.0.1), NOT loopback — and all requests get 403 "loopback only".
+# Two workarounds:
+#   1. Set PS5UPLOAD_ALLOW_IP to the Docker bridge gateway IP:
+#        docker run --rm -p 19113:19113 \
+#          -e PS5_ADDR=192.168.1.50:9113 \
+#          -e PS5UPLOAD_ALLOW_IP=172.17.0.1 \
+#          ps5upload-engine
+#   2. On Linux hosts, use --network host (connections are true loopback):
+#        docker run --rm --network host \
+#          -e PS5_ADDR=192.168.1.50:9113 \
+#          ps5upload-engine
+# Note: on macOS/Windows Docker Desktop, --network host does NOT work (the
+# daemon runs in a VM and can't bind to the host's LAN). Use option 1 and
+# note that the PS5 must be reachable from the Docker VM's network (may
+# require additional routing/bridging for the VM to reach the LAN).
+#
 # SECURITY: the /api/* surface is UNAUTHENTICATED — it can install/uninstall
 # titles and read/write/delete files on the PS5. By default only loopback may
 # reach it. PS5UPLOAD_ALLOW_IP opens it to the listed IP(s) so a remote desktop

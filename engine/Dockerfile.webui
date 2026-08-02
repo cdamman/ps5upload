@@ -14,6 +14,14 @@
 # Then open http://192.168.1.<host>:19113 in a browser on the machine whose
 # IP you set in PS5UPLOAD_ALLOW_IP.
 #
+# DOCKER DESKTOP (macOS/Windows): the engine's loopback guard rejects
+# connections from Docker's NAT bridge. You MUST set PS5UPLOAD_ALLOW_IP to
+# the bridge gateway (usually 172.17.0.1) for port-forwarded connections to
+# work. On Linux, prefer --network host instead. See engine/Dockerfile for
+# full networking details. Note: on macOS/Windows the Docker VM is NAT'd
+# and may not be able to reach the PS5 on your LAN — this is a Docker
+# Desktop limitation, not an engine bug.
+#
 # SECURITY: the web UI is UNAUTHENTICATED.  Anyone whose IP is in
 # PS5UPLOAD_ALLOW_IP gets full control over your PS5.  Only add IPs from
 # your own trusted LAN.  Never expose port 19113 to the internet.

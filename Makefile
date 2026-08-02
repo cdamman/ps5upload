@@ -335,7 +335,10 @@ _payload-if-ready:
 		echo "⚠ Skipping payload rebuild (PS5_PAYLOAD_SDK not set) — using existing $(PAYLOAD_ELF) if present."; \
 	fi
 
-build: sync-version-check payload engine client
+# Build only the release engine binary (the binary Tauri spawns). Skips the
+# dev-profile workspace build that the standalone `engine` target does —
+# `make build` only needs the release binary, not the dev workspace.
+build: sync-version-check payload _engine-release client
 	@$(MAKE) _android-build-if-ready
 	@echo ""
 	@echo "✓ Build complete"

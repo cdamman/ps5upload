@@ -111,7 +111,7 @@ export default function ActivityBar() {
           onClick={() => navigate("/activity")}
           className="rounded-md border border-[var(--color-border)] px-2 py-0.5 text-xs text-[var(--color-muted)] hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text)]"
         >
-          {tr("activity_bar_open", undefined, "View Activity")}
+          {tr("activity_bar_open", undefined, "View Log")}
         </button>
       </div>
 

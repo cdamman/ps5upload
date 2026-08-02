@@ -97,4 +97,8 @@ pub use system_power::*;
 pub use title_meta::*;
 pub use updates::*;
 pub use usb_autoloader::*;
+
+pub(crate) fn default_true() -> bool {
+    true
+}
 pub use user_config::*;

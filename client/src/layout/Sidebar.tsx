@@ -39,6 +39,12 @@ import {
   MonitorPlay,
   Fan,
   Bell,
+  Clock,
+  Layers,
+  Database,
+  ShieldAlert,
+  Server,
+  Network,
 } from "lucide-react";
 import clsx from "clsx";
 import { useThemeStore } from "../state/theme";
@@ -205,6 +211,48 @@ const items: NavItem[] = [
     fallback: "Notifications",
     icon: Bell,
   },
+  {
+    to: "/cheats",
+    key: "cheats",
+    fallback: "Cheats",
+    icon: Gamepad2,
+  },
+  {
+    to: "/game-activity",
+    key: "game_activity",
+    fallback: "Game Activity",
+    icon: Clock,
+  },
+  {
+    to: "/sdk-changer",
+    key: "sdk_changer",
+    fallback: "SDK Changer",
+    icon: Layers,
+  },
+  {
+    to: "/tmdb",
+    key: "tmdb",
+    fallback: "TMDB",
+    icon: Database,
+  },
+  {
+    to: "/fw-spoof",
+    key: "fw_spoof",
+    fallback: "FW Spoof",
+    icon: ShieldAlert,
+  },
+  {
+    to: "/ftp-server",
+    key: "ftp_server",
+    fallback: "FTP Server",
+    icon: Server,
+  },
+  {
+    to: "/smb-browser",
+    key: "smb_browser",
+    fallback: "SMB Browser",
+    icon: Network,
+  },
   { to: "/backup", key: "backup", fallback: "Backup", icon: Archive },
   { to: "/nanodns", key: "nanodns", fallback: "nanoDNS", icon: Globe },
   { to: "/shell", key: "shell", fallback: "Shell", icon: TerminalSquare },
@@ -212,8 +260,8 @@ const items: NavItem[] = [
   // ─ Diagnostics: history, logs, debugging ─
   {
     to: "/activity",
-    key: "activity",
-    fallback: "Activity",
+    key: "transfer_log",
+    fallback: "Transfer Log",
     icon: ActivityIcon,
     section: { key: "nav_section_diagnostics", fallback: "Diagnostics" },
   },

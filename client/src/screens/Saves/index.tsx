@@ -851,7 +851,7 @@ export default function SavesScreen() {
 
         <div className="mx-auto max-w-4xl space-y-3">
           {saves?.some((e) => e.kind === "ps4") && (
-            <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-200">
+            <div className="rounded-lg border border-[var(--color-warn)]/40 bg-[var(--color-warn)]/10 p-3 text-xs text-[var(--color-warn)]">
               <strong>
                 {tr("saves_ps4_warning_title", undefined, "PS4-format saves:")}
               </strong>{" "}

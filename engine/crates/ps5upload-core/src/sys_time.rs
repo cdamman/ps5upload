@@ -16,8 +16,92 @@
 use anyhow::{bail, Result};
 use ftx2_proto::FrameType;
 use serde::{Deserialize, Serialize};
+use std::net::{SocketAddr, UdpSocket};
+use std::time::Duration;
 
 use crate::connection::Connection;
+
+// ─── NTP query ────────────────────────────────────────────────────
+//
+// Minimal NTPv4 client (RFC 5905). Sends a single 48-byte client mode
+// request to a pool server on UDP 123 and parses the transmit
+// timestamp from the reply. The NTP epoch (1900-01-01) is 2208988800
+// seconds before the Unix epoch (1970-01-01).
+//
+// We implement NTP from scratch (48 bytes, one UDP round-trip) rather
+// than pulling in an NTP crate — the protocol is trivially simple for
+// a one-shot query and we avoid the transitive dependency cost.
+const NTP_EPOCH_OFFSET: u64 = 2_208_988_800;
+const NTP_TIMEOUT: Duration = Duration::from_secs(3);
+
+/// Query an NTP server and return the current Unix epoch in seconds (UTC).
+/// Tries each server in order; first success wins.
+pub fn ntp_query_unix_seconds(servers: &[&str]) -> Result<i64> {
+    if servers.is_empty() {
+        bail!("no NTP servers provided");
+    }
+    let mut last_err = None;
+    for &host in servers {
+        match ntp_query_single(host) {
+            Ok(ts) => return Ok(ts),
+            Err(e) => last_err = Some((host, e)),
+        }
+    }
+    let (host, e) = last_err.unwrap();
+    bail!("all NTP servers failed; last: {host}: {e:#}");
+}
+
+fn ntp_query_single(host: &str) -> Result<i64> {
+    // Resolve and try each address until one responds.
+    let addrs = std::net::ToSocketAddrs::to_socket_addrs(&(host, 123))?;
+    let mut last_err = None;
+    for addr in addrs {
+        match ntp_query_addr(addr) {
+            Ok(ts) => return Ok(ts),
+            Err(e) => last_err = Some(e),
+        }
+    }
+    Err(last_err.unwrap_or_else(|| anyhow::anyhow!("no addresses resolved for {host}")))
+}
+
+fn ntp_query_addr(addr: SocketAddr) -> Result<i64> {
+    let sock = UdpSocket::bind("0.0.0.0:0")?;
+    sock.set_read_timeout(Some(NTP_TIMEOUT))?;
+    sock.set_write_timeout(Some(NTP_TIMEOUT))?;
+    sock.connect(addr)?;
+
+    // 48-byte NTPv4 client request. Only the first byte is meaningful:
+    // LI=0 (no warning), VN=4, Mode=3 (client). Rest is zero.
+    let req = [0u8; 48];
+    let mut ntp_req = req;
+    ntp_req[0] = 0x1B; // LI=0, VN=3, Mode=3
+
+    sock.send(&ntp_req)?;
+
+    let mut buf = [0u8; 48];
+    let n = sock.recv(&mut buf)?;
+    if n < 48 {
+        bail!("short NTP reply: {n} bytes");
+    }
+
+    // Transmit timestamp starts at byte 40 (4 bytes seconds + 4 bytes fraction).
+    // We only need the seconds field for second-level precision.
+    let seconds = u32::from_be_bytes([buf[40], buf[41], buf[42], buf[43]]);
+    let unix = (seconds as u64).saturating_sub(NTP_EPOCH_OFFSET);
+    if unix > i64::MAX as u64 {
+        bail!("NTP timestamp overflow: {unix}");
+    }
+    Ok(unix as i64)
+}
+
+/// Default NTP servers used when the client doesn't specify any.
+/// Cloudflare and Google are anycast, fast, and globally reachable.
+pub const DEFAULT_NTP_SERVERS: &[&str] = &[
+    "time.cloudflare.com",
+    "time.google.com",
+    "pool.ntp.org",
+    "time.windows.com",
+];
 
 /// Diagnostic err_code sentinels surfaced by the payload's sys_time
 /// module. Keep in sync with payload/include/sys_time.h.
@@ -648,5 +732,26 @@ mod tests {
         let r: PsTimeSetResult = serde_json::from_value(json).unwrap();
         assert_eq!(r.prior_unix, -1);
         assert_eq!(r.new_unix, -1);
+    }
+
+    #[test]
+    fn ntp_query_returns_plausible_timestamp() {
+        // Live NTP query — may fail in CI without network. We only assert
+        // the timestamp is in a sane range (year 2024-2035) so a wrong
+        // reply is caught without making the test brittle.
+        let ts = ntp_query_unix_seconds(DEFAULT_NTP_SERVERS);
+        if let Ok(ts) = ts {
+            // 2024-01-01 to 2035-12-31 ≈ 1.7B to 2.08B
+            assert!(ts > 1_704_067_200, "NTP timestamp too old: {ts}");
+            assert!(ts < 2_100_000_000, "NTP timestamp too far future: {ts}");
+        }
+        // If NTP failed (no network in CI), that's acceptable — we don't
+        // fail the test. The function's error path is exercised.
+    }
+
+    #[test]
+    fn ntp_query_empty_servers_returns_error() {
+        let r = ntp_query_unix_seconds(&[]);
+        assert!(r.is_err());
     }
 }
