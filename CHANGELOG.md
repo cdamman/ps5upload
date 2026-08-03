@@ -4,6 +4,22 @@ What's new in ps5upload, written for humans.
 
 ---
 
+## 4.6.1
+
+Hotfix release — eliminates 7 compiler warnings that appeared when
+building `ps5upload-core` for the Android target (aarch64-linux-android).
+No user-visible behavior changes.
+
+- **Fixed: Android-target dead-code warnings** — three helper functions
+  (`format_from_index`, `parse_index_line`, `cheat_install_path`) and
+  four variables (`q`, `repo`, `filename`, `region`) were only
+  referenced inside `#[cfg(not(target_os = "android"))]` blocks, making
+  them dead code on Android. All are now properly cfg-gated. The
+  engine workspace, desktop crate, and Android target now all compile
+  with **zero warnings**.
+
+---
+
 ## 4.6.0
 
 Maintenance release — CI gate fixes, code hygiene, and dependency
