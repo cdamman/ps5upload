@@ -87,7 +87,7 @@ export function RepoBrowser({ addr, onDownloaded, onClose }: RepoBrowserProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] shadow-xl">
+      <div className="flex max-h-[85dvh] w-full max-w-2xl flex-col rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] shadow-xl">
         <div className="flex items-center justify-between border-b border-[var(--color-border)] px-4 py-3">
           <div className="flex items-center gap-2">
             <Package size={18} />
@@ -164,7 +164,7 @@ export function RepoBrowser({ addr, onDownloaded, onClose }: RepoBrowserProps) {
                       <div className="truncate font-mono text-xs text-[var(--color-muted)]">
                         {e.filename}
                       </div>
-                      <span className="badge mt-1 inline-block text-[10px]">
+                      <span className="badge mt-1 inline-block text-xs">
                         {e.format}
                       </span>
                     </div>

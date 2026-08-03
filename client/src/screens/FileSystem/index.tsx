@@ -2260,7 +2260,7 @@ export default function FileSystemScreen() {
             onClick={() => setPreview(null)}
           >
             <div
-              className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]"
+              className="flex max-h-[90dvh] w-full max-w-3xl flex-col overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]"
               onClick={(e) => e.stopPropagation()}
             >
               <header className="flex items-center justify-between border-b border-[var(--color-border)] px-4 py-2">

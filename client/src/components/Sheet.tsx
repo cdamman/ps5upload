@@ -5,6 +5,7 @@ import { useTr } from "../state/lang";
 import { useScrollLock } from "../lib/useScrollLock";
 import { useAccessibilityStore } from "../state/accessibility";
 import { haptic } from "../lib/haptics";
+import { useResponsiveTier } from "../lib/platform";
 
 export interface SheetProps {
   open: boolean;
@@ -41,10 +42,9 @@ export function Sheet({
   const prevFocus = useRef<HTMLElement | null>(null);
   const dragStartY = useRef<number | null>(null);
   const motion = useAccessibilityStore((s) => s.resolvedMotion)();
+  const tier = useResponsiveTier();
 
-  const isMobile =
-    typeof window !== "undefined" &&
-    window.matchMedia("(max-width: 767px)").matches;
+  const isMobile = tier === "xs" || tier === "sm";
   const showBottom = forceBottom || isMobile;
 
   useScrollLock(open);
@@ -136,7 +136,7 @@ export function Sheet({
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
         className={[
-          "elev-3 flex max-h-[90vh] w-full flex-col overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]",
+          "elev-3 flex max-h-[90dvh] w-full flex-col overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]",
           showBottom ? "rounded-b-none" : "max-w-md",
           slideAnim,
           className,

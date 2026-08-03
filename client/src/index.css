@@ -684,13 +684,26 @@ button {
  * finger (Apple HIG 44pt / Material 48dp). Desktop (`pointer: fine`, a mouse)
  * is untouched, keeping its denser layout. Body text stays at the 18px root,
  * which is already very legible on a phone — the gap was tap size, not read
- * size. Checkboxes/radios keep their intrinsic size. */
+ * size. Checkboxes/radios keep their intrinsic size.
+ *
+ * role="switch" (the Toggle component) is excluded because it's a visual
+ * slider whose dimensions are fixed by the component — the 44px rule
+ * distorts it into a tall rectangle. The Toggle already meets 44px width.
+ * Similarly, tightly-packed segmented controls inside [role="tablist"],
+ * [role="menu"], and [role="radiogroup"] get per-item targets via their
+ * child [role="tab"/"menuitem"/"radio"] selectors below. */
 @media (pointer: coarse) {
-  button,
-  [role="button"],
+  button:not([role="switch"]),
+  [role="button"]:not([role="switch"]),
+  [role="tab"],
+  [role="menuitem"],
+  [role="menuitemcheckbox"],
+  [role="menuitemradio"],
+  [role="option"],
+  [role="treeitem"],
   select,
   textarea,
-  input:not([type="checkbox"]):not([type="radio"]) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]) {
     min-height: 44px;
   }
 }

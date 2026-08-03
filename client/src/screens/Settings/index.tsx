@@ -1285,7 +1285,7 @@ function TextSizePicker() {
             >
               {uiScaleLabel(step)}
               {Math.abs(step - 1) < 0.001 && (
-                <span className="ml-1 text-[10px] text-[var(--color-muted)]">
+                <span className="ml-1 text-xs text-[var(--color-muted)]">
                   {tr("settings_text_size_default", undefined, "default")}
                 </span>
               )}
@@ -1323,6 +1323,7 @@ function BandwidthControl({
           step={1}
           value={value || ""}
           placeholder="0"
+          inputMode="numeric"
           onChange={(e) =>
             onChange(Math.max(0, Math.floor(Number(e.target.value) || 0)))
           }

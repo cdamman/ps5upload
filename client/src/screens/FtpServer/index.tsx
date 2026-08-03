@@ -135,6 +135,7 @@ export default function FtpServerScreen() {
                   className="input"
                   min={1}
                   max={65535}
+                  inputMode="numeric"
                 />
               </label>
 

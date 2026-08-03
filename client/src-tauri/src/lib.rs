@@ -213,6 +213,7 @@ pub fn run() {
             commands::remoteplay_status,
             commands::remoteplay_cancel,
             commands::fan_curve_set,
+            commands::fan_curve_get,
             commands::notif_list,
             commands::cheats_list,
             commands::cheats_get,

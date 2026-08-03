@@ -2669,6 +2669,7 @@ function BandwidthCard() {
           min={0}
           step={0.5}
           value={cap}
+          inputMode="decimal"
           onChange={(e) => {
             const n = parseFloat(e.target.value);
             setCap(isFinite(n) && n > 0 ? n : 0);

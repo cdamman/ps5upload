@@ -154,6 +154,7 @@ export default function ConsoleTabs() {
               if (e.key === "Escape") setAdding(false);
             }}
             placeholder={tr("console_tab_ip", "PS5 IP")}
+            inputMode="decimal"
             className="w-28 rounded bg-[var(--color-surface)] px-2 py-1 text-sm outline-none"
           />
           <input

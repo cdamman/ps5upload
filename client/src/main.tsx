@@ -60,6 +60,30 @@ void hydrateFromUserConfig();
 // non-Tauri / Android. See preventAccidentalReload.ts for the dev/prod split.
 installAccidentalReloadGuard();
 
+// Android soft-keyboard avoidance: when the keyboard appears, the visualViewport
+// shrinks. Scroll the focused input into view so it isn't hidden behind the
+// keyboard. Uses visualViewport API (available on Android Chrome/WebView 61+).
+if (typeof window !== "undefined" && window.visualViewport) {
+  const onResize = () => {
+    const active = document.activeElement;
+    if (
+      active &&
+      (active.tagName === "INPUT" ||
+        active.tagName === "TEXTAREA" ||
+        (active as HTMLElement).isContentEditable)
+    ) {
+      const el = active as HTMLElement;
+      const vv = window.visualViewport!;
+      const rect = el.getBoundingClientRect();
+      // If the input's bottom is below the visual viewport bottom, scroll it into view
+      if (rect.bottom > vv.height + vv.offsetTop) {
+        el.scrollIntoView({ block: "center", behavior: "smooth" });
+      }
+    }
+  };
+  window.visualViewport.addEventListener("resize", onResize);
+}
+
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <RootErrorBoundary>

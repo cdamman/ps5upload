@@ -31,7 +31,7 @@ export function ConsoleChip({
   const accent = profileAccentForHost(addr, profiles);
   return (
     <span
-      className={`inline-flex max-w-[12rem] items-center gap-1 rounded-full bg-[var(--color-surface-3)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-muted)] ${className}`}
+      className={`inline-flex max-w-[12rem] items-center gap-1 rounded-full bg-[var(--color-surface-3)] px-1.5 py-0.5 text-xs font-medium text-[var(--color-muted)] ${className}`}
       title={name}
     >
       <span

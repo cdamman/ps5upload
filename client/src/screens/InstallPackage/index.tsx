@@ -775,7 +775,7 @@ export default function InstallPackageScreen() {
           adding a package (not buried under the library list). Both govern the
           hands-off "add → installed → cleaned up" flow, so they read together. */}
       <div className="mb-4 flex flex-col gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] p-3">
-        <span className="text-[11px] font-medium uppercase tracking-wide text-[var(--color-muted)]">
+        <span className="text-xs font-medium uppercase tracking-wide text-[var(--color-muted)]">
           {tr("pkglib.options.heading", "Options")}
         </span>
         <label className="flex cursor-pointer items-center gap-2 text-xs text-[var(--color-text)]">
@@ -1094,13 +1094,13 @@ function ExternalPackages({ host }: { host: string }) {
               : tr("pkglib.external.scan", "Scan")}
         </Button>
       </div>
-      <div className="mb-2 text-[11px] leading-relaxed text-[var(--color-muted)]">
+      <div className="mb-2 text-xs leading-relaxed text-[var(--color-muted)]">
         {tr(
           "pkglib.external.hint",
           "Plug a USB stick or external drive with .pkg files into the PS5 and they show up here — no upload needed. Installing copies the file onto the console first (your drive's copy is left untouched), then installs it. Use Scan after connecting a drive.",
         )}
       </div>
-      <label className="mb-2 flex cursor-pointer items-center gap-2 text-[11px] text-[var(--color-muted)]">
+      <label className="mb-2 flex cursor-pointer items-center gap-2 text-xs text-[var(--color-muted)]">
         <input
           type="checkbox"
           className="h-3.5 w-3.5"

@@ -394,7 +394,7 @@ export default function CatalogPanel() {
                 <X size={14} />
               </button>
             </div>
-            <p className="mb-2 text-[11px] text-[var(--color-muted)]">
+            <p className="mb-2 text-xs text-[var(--color-muted)]">
               {tr(
                 "payloads_add_repo_hint",
                 undefined,
@@ -417,7 +417,7 @@ export default function CatalogPanel() {
                 spellCheck={false}
                 className="min-w-[260px] flex-1 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1.5 text-xs outline-none focus:border-[var(--color-accent)]"
               />
-              <label className="flex items-center gap-1 text-[11px] text-[var(--color-muted)]">
+              <label className="flex items-center gap-1 text-xs text-[var(--color-muted)]">
                 {tr("payloads_add_repo_host", undefined, "Host")}
                 <input
                   type="text"
@@ -443,7 +443,7 @@ export default function CatalogPanel() {
               </Button>
             </div>
             {addError && (
-              <div className="mt-2 text-[11px] text-[var(--color-danger)]">{addError}</div>
+              <div className="mt-2 text-xs text-[var(--color-danger)]">{addError}</div>
             )}
           </div>
         )}
@@ -572,7 +572,7 @@ function PayloadCard({
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="text-sm font-semibold">{info.display_name}</h3>
             {info.is_custom && (
-              <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-[var(--color-muted)]">
+              <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-xs uppercase tracking-wide text-[var(--color-muted)]">
                 {tr("payloads_custom_badge", undefined, "Custom")}
               </span>
             )}

@@ -112,7 +112,7 @@ export default function NotificationInbox() {
         <Bell size={14} />
         {unread > 0 && (
           <span
-            className="absolute -right-0.5 -top-0.5 inline-flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-[var(--color-bad)] px-1 text-[9px] font-semibold tabular-nums text-white"
+            className="absolute -right-0.5 -top-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--color-bad)] px-1 text-[10px] font-semibold tabular-nums text-white"
             title={tr(
               unread === 1
                 ? "notifications_unread_one"
@@ -164,6 +164,7 @@ export default function NotificationInbox() {
                 <button
                   type="button"
                   onClick={clear}
+                  aria-label={tr("notifications_clear", undefined, "Clear all")}
                   className="rounded p-1 text-[var(--color-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text)]"
                   title={tr("notifications_clear", undefined, "Clear all")}
                 >

@@ -4,6 +4,7 @@ import { X } from "lucide-react";
 import { useTr } from "../state/lang";
 import { useScrollLock } from "../lib/useScrollLock";
 import { useAccessibilityStore } from "../state/accessibility";
+import { useResponsiveTier } from "../lib/platform";
 
 export interface DrawerProps {
   open: boolean;
@@ -38,6 +39,7 @@ export function Drawer({
   const panelRef = useRef<HTMLDivElement>(null);
   const prevFocus = useRef<HTMLElement | null>(null);
   const motion = useAccessibilityStore((s) => s.resolvedMotion)();
+  const tier = useResponsiveTier();
 
   useScrollLock(open);
 
@@ -73,9 +75,7 @@ export function Drawer({
 
   if (!open) return null;
 
-  const isMobile =
-    typeof window !== "undefined" &&
-    window.matchMedia("(max-width: 767px)").matches;
+  const isMobile = tier === "xs" || tier === "sm";
   const computedWidth = width ?? (isMobile ? "85vw" : "320px");
 
   const slideAnim =

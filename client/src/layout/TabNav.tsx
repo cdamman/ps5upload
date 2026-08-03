@@ -339,7 +339,7 @@ export function TabBottomNav() {
               aria-label={label}
               aria-current={active ? "page" : undefined}
               className={[
-                "flex flex-1 flex-col items-center justify-center gap-0.5 text-[10px] font-medium",
+                "flex flex-1 flex-col items-center justify-center gap-0.5 text-xs font-medium",
                 "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)]",
                 active
                   ? "text-[var(--color-accent)]"
@@ -360,7 +360,7 @@ export function TabBottomNav() {
           aria-label={tr("v5_tab_more", "More")}
           aria-expanded={moreOpen}
           onClick={() => setMoreOpen(true)}
-          className="flex flex-1 flex-col items-center justify-center gap-0.5 text-[10px] font-medium text-[var(--color-muted)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)]"
+          className="flex flex-1 flex-col items-center justify-center gap-0.5 text-xs font-medium text-[var(--color-muted)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)]"
         >
           <MoreHorizontal size={22} aria-hidden />
           <span>{tr("v5_tab_more", "More")}</span>
@@ -383,7 +383,7 @@ export function TabBottomNav() {
             onClick={() => setMoreOpen(false)}
             className="anim-scrim absolute inset-0 bg-[var(--overlay-scrim)]"
           />
-          <div className="anim-sheet elev-3 absolute inset-x-0 bottom-0 max-h-[80vh] overflow-y-auto rounded-t-xl bg-[var(--color-surface-2)] pb-[env(safe-area-inset-bottom)]">
+          <div className="anim-sheet elev-3 absolute inset-x-0 bottom-0 max-h-[80dvh] overflow-y-auto rounded-t-xl bg-[var(--color-surface-2)] pb-[env(safe-area-inset-bottom)]">
             <div className="sticky top-0 flex items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-surface-2)] px-4 py-3">
               <span className="font-semibold">
                 {tr("v5_tab_more", "More")}

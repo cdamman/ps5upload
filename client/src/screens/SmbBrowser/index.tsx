@@ -191,6 +191,7 @@ export default function SmbBrowserScreen() {
                   onChange={(e) => setServer(e.target.value)}
                   className="input font-mono"
                   placeholder="192.168.1.100:445"
+                  inputMode="url"
                 />
               </label>
               <label className="space-y-1">

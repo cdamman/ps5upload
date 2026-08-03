@@ -127,7 +127,7 @@ export function LocalPathPicker() {
       <div
         role="dialog"
         aria-modal="true"
-        className="anim-sheet elev-3 flex max-h-[88vh] w-full max-w-lg flex-col rounded-t-xl border border-[var(--color-border)] bg-[var(--color-surface-2)] sm:max-h-[80vh] sm:rounded-xl"
+        className="anim-sheet elev-3 flex max-h-[88dvh] w-full max-w-lg flex-col rounded-t-xl border border-[var(--color-border)] bg-[var(--color-surface-2)] sm:max-h-[80dvh] sm:rounded-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <header className="flex items-center gap-2 border-b border-[var(--color-border)] px-4 py-3">

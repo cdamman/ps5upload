@@ -490,7 +490,7 @@ function ProcessRowImpl({
           <KindBadge kind={proc.kind} />
           {platform && <PlatformBadge platform={platform} />}
           {isSelf && (
-            <span className="shrink-0 rounded-full border border-[var(--color-accent)] px-1.5 py-px text-[10px] font-medium text-[var(--color-accent)]">
+            <span className="shrink-0 rounded-full border border-[var(--color-accent)] px-1.5 py-px text-xs font-medium text-[var(--color-accent)]">
               {tr("processes_this_tool", undefined, "this tool")}
             </span>
           )}
@@ -561,7 +561,7 @@ function KindBadge({ kind }: { kind: ProcessInfo["kind"] }) {
   const m = map[kind] ?? map.system;
   return (
     <span
-      className={`shrink-0 rounded-full border px-1.5 py-px text-[10px] font-medium ${m.cls}`}
+      className={`shrink-0 rounded-full border px-1.5 py-px text-xs font-medium ${m.cls}`}
     >
       {m.label}
     </span>

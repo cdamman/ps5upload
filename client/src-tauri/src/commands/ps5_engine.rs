@@ -643,6 +643,12 @@ pub struct FanCurvePoint {
     pub duty_pct: i32,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct FanCurveGetReq {
+    #[serde(default)]
+    pub addr: Option<String>,
+}
+
 // ── Notifications ─────────────────────────────────────────────────────
 #[derive(Debug, Deserialize)]
 pub struct NotifListReq {
@@ -847,6 +853,17 @@ pub async fn fan_curve_set(req: FanCurveSetReq) -> Result<JsonValue, String> {
     let url = format!("{base}/api/ps5/hw/fan-curve");
     let body = serde_json::json!({ "addr": req.addr, "points": req.points });
     post_json(&url, &body).await
+}
+
+#[tauri::command]
+pub async fn fan_curve_get(req: FanCurveGetReq) -> Result<JsonValue, String> {
+    let base = engine::url();
+    let mut url = format!("{base}/api/ps5/hw/fan-curve/get");
+    if let Some(ref addr) = req.addr {
+        url.push('?');
+        url.push_str(&format!("addr={}", urlencoding(addr)));
+    }
+    get_json(&url).await
 }
 
 // ── Notifications ─────────────────────────────────────────────────────

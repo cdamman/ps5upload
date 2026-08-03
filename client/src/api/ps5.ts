@@ -3803,6 +3803,12 @@ export async function fanCurveSet(points: FanCurvePoint[], addr?: string): Promi
   });
 }
 
+export async function fanCurveGet(addr?: string): Promise<{ points: FanCurvePoint[] }> {
+  return invoke("fan_curve_get", {
+    req: { addr: addr ?? null },
+  });
+}
+
 // ── Notifications ─────────────────────────────────────────────────────
 export interface Notification {
   seq: number;

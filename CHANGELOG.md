@@ -4,6 +4,43 @@ What's new in ps5upload, written for humans.
 
 ---
 
+## 4.5.0
+
+Android & mobile UX release — comprehensive touch device fixes,
+soft-keyboard handling, fan curve persistence, and accessibility
+improvements across the entire app.
+
+- **Fixed: fan curve now loads from the PS5 on screen open** — the
+  FanCurve screen fetches the persisted threshold via a new
+  `fan_curve_get` engine command on mount, so you see the actual saved
+  curve instead of defaults. A persistence info banner communicates
+  that the curve survives reboots and rest mode.
+- **Soft-keyboard avoidance** — added `interactive-widget=resizes-content`
+  to the viewport meta, switched all modal/sheet max-heights from `vh`
+  to `dvh`, and added a `visualViewport` listener that scrolls the
+  focused input into view when the keyboard appears. No more hidden
+  text fields behind the on-screen keyboard.
+- **Numeric keyboard hints** — all numeric inputs (ports, temperatures,
+  fan duty, speed caps, counts) now have `inputMode="numeric"` or
+  `"decimal"`, and all IP address fields have `inputMode="decimal"`.
+  Android shows the numeric keypad instead of the full alphabet.
+- **Fixed: Toggle no longer distorted on touch devices** — the global
+  44px touch-target rule was stretching the Toggle switch into a tall
+  rectangle. The CSS now excludes `role="switch"` and properly targets
+  `role="tab"`, `role="menuitem"`, `role="option"`, etc. instead of
+  blindly catching every `<button>`.
+- **Minimum text size enforced** — all sub-12px text bumped to `text-xs`
+  (12px). Bottom nav labels, badges, hints, section headings, and
+  metadata text are now comfortably legible on mobile.
+- **Reactive responsive tier** — Sheet and Drawer components now use the
+  `useResponsiveTier()` hook instead of a one-shot `matchMedia` check,
+  so they respond correctly to orientation changes and window resizing.
+- **Accessibility: aria-labels on icon buttons** — all icon-only buttons
+  in PlaylistsPanel, NotificationInbox, and ConsoleTabs now have proper
+  `aria-label` attributes for screen readers.
+
+---
+
 ## 4.4.0
 
 UI modernization release — redesigned navigation, 28 reusable UI

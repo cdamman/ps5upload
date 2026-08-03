@@ -275,7 +275,7 @@ function AppCard({
               muted line for played titles; a subtle warning tint for
               never-seen ones so unused games are scannable at a glance. */}
           <div
-            className={`mt-1 flex items-center gap-1.5 text-[11px] ${
+            className={`mt-1 flex items-center gap-1.5 text-xs ${
               lastSeenMs === undefined
                 ? "text-[var(--color-warning)]"
                 : "text-[var(--color-muted)]"

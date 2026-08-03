@@ -60,6 +60,7 @@ export default function SpeedTestPanel({ mgmtAddr }: { mgmtAddr: string }) {
             max={2048}
             step={4}
             value={rounds}
+            inputMode="numeric"
             onChange={(e) => {
               const n = parseInt(e.target.value, 10);
               if (!isNaN(n)) setRounds(Math.max(4, Math.min(2048, n)));

@@ -559,6 +559,7 @@ export default function ConnectionScreen() {
                 if (e.key === "Enter") void handleCheck();
               }}
               placeholder="192.168.1.50"
+              inputMode="decimal"
               disabled={step2 === "busy"}
               className="flex-1 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)] disabled:opacity-50"
             />

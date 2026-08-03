@@ -722,6 +722,7 @@ function PlaylistCard({
               type="button"
               onClick={() => movePlaylistUp(playlist.id)}
               disabled={anyRunning || index === 0}
+              aria-label={tr("playlist_move_up", undefined, "Move playlist up")}
               className="rounded p-1 text-[var(--color-muted)] hover:bg-[var(--color-surface-3)] disabled:opacity-30"
               title={tr("playlist_move_up", undefined, "Move playlist up")}
             >
@@ -731,6 +732,7 @@ function PlaylistCard({
               type="button"
               onClick={() => movePlaylistDown(playlist.id)}
               disabled={anyRunning || index === total - 1}
+              aria-label={tr("playlist_move_down", undefined, "Move playlist down")}
               className="rounded p-1 text-[var(--color-muted)] hover:bg-[var(--color-surface-3)] disabled:opacity-30"
               title={tr("playlist_move_down", undefined, "Move playlist down")}
             >
@@ -928,7 +930,7 @@ function PlaylistCard({
                   // instead of a host path (there may be none yet — it's
                   // resolved from the repo at run time).
                   <div className="flex min-w-0 flex-1 items-center gap-1.5">
-                    <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-[var(--color-muted)]">
+                    <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-xs uppercase tracking-wide text-[var(--color-muted)]">
                       {tr("playlist_step_repo_badge", undefined, "Repo")}
                     </span>
                     <span
@@ -965,6 +967,7 @@ function PlaylistCard({
                       undefined,
                       "default",
                     )}
+                    inputMode="decimal"
                     onChange={(e) =>
                       updateStep(playlist.id, i, {
                         ip: e.target.value.trim(),
@@ -989,6 +992,7 @@ function PlaylistCard({
                       undefined,
                       "default",
                     )}
+                    inputMode="numeric"
                     onChange={(e) => {
                       const raw = e.target.value.trim();
                       const n =
@@ -1008,6 +1012,7 @@ function PlaylistCard({
                     min={0}
                     step={100}
                     value={step.sleepMs}
+                    inputMode="numeric"
                     onChange={(e) =>
                       updateStep(playlist.id, i, {
                         sleepMs: sanitiseSleepMs(e.target.value),
@@ -1023,6 +1028,7 @@ function PlaylistCard({
                     type="button"
                     onClick={() => moveStepUp(playlist.id, i)}
                     disabled={anyRunning || i === 0}
+                    aria-label={tr("playlist_step_up", undefined, "Move up")}
                     className="rounded p-1 text-[var(--color-muted)] hover:bg-[var(--color-surface-3)] disabled:opacity-30"
                     title={tr("playlist_step_up", undefined, "Move up")}
                   >
@@ -1032,6 +1038,7 @@ function PlaylistCard({
                     type="button"
                     onClick={() => moveStepDown(playlist.id, i)}
                     disabled={anyRunning || i === playlist.steps.length - 1}
+                    aria-label={tr("playlist_step_down", undefined, "Move down")}
                     className="rounded p-1 text-[var(--color-muted)] hover:bg-[var(--color-surface-3)] disabled:opacity-30"
                     title={tr("playlist_step_down", undefined, "Move down")}
                   >
@@ -1041,6 +1048,7 @@ function PlaylistCard({
                     type="button"
                     onClick={() => removeStep(playlist.id, i)}
                     disabled={anyRunning}
+                    aria-label={tr("playlist_step_remove", undefined, "Remove step")}
                     className="rounded p-1 text-[var(--color-muted)] hover:bg-[var(--color-bad)] hover:text-[var(--color-accent-contrast)] disabled:opacity-30"
                     title={tr("playlist_step_remove", undefined, "Remove step")}
                   >
@@ -1137,7 +1145,7 @@ function PlaylistCard({
                             <span className="block truncate font-medium text-[var(--color-text)]">
                               {p.display_name}
                               {p.is_custom && (
-                                <span className="ml-1.5 rounded-full border border-[var(--color-border)] px-1 py-0.5 text-[9px] uppercase text-[var(--color-muted)]">
+                                <span className="ml-1.5 rounded-full border border-[var(--color-border)] px-1 py-0.5 text-xs uppercase text-[var(--color-muted)]">
                                   {tr("payloads_custom_badge", undefined, "Custom")}
                                 </span>
                               )}

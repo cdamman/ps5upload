@@ -340,7 +340,7 @@ export default function HomeScreen() {
                   </span>
                   <ConsoleChip
                     addr={e.addr}
-                    className="shrink-0 text-[10px]"
+                    className="shrink-0 text-xs"
                   />
                 </li>
               ))}

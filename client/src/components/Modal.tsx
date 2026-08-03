@@ -124,7 +124,7 @@ export function Modal({
         aria-label={!title ? ariaLabel : undefined}
         tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
-        className={`anim-pop elev-3 flex max-h-[90vh] w-full ${SIZES[size]} flex-col overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] ${panelClassName}`}
+        className={`anim-pop elev-3 flex max-h-[90dvh] w-full ${SIZES[size]} flex-col overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] ${panelClassName}`}
       >
         {title && (
           <header className="flex items-center justify-between gap-3 border-b border-[var(--color-border)] px-4 py-3">
