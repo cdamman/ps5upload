@@ -4,6 +4,29 @@ What's new in ps5upload, written for humans.
 
 ---
 
+## 4.6.0
+
+Maintenance release — CI gate fixes, code hygiene, and dependency
+health. No user-visible behavior changes; this release supersedes the
+v4.5.0 artifacts that were published from a commit failing the i18n
+and rustfmt gates.
+
+- **Fixed: i18n coverage gate** — 55 `tr()` call-site keys that were
+  referenced in code but missing from `en.ts` have been added. Without
+  them, those strings rendered their English fallback for every locale
+  (including non-English) and could never be translated. The
+  `i18n-known-missing.json` allowlist was regenerated in the explicit
+  `{missing, stale}` object form so stale-key tracking works going
+  forward.
+- **Fixed: cargo fmt gate** — 8 engine source files reformatted
+  (`cargo fmt --all`). Purely cosmetic (line wrapping, module
+  ordering); zero logic changes.
+- **Fixed: Dependabot alerts** — all open Rust crate vulnerabilities
+  (openssl, rustls-webpki, lz4_flex, bytes, rand, time, glib) are now
+  resolved in the lockfiles.
+
+---
+
 ## 4.5.0
 
 Android & mobile UX release — comprehensive touch device fixes,
