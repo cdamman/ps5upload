@@ -4,7 +4,6 @@ import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { pickPath } from "../../lib/pickPath";
 import {
   Send,
-  Loader2,
   CheckCircle2,
   XCircle,
   AlertTriangle,
@@ -15,7 +14,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 
-import { Button } from "../../components";
+import { Button, Spinner } from "../../components";
 
 import { useConnectionStore, PS5_LOADER_PORT } from "../../state/connection";
 import { sendPayload } from "../../api/ps5";
@@ -537,12 +536,9 @@ export default function SendPanel() {
           {status.kind === "probing" && (
             <ProbeRow
               icon={
-                <Loader2
-                  size={14}
-                  className="animate-spin text-[var(--color-accent)]"
-                />
+                <Spinner size={14} tone="accent" />
               }
-              text="Checking file…"
+              text={tr("sendpayload_checking_file", "Checking file…")}
             />
           )}
           {status.kind === "probed" && (
@@ -722,12 +718,13 @@ function HistoryPanel({
 }
 
 function StatusDot({ ok }: { ok: boolean }) {
+  const tr = useTr();
   return (
     <span
       className={`mt-1 inline-block h-1.5 w-1.5 shrink-0 rounded-full ${
         ok ? "bg-[var(--color-good)]" : "bg-[var(--color-bad)]"
       }`}
-      aria-label={ok ? "success" : "failed"}
+      aria-label={ok ? tr("sendpayload_success", "success") : tr("sendpayload_failed", "failed")}
     />
   );
 }

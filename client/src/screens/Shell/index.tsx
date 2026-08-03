@@ -2,14 +2,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   TerminalSquare,
   Send,
-  Loader2,
   AlertTriangle,
   Trash2,
 } from "lucide-react";
 import { shellRun, type ShellRunResult } from "../../api/ps5";
 import { useConnectionStore } from "../../state/connection";
 import { mgmtAddr } from "../../lib/addr";
-import { PageHeader, Button, ConnectionGate } from "../../components";
+import { PageHeader, Button, ConnectionGate, Spinner } from "../../components";
 import { useTr } from "../../state/lang";
 import { splitShellSequence } from "./shellSequence";
 
@@ -234,7 +233,7 @@ export default function ShellScreen() {
               size="md"
               leftIcon={
                 busy ? (
-                  <Loader2 size={11} className="animate-spin" />
+                  <Spinner size={12} />
                 ) : (
                   <Send size={11} />
                 )
@@ -302,7 +301,7 @@ function ShellHistoryRow({ entry }: { entry: HistoryEntry }) {
         )
       ) : (
         <div className="mt-1 italic text-[var(--color-muted)]">
-          <Loader2 size={10} className="mr-1 inline animate-spin" />
+          <Spinner size={10} className="mr-1 inline" />
           {tr("shell_running", undefined, "running…")}
         </div>
       )}

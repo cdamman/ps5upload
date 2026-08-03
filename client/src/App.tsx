@@ -25,6 +25,7 @@ import { isTauriEnv } from "./lib/tauriEnv";
 import ConnectionScreen from "./screens/Connection";
 import ChangelogScreen from "./screens/Changelog";
 import SettingsScreen from "./screens/Settings";
+import HomeScreen from "./screens/Home";
 
 const UploadScreen = lazy(() => import("./screens/Upload"));
 const InstallPackageScreen = lazy(() => import("./screens/InstallPackage"));
@@ -85,7 +86,7 @@ function ScreenLoader() {
  */
 function LandingRedirect() {
   const hasConsole = useRosterStore((s) => s.profiles.length > 0);
-  return <Navigate to={hasConsole ? "/whats-new" : "/connection"} replace />;
+  return <Navigate to={hasConsole ? "/home" : "/connection"} replace />;
 }
 
 /** Guards a route whose screen has NO browser-functional path at all (see
@@ -105,6 +106,7 @@ export default function App() {
          * returning users land on the changelog and route-restore takes
          * them back to their last screen. */}
         <Route index element={<LandingRedirect />} />
+        <Route path="/home" element={<HomeScreen />} />
         <Route path="/whats-new" element={<ChangelogScreen />} />
         <Route path="/connection" element={<ConnectionScreen />} />
         <Route
@@ -124,13 +126,16 @@ export default function App() {
           }
         />
         <Route
-          path="/library"
+          path="/games"
           element={
             <Suspense fallback={<ScreenLoader />}>
               <LibraryScreen />
             </Suspense>
           }
         />
+        {/* v5: /games is now the canonical games grid. /library redirects
+             for backward compatibility with deep links and bookmarks. */}
+        <Route path="/library" element={<Navigate to="/games" replace />} />
         <Route
           path="/installed"
           element={
@@ -155,11 +160,23 @@ export default function App() {
             </Suspense>
           }
         />
+        {/* v5: /files is the canonical file browser route. /file-system
+             redirects for backward compatibility. */}
         <Route
-          path="/file-system"
+          path="/files"
           element={
             <Suspense fallback={<ScreenLoader />}>
               <FileSystemScreen />
+            </Suspense>
+          }
+        />
+        <Route path="/file-system" element={<Navigate to="/files" replace />} />
+        {/* v5: /console is the canonical console-management route. */}
+        <Route
+          path="/console"
+          element={
+            <Suspense fallback={<ScreenLoader />}>
+              <HardwareScreen />
             </Suspense>
           }
         />
@@ -332,6 +349,15 @@ export default function App() {
             </Suspense>
           }
         />
+        {/* v5: /tasks is the canonical tasks/activity route. */}
+        <Route
+          path="/tasks"
+          element={
+            <Suspense fallback={<ScreenLoader />}>
+              <ActivityScreen />
+            </Suspense>
+          }
+        />
         <Route
           path="/activity"
           element={
@@ -420,7 +446,7 @@ export default function App() {
             </Suspense>
           }
         />
-        <Route path="*" element={<Navigate to="/whats-new" replace />} />
+        <Route path="*" element={<Navigate to="/home" replace />} />
       </Route>
     </Routes>
   );

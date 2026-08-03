@@ -8,6 +8,7 @@ import { useUploadSettingsStore } from "./uploadSettings";
 import { useConnectionStore } from "./connection";
 import { useEngineStore, normalizeEngineUrl } from "./engine";
 import { useSaveSettingsStore, normalizeSavePath } from "./saveSettings";
+import { useAccessibilityStore } from "./accessibility";
 
 /**
  * Mirror all persisted user settings to `~/.ps5upload/settings.json`.
@@ -47,6 +48,15 @@ interface SettingsSnapshot {
     show_transfer_files?: boolean;
     bandwidth_cap_mbps?: number;
   };
+  accessibility?: {
+    motion?: string;
+    density?: string;
+    contrast?: string;
+    dyslexia?: boolean;
+    haptics_enabled?: boolean;
+    screen_reader_hints?: boolean;
+    color_blind_palette?: string;
+  };
 }
 
 function snapshotCurrent(): SettingsSnapshot {
@@ -62,6 +72,15 @@ function snapshotCurrent(): SettingsSnapshot {
       reconcile_mode: useUploadSettingsStore.getState().reconcileMode,
       show_transfer_files: useUploadSettingsStore.getState().showTransferFiles,
       bandwidth_cap_mbps: useUploadSettingsStore.getState().bandwidthCapMbps,
+    },
+    accessibility: {
+      motion: useAccessibilityStore.getState().motion,
+      density: useAccessibilityStore.getState().density,
+      contrast: useAccessibilityStore.getState().contrast,
+      dyslexia: useAccessibilityStore.getState().dyslexia,
+      haptics_enabled: useAccessibilityStore.getState().hapticsEnabled,
+      screen_reader_hints: useAccessibilityStore.getState().screenReaderHints,
+      color_blind_palette: useAccessibilityStore.getState().colorBlindPalette,
     },
   };
 }
@@ -117,6 +136,7 @@ export function installUserConfigMirror() {
     pushEngineUrl(s.engineUrl);
   });
   useSaveSettingsStore.subscribe(schedulePersist);
+  useAccessibilityStore.subscribe(schedulePersist);
 }
 
 /** Tell the Rust shell which engine URL its proxies should hit. */
@@ -248,6 +268,57 @@ export async function hydrateFromUserConfig(): Promise<void> {
   // already scheduled a debounced persist; this ensures the file
   // converges to the authoritative (merged) snapshot without waiting
   // for the debounce window.
+  if (data.accessibility) {
+    const a = data.accessibility;
+    const as = useAccessibilityStore.getState();
+    const motionVals = ["auto", "full", "reduced", "none"];
+    if (
+      typeof a.motion === "string" &&
+      motionVals.includes(a.motion) &&
+      a.motion !== as.motion
+    ) {
+      as.setMotion(a.motion as never);
+    }
+    const densityVals = ["comfortable", "compact", "spacious"];
+    if (
+      typeof a.density === "string" &&
+      densityVals.includes(a.density) &&
+      a.density !== as.density
+    ) {
+      as.setDensity(a.density as never);
+    }
+    const contrastVals = ["normal", "high"];
+    if (
+      typeof a.contrast === "string" &&
+      contrastVals.includes(a.contrast) &&
+      a.contrast !== as.contrast
+    ) {
+      as.setContrast(a.contrast as never);
+    }
+    const cbVals = ["default", "deuteranopia", "protanopia", "tritanopia"];
+    if (
+      typeof a.color_blind_palette === "string" &&
+      cbVals.includes(a.color_blind_palette) &&
+      a.color_blind_palette !== as.colorBlindPalette
+    ) {
+      as.setColorBlindPalette(a.color_blind_palette as never);
+    }
+    if (typeof a.dyslexia === "boolean" && a.dyslexia !== as.dyslexia) {
+      as.setDyslexia(a.dyslexia);
+    }
+    if (
+      typeof a.haptics_enabled === "boolean" &&
+      a.haptics_enabled !== as.hapticsEnabled
+    ) {
+      as.setHapticsEnabled(a.haptics_enabled);
+    }
+    if (
+      typeof a.screen_reader_hints === "boolean" &&
+      a.screen_reader_hints !== as.screenReaderHints
+    ) {
+      as.setScreenReaderHints(a.screen_reader_hints);
+    }
+  }
   await persistNow();
 }
 

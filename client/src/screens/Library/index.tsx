@@ -11,7 +11,6 @@ import { createPortal } from "react-dom";
 import {
   LibraryBig,
   RefreshCw,
-  Loader2,
   FileArchive,
   Gamepad2,
   Trash2,
@@ -116,6 +115,7 @@ import {
   Button,
   OverflowMenu,
   SkeletonRows,
+  Spinner,
   type OverflowMenuItem,
 } from "../../components";
 import { useTr } from "../../state/lang";
@@ -372,7 +372,7 @@ export default function LibraryScreen() {
     <div className="p-6">
       <PageHeader
         icon={LibraryBig}
-        title={tr("library", undefined, "Library")}
+        title={tr("games_title", "Games")}
         count={entries?.length}
         loading={loading}
         description={tr(
@@ -2038,7 +2038,7 @@ function LibraryRowImpl({
           withConsolePrefix(host, `Heal partial: ${entry.titleId}`),
           {
             body: `${res.copied} copied, ${res.errors} failed for ${entry.name}`,
-            link: "/library",
+            link: "/games",
           },
         );
       } else if (res.copied > 0) {
@@ -2047,7 +2047,7 @@ function LibraryRowImpl({
           withConsolePrefix(host, `Healed ${entry.name}`),
           {
             body: `Restored ${res.copied} file${res.copied === 1 ? "" : "s"} for ${entry.titleId} — home-screen tile should refresh.`,
-            link: "/library",
+            link: "/games",
           },
         );
       }
@@ -2504,9 +2504,9 @@ function LibraryRowImpl({
       {busy && (
         <div className="flex flex-col gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-2 text-xs">
           <div className="flex items-center gap-2">
-            <Loader2
+            <Spinner
               size={12}
-              className="animate-spin text-[var(--color-accent)]"
+              tone="accent"
             />
             <span className="font-medium">
               {busy === "delete"
@@ -2686,11 +2686,7 @@ function LibraryRowImpl({
         </div>
       )}
 
-      {error && (
-        <div className="rounded-md border border-[var(--color-bad)] bg-[var(--color-surface)] p-2 text-xs text-[var(--color-bad)]">
-          {error}
-        </div>
-      )}
+      {error && <ErrorCard title={error} />}
 
       {confirm && (
         <ConfirmRow
@@ -3110,12 +3106,14 @@ function MoveModal({
         </div>
 
         {nameInvalid && (
-          <div className="mb-3 rounded-md border border-[var(--color-bad)] bg-[var(--color-surface)] p-2 text-xs text-[var(--color-bad)]">
-            {tr(
-              "library_move_modal_name_invalid",
-              undefined,
-              'Name can\'t contain / or \\ and can\'t be "." or "..". Use the subpath field above to nest into a folder.',
-            )}
+          <div className="mb-3">
+            <ErrorCard
+              title={tr(
+                "library_move_modal_name_invalid",
+                undefined,
+                'Name can\'t contain / or \\ and can\'t be "." or "..". Use the subpath field above to nest into a folder.',
+              )}
+            />
           </div>
         )}
 
@@ -3130,12 +3128,14 @@ function MoveModal({
         )}
 
         {destExists === "yes" && !noop && !nameInvalid && (
-          <div className="mb-3 rounded-md border border-[var(--color-bad)] bg-[var(--color-surface)] p-2 text-xs text-[var(--color-bad)]">
-            {tr(
-              "library_move_modal_dest_exists",
-              { path: resolved },
-              "Destination already exists: {path}. Rename above or pick a different folder. The PS5 won't overwrite an existing folder — if it's a leftover from a cancelled move, delete it from the File System screen first.",
-            )}
+          <div className="mb-3">
+            <ErrorCard
+              title={tr(
+                "library_move_modal_dest_exists",
+                { path: resolved },
+                "Destination already exists: {path}. Rename above or pick a different folder. The PS5 won't overwrite an existing folder — if it's a leftover from a cancelled move, delete it from the File System screen first.",
+              )}
+            />
           </div>
         )}
 
@@ -3558,12 +3558,14 @@ function MountModal({
         )}
 
         {nameInvalid && (
-          <div className="mb-3 rounded-md border border-[var(--color-bad)] bg-[var(--color-surface)] p-2 text-xs text-[var(--color-bad)]">
-            {tr(
-              "library_mount_modal_name_invalid",
-              undefined,
-              'Name can\'t be empty, contain / or \\, or be "." / "..".',
-            )}
+          <div className="mb-3">
+            <ErrorCard
+              title={tr(
+                "library_mount_modal_name_invalid",
+                undefined,
+                'Name can\'t be empty, contain / or \\, or be "." / "..".',
+              )}
+            />
           </div>
         )}
 

@@ -9,7 +9,6 @@ import {
   RefreshCw,
   CheckCircle2,
   AlertTriangle,
-  Loader2,
   Sun,
   Moon,
   MoonStar,
@@ -30,7 +29,7 @@ import {
   uiScaleLabel,
 } from "../../state/uiScale";
 
-import { PageHeader } from "../../components";
+import { PageHeader, Spinner } from "../../components";
 import { isTauriEnv } from "../../lib/tauriEnv";
 import { safeGetItem, safeRemoveItem, safeSetItem } from "../../lib/safeStorage";
 import { useConfirm } from "../../components/ConfirmDialog";
@@ -908,11 +907,11 @@ function NotifPrunePanel() {
     setDays(d);
   }
 
-  const options: Array<{ days: number; label: string }> = [
-    { days: 7, label: "7 days" },
-    { days: 30, label: "30 days" },
-    { days: 90, label: "90 days" },
-    { days: 0, label: "Never (keep all)" },
+  const options: Array<{ days: number; labelKey: string; labelFallback: string }> = [
+    { days: 7, labelKey: "settings_retention_7", labelFallback: "7 days" },
+    { days: 30, labelKey: "settings_retention_30", labelFallback: "30 days" },
+    { days: 90, labelKey: "settings_retention_90", labelFallback: "90 days" },
+    { days: 0, labelKey: "settings_retention_never", labelFallback: "Never (keep all)" },
   ];
 
   return (
@@ -936,7 +935,7 @@ function NotifPrunePanel() {
                 : "border-[var(--color-border)] hover:bg-[var(--color-surface-3)]"
             }`}
           >
-            {o.label}
+            {tr(o.labelKey, o.labelFallback)}
           </button>
         ))}
       </div>
@@ -1123,7 +1122,7 @@ function BackupRestorePanel() {
           className="inline-flex items-center gap-1 rounded-md bg-[var(--color-accent)] px-3 py-1.5 text-xs text-[var(--color-accent-contrast)] transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] disabled:opacity-50"
         >
           {busy ? (
-            <Loader2 size={11} className="animate-spin" />
+            <Spinner size={12} tone="inherit" />
           ) : (
             <Download size={11} />
           )}
@@ -1329,7 +1328,7 @@ function BandwidthControl({
           }
           className="w-20 rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 text-sm tabular-nums"
         />
-        <span className="text-xs text-[var(--color-muted)]">MB/s</span>
+        <span className="text-xs text-[var(--color-muted)]">{tr("upload_unit_mbs", "MB/s")}</span>
       </div>
       <div className="mt-0.5 text-xs text-[var(--color-muted)]">
         {value > 0
@@ -1399,7 +1398,7 @@ function ResetPanel() {
         className="inline-flex items-center gap-1.5 rounded-md border border-[var(--color-bad)] px-3 py-1.5 text-xs text-[var(--color-bad)] hover:bg-[var(--color-bad)] hover:text-[var(--color-accent-contrast)] disabled:opacity-50"
       >
         {busy ? (
-          <Loader2 size={11} className="animate-spin" />
+          <Spinner size={12} tone="inherit" />
         ) : (
           <Trash2 size={11} />
         )}
@@ -1683,7 +1682,7 @@ function StatusRow({ phase }: { phase: UpdatePhase }) {
   if (phase.kind === "checking") {
     return (
       <div className="inline-flex items-center gap-2 text-xs text-[var(--color-muted)]">
-        <Loader2 size={12} className="animate-spin" />
+        <Spinner size={12} />
         {tr("update_checking", undefined, "Checking GitHub releases…")}
       </div>
     );
@@ -1732,7 +1731,7 @@ function StatusRow({ phase }: { phase: UpdatePhase }) {
   if (phase.kind === "downloading") {
     return (
       <div className="inline-flex items-center gap-2 text-xs text-[var(--color-accent)]">
-        <Loader2 size={12} className="animate-spin" />
+        <Spinner size={12} tone="accent" />
         {tr(
           "update_downloading",
           { version: phase.result.latest_version },

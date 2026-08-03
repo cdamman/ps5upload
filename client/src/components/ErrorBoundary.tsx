@@ -89,7 +89,7 @@ export class RootErrorBoundary extends Component<Props, State> {
         <div
           role="alert"
           aria-live="assertive"
-          className="flex min-h-screen items-center justify-center bg-[var(--color-bg)] p-6"
+          className="flex min-h-screen items-center justify-center bg-[var(--color-surface)] p-6"
         >
           <div className="w-full max-w-xl rounded-xl border border-[var(--color-bad)] bg-[var(--color-bad-soft)] p-6">
             <div className="text-base font-semibold text-[var(--color-bad)]">
@@ -116,14 +116,14 @@ export class RootErrorBoundary extends Component<Props, State> {
                 onClick={() =>
                   this.setState({ err: null, componentStack: "" })
                 }
-                className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-sm font-medium hover:bg-[var(--color-surface-hover)]"
+                className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-sm font-medium hover:bg-[var(--color-surface-3)]"
               >
                 {this.tr("errorboundary_try_again", "Try again")}
               </button>
               <button
                 type="button"
                 onClick={() => window.location.reload()}
-                className="rounded-md bg-[var(--color-bad)] px-3 py-1.5 text-sm font-medium text-white hover:opacity-90"
+                className="rounded-md bg-[var(--color-bad)] px-3 py-1.5 text-sm font-medium text-[var(--color-accent-contrast)] hover:opacity-90"
               >
                 {this.tr("errorboundary_reload_window", "Reload window")}
               </button>

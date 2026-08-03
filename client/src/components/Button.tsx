@@ -1,4 +1,4 @@
-import { Loader2 } from "lucide-react";
+import { Spinner } from "./Spinner";
 
 export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 
@@ -8,7 +8,7 @@ export interface ButtonProps
     "className" | "children"
   > {
   variant?: ButtonVariant;
-  size?: "sm" | "md";
+  size?: "sm" | "md" | "lg";
   loading?: boolean;
   leftIcon?: React.ReactNode;
   rightIcon?: React.ReactNode;
@@ -24,9 +24,10 @@ export interface ButtonProps
  *   ghost     — subtle tertiary (Dismiss, icon-only); border-less.
  *   danger    — destructive (Delete, Uninstall); red border.
  *
- * Two sizes:
- *   sm — used for header actions and inline row actions.
- *   md — the default for primary CTAs.
+ * Three sizes:
+ *   sm — header actions and inline row actions (default).
+ *   md — primary CTAs and dialog confirms.
+ *   lg — hero / full-width CTAs (FirstRun, empty-state actions).
  *
  * `loading` swaps the left icon for a spinner and disables the button.
  * `leftIcon` / `rightIcon` give consistent icon spacing without the
@@ -63,9 +64,13 @@ export function Button({
     "disabled:cursor-not-allowed disabled:opacity-50";
 
   const sizing =
-    size === "md"
-      ? "px-4 py-2 text-sm"
-      : "px-3 py-1.5 text-xs";
+    size === "lg"
+      ? "px-5 py-2.5 text-sm"
+      : size === "md"
+        ? "px-4 py-2 text-sm"
+        : "px-3 py-1.5 text-xs";
+
+  const spinnerSize = size === "lg" ? 16 : size === "md" ? 14 : 12;
 
   const variants: Record<ButtonVariant, string> = {
     primary:
@@ -86,7 +91,7 @@ export function Button({
       {...rest}
     >
       {loading ? (
-        <Loader2 size={size === "md" ? 14 : 12} className="animate-spin" />
+        <Spinner size={spinnerSize} tone="inherit" />
       ) : (
         leftIcon
       )}

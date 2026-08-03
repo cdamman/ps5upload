@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
-  Loader2,
   CheckCircle2,
   XCircle,
   CircleDashed,
@@ -16,7 +15,7 @@ import {
   Ban,
 } from "lucide-react";
 
-import { Button } from "../../components";
+import { Button, ErrorCard, Spinner } from "../../components";
 import { GameIcon } from "../../components/GameIcon";
 import { PlatformBadge } from "../../components/PlatformBadge";
 import { humanizeJobErrorReason } from "../../api/ps5";
@@ -625,7 +624,7 @@ function QueueRow({
 
       {isRecovering && (
         <div className="mt-2 flex items-center gap-2 rounded-md bg-[var(--color-warn)]/10 px-2 py-1.5 text-xs text-[var(--color-warn)]">
-          <RotateCcw size={12} className="shrink-0 animate-spin" />
+          <Spinner size={12} className="shrink-0" />
           <span>
             {tr(
               "queue_recovering",
@@ -772,30 +771,34 @@ function FailedRowErrorCard({
   const tr = useTr();
   const humanized = humanizeJobErrorReason(reason ?? undefined);
   return (
-    <div className="mt-2 rounded-md border border-[var(--color-bad)] bg-[var(--color-surface-2)] p-2 text-xs text-[var(--color-bad)]">
-      {humanized ? (
-        <>
-          <div className="font-medium">{humanized}</div>
-          {detail && (
-            <div className="mt-1 text-xs text-[var(--color-muted)]">
-              {detail}
-            </div>
-          )}
-          <details className="mt-1 cursor-pointer">
-            <summary className="text-xs text-[var(--color-muted)] hover:text-[var(--color-text)]">
-              {tr("queue_raw_error", "raw error")}
-            </summary>
-            <code className="mt-1 block whitespace-pre-wrap break-all font-mono text-xs text-[var(--color-muted)]">
+    <div className="mt-2">
+      <ErrorCard
+        title={humanized ?? tr("queue_error", "Error")}
+        detail={
+          humanized ? (
+            <>
+              {detail && (
+                <div className="mt-1 text-xs text-[var(--color-muted)]">
+                  {detail}
+                </div>
+              )}
+              <details className="mt-1 cursor-pointer">
+                <summary className="text-xs text-[var(--color-muted)] hover:text-[var(--color-text)]">
+                  {tr("queue_raw_error", "raw error")}
+                </summary>
+                <code className="mt-1 block whitespace-pre-wrap break-all font-mono text-xs text-[var(--color-muted)]">
+                  {rawError}
+                  {reason && `\n[reason: ${reason}]`}
+                </code>
+              </details>
+            </>
+          ) : (
+            <code className="block whitespace-pre-wrap break-all font-mono text-xs">
               {rawError}
-              {reason && `\n[reason: ${reason}]`}
             </code>
-          </details>
-        </>
-      ) : (
-        <code className="block whitespace-pre-wrap break-all font-mono text-xs">
-          {rawError}
-        </code>
-      )}
+          )
+        }
+      />
     </div>
   );
 }
@@ -811,9 +814,10 @@ function StatusIcon({ status }: { status: QueueItemStatus }) {
       );
     case "running":
       return (
-        <Loader2
+        <Spinner
           size={18}
-          className="mt-0.5 shrink-0 animate-spin text-[var(--color-accent)]"
+          tone="accent"
+          className="mt-0.5 shrink-0"
         />
       );
     case "done":

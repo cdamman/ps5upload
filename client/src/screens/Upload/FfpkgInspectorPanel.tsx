@@ -3,7 +3,6 @@ import {
   FileSearch,
   ChevronDown,
   ChevronRight,
-  Loader2,
   AlertTriangle,
   CheckCircle2,
   Folder,
@@ -18,7 +17,7 @@ import {
   type FfpkgExtractResult,
 } from "../../api/ps5";
 import { pickPath } from "../../lib/pickPath";
-import { Button } from "../../components";
+import { Button, Spinner } from "../../components";
 import { useTr } from "../../state/lang";
 import { pushNotification } from "../../state/notifications";
 import { formatBytes } from "../../lib/format";
@@ -108,7 +107,7 @@ export default function FfpkgInspectorPanel({ path }: { path: string }) {
             size="sm"
             leftIcon={
               busy ? (
-                <Loader2 size={11} className="animate-spin" />
+                <Spinner size={12} tone="inherit" />
               ) : (
                 <FileSearch size={11} />
               )
@@ -149,7 +148,7 @@ export default function FfpkgInspectorPanel({ path }: { path: string }) {
               size="sm"
               leftIcon={
                 extractBusy === "" ? (
-                  <Loader2 size={11} className="animate-spin" />
+                  <Spinner size={12} tone="inherit" />
                 ) : (
                   <Package size={11} />
                 )
@@ -170,7 +169,7 @@ export default function FfpkgInspectorPanel({ path }: { path: string }) {
                 size="sm"
                 leftIcon={
                   extractBusy === "sce_sys" ? (
-                    <Loader2 size={11} className="animate-spin" />
+                    <Spinner size={12} tone="inherit" />
                   ) : (
                     <Package size={11} />
                   )
@@ -344,7 +343,7 @@ function RootEntries({
                 )}
               >
                 {extractBusy === e.name ? (
-                  <Loader2 size={11} className="animate-spin" />
+                  <Spinner size={12} tone="inherit" />
                 ) : (
                   <Download size={11} />
                 )}

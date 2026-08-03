@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { ShieldAlert, Loader2, RefreshCw, CheckCircle2, AlertTriangle, Info } from "lucide-react";
-import { PageHeader, Button, ErrorCard, ConnectionGate, Card } from "../../components";
+import { ShieldAlert, RefreshCw, CheckCircle2, AlertTriangle, Info } from "lucide-react";
+import { PageHeader, Button, ErrorCard, ConnectionGate, Card, Spinner } from "../../components";
 import { useTr } from "../../state/lang";
 import { useConnectionStore } from "../../state/connection";
 import { transferAddr } from "../../lib/addr";
@@ -37,7 +37,7 @@ export default function FwSpoofScreen() {
 
   const kernelUnknown = status?.kernel_release === "unknown" || !status?.kernel_release;
   const fwUnknown = status?.system_sw_version === "unknown";
-  const swVersionDisplay = fwUnknown ? "Unknown" : (status?.system_sw_version || "—");
+  const swVersionDisplay = fwUnknown ? tr("fw_spoof_unknown", "Unknown") : (status?.system_sw_version || "—");
   const swParts = (!fwUnknown && swVersionDisplay !== "—") ? swVersionDisplay.split(".").map(Number) : [];
 
   return (
@@ -53,7 +53,7 @@ export default function FwSpoofScreen() {
           )}
           right={
             <Button variant="ghost" onClick={() => void refresh()} disabled={loading}>
-              {loading ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
+              {loading ? <Spinner size={16} tone="inherit" /> : <RefreshCw size={16} />}
               {tr("refresh", undefined, "Refresh")}
             </Button>
           }
@@ -63,7 +63,7 @@ export default function FwSpoofScreen() {
 
         {loading && !status ? (
           <div className="flex items-center justify-center py-12">
-            <Loader2 size={32} className="animate-spin text-[var(--color-muted)]" />
+            <Spinner size={32} />
           </div>
         ) : status ? (
           <>
@@ -153,7 +153,7 @@ export default function FwSpoofScreen() {
                     {tr("fw_spoof_flag", undefined, "Spoofed")}
                   </span>
                   <span className={`font-semibold ${status.spoofed ? "text-[var(--color-bad)]" : "text-[var(--color-good)]"}`}>
-                    {status.spoofed ? "Yes" : "No"}
+                    {status.spoofed ? tr("fw_spoof_yes", "Yes") : tr("fw_spoof_no", "No")}
                   </span>
                 </div>
               </div>

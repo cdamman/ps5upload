@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Search as SearchIcon,
-  Loader2,
   File as FileIcon,
   Folder,
   X,
@@ -23,6 +22,7 @@ import {
   Button,
   EmptyState,
   ConnectionGate,
+  Spinner,
 } from "../../components";
 // Direct import to avoid the barrel's circular-dep warning at build.
 import { usePrompt } from "../../components/ConfirmDialog";
@@ -408,9 +408,9 @@ export default function SearchScreen() {
         {loading && progress && (
           <div className="mb-3 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] p-3 text-sm">
             <div className="flex items-center gap-2">
-              <Loader2
+              <Spinner
                 size={14}
-                className="animate-spin text-[var(--color-accent)]"
+                tone="accent"
               />
               <span className="font-medium">
                 {tr("search_searching", undefined, "Searching")}

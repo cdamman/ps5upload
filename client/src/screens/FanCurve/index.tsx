@@ -1,10 +1,11 @@
 import { useCallback, useState } from "react";
-import { Fan, Loader2, Plus, Trash2, Check, Activity } from "lucide-react";
+import { Fan, Plus, Trash2, Check, Activity } from "lucide-react";
 import {
   PageHeader,
   Button,
   ErrorCard,
   ConnectionGate,
+  Spinner,
 } from "../../components";
 import { useConfirm } from "../../components/ConfirmDialog";
 import { useTr } from "../../state/lang";
@@ -227,13 +228,14 @@ export default function FanCurveScreen() {
           <div className="mt-4">
             <Button
               variant="primary"
+              size="md"
               onClick={handleApply}
               disabled={
                 busy || points.length === 0 || payloadStatus !== "up" || !addr
               }
             >
               {busy ? (
-                <Loader2 size={14} className="animate-spin" />
+                <Spinner size={14} tone="inherit" />
               ) : (
                 <Fan size={14} />
               )}

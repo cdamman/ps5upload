@@ -7,14 +7,13 @@ import {
   FileArchive,
   ExternalLink,
   FolderOpen,
-  Loader2,
   CheckCircle2,
   RefreshCw,
   Check,
   Camera,
 } from "lucide-react";
 
-import { PageHeader, Card, Button, ErrorCard } from "../../components";
+import { PageHeader, Card, Button, ErrorCard, Spinner } from "../../components";
 import { useTr } from "../../state/lang";
 import { useDiagSettingsStore, LOG_LEVELS } from "../../state/diagSettings";
 import { useConnectionStore } from "../../state/connection";
@@ -596,8 +595,9 @@ export default function BugReportScreen() {
             <div className="mt-4 flex items-center gap-2">
               <Button
                 variant="primary"
+                size="md"
                 leftIcon={
-                  busy ? <Loader2 size={14} className="animate-spin" /> : <FileArchive size={14} />
+                  busy ? <Spinner size={14} tone="inherit" /> : <FileArchive size={14} />
                 }
                 onClick={createReport}
                 disabled={busy}

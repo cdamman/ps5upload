@@ -4,8 +4,6 @@ import {
   FolderTree,
   Folder,
   File as FileIcon,
-  Loader2,
-  AlertTriangle,
   ChevronRight,
   Home,
   ArrowUp,
@@ -29,7 +27,7 @@ import {
 import { pickPath } from "../../lib/pickPath";
 import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { isTauriEnv } from "../../lib/tauriEnv";
-import { PageHeader, Button, ConnectionGate } from "../../components";
+import { PageHeader, Button, ConnectionGate, Spinner, ErrorCard } from "../../components";
 // Direct import to avoid the barrel's circular-dep warning at build.
 import {
   useConfirm,
@@ -1957,7 +1955,7 @@ export default function FileSystemScreen() {
           console's progress here as if it were this console's. */}
         {(bulkOpElsewhere || downloadElsewhere) && (
           <div className="mb-3 flex items-center gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] p-2 text-xs text-[var(--color-muted)]">
-            <Loader2 size={12} className="animate-spin" />
+            <Spinner size={12} />
             <span>
               {tr(
                 "fs_op_on_other_console",
@@ -1975,10 +1973,7 @@ export default function FileSystemScreen() {
 
         {busyEntry && bulkOp.op === null && (
           <div className="mb-3 flex items-center gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] p-2 text-xs">
-            <Loader2
-              size={12}
-              className="animate-spin text-[var(--color-accent)]"
-            />
+            <Spinner size={12} tone="accent" />
             <span className="font-medium">
               {busyEntry.op === "rename"
                 ? tr("fs_busy_renaming", undefined, "Renaming")
@@ -2001,12 +1996,8 @@ export default function FileSystemScreen() {
         )}
 
         {error && (
-          <div className="mb-3 flex items-start gap-2 rounded-md border border-[var(--color-bad)] bg-[var(--color-surface-2)] p-2 text-xs">
-            <AlertTriangle
-              size={12}
-              className="mt-0.5 text-[var(--color-bad)]"
-            />
-            <span>{error}</span>
+          <div className="mb-3">
+            <ErrorCard title={tr("fs_error_title", "Error")} detail={error} />
           </div>
         )}
 
@@ -2019,38 +2010,22 @@ export default function FileSystemScreen() {
           dismissible (clearError) so it doesn't block subsequent
           operations. */}
         {bulkOp.errorBanner && (
-          <div className="mb-3 flex items-start gap-2 rounded-md border border-[var(--color-bad)] bg-[var(--color-surface-2)] p-2 text-xs">
-            <AlertTriangle
-              size={12}
-              className="mt-0.5 text-[var(--color-bad)]"
+          <div className="mb-3">
+            <ErrorCard
+              title={tr("fs_bulk_error_title", "Error")}
+              detail={bulkOp.errorBanner}
+              onDismiss={() => fsBulk.clearError()}
             />
-            <span className="flex-1">{bulkOp.errorBanner}</span>
-            <button
-              type="button"
-              onClick={() => fsBulk.clearError()}
-              className="rounded px-1 text-[var(--color-muted)] hover:bg-[var(--color-surface-3)]"
-              aria-label={tr("dismiss", undefined, "Dismiss")}
-            >
-              ×
-            </button>
           </div>
         )}
 
         {downloadOp.errorBanner && !downloadOp.active && (
-          <div className="mb-3 flex items-start gap-2 rounded-md border border-[var(--color-bad)] bg-[var(--color-surface-2)] p-2 text-xs">
-            <AlertTriangle
-              size={12}
-              className="mt-0.5 text-[var(--color-bad)]"
+          <div className="mb-3">
+            <ErrorCard
+              title={tr("fs_download_error_title", "Download failed")}
+              detail={downloadOp.errorBanner}
+              onDismiss={() => fsDownload.clearError()}
             />
-            <span className="flex-1">{downloadOp.errorBanner}</span>
-            <button
-              type="button"
-              onClick={() => fsDownload.clearError()}
-              className="rounded px-1 text-[var(--color-muted)] hover:bg-[var(--color-surface-3)]"
-              aria-label={tr("dismiss", undefined, "Dismiss")}
-            >
-              ×
-            </button>
           </div>
         )}
 
@@ -2061,7 +2036,7 @@ export default function FileSystemScreen() {
             was both stale and confusing. */}
         {entries === null && !error && (
           <div className="flex items-center justify-center gap-2 py-10 text-xs text-[var(--color-muted)]">
-            <Loader2 size={14} className="animate-spin" />
+            <Spinner size={14} />
             {tr("fs_listing", undefined, "Reading directory…")}
           </div>
         )}
@@ -2171,10 +2146,7 @@ export default function FileSystemScreen() {
                         className="rounded-md border border-[var(--color-border)] p-1 hover:bg-[var(--color-surface-3)] disabled:opacity-30"
                       >
                         {downloadHere && downloadOp.rootName === e.name ? (
-                          <Loader2
-                            size={12}
-                            className="animate-spin text-[var(--color-accent)]"
-                          />
+                          <Spinner size={12} tone="accent" />
                         ) : (
                           <Download size={12} />
                         )}
@@ -2263,7 +2235,7 @@ export default function FileSystemScreen() {
                       className="rounded-md border border-[var(--color-accent)] p-1 text-[var(--color-accent)] hover:bg-[var(--color-surface-3)] disabled:opacity-30"
                     >
                       {installingPkgName === e.name ? (
-                        <Loader2 size={12} className="animate-spin" />
+                        <Spinner size={12} tone="inherit" />
                       ) : (
                         <PackagePlus size={12} />
                       )}
@@ -2488,10 +2460,7 @@ function BulkOpBanner({
   return (
     <div className="mb-3 rounded-md border border-[var(--color-accent)] bg-[var(--color-surface-2)] p-3 text-xs">
       <div className="mb-2 flex items-center gap-2">
-        <Loader2
-          size={14}
-          className="animate-spin text-[var(--color-accent)]"
-        />
+        <Spinner size={14} tone="accent" />
         <span className="font-semibold">{verb}</span>
         <span className="text-[var(--color-muted)]">
           {tr(
@@ -2649,10 +2618,7 @@ function DownloadOpBanner({
   return (
     <div className="mb-3 rounded-md border border-[var(--color-accent)] bg-[var(--color-surface-2)] p-3 text-xs">
       <div className="mb-2 flex items-center gap-2">
-        <Loader2
-          size={14}
-          className="animate-spin text-[var(--color-accent)]"
-        />
+        <Spinner size={14} tone="accent" />
         <span className="font-semibold">
           {tr("fs_busy_downloading", undefined, "Downloading from PS5")}
         </span>

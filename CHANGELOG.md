@@ -4,6 +4,37 @@ What's new in ps5upload, written for humans.
 
 ---
 
+## 4.4.0
+
+UI modernization release — redesigned navigation, 28 reusable UI
+components, full i18n compliance, accessibility infrastructure, and a
+unified visual language across every screen.
+
+- **New 5-tab navigation** — Home, Games, Files, Console, Tasks. The old
+  40-item sidebar is now a clean tab rail (desktop) and bottom nav
+  (mobile), with secondary destinations in a "More" drawer.
+- **Home dashboard** — new landing page with console status, quick
+  actions, recent activity, storage, and telemetry widgets.
+- **28 UI component primitives** — Spinner, Badge, ErrorCard, EmptyState,
+  Callout, Card, Tabs, Tooltip, Drawer, Sheet, Toaster, LiveRegion,
+  SkipNav, and more. All screens now use a shared design system instead
+  of ad-hoc markup.
+- **Unified loading & error states** — every screen's spinner and error
+  display now uses the centralized `Spinner` and `ErrorCard` components
+  for consistent visual feedback and screen-reader announcements.
+- **Full i18n compliance** — all hardcoded UI strings migrated to the
+  translation system. Zero lint errors from the `no-untranslated-jsx`
+  rule.
+- **Accessibility infrastructure** — WCAG 2.2 AA groundwork: skip-nav,
+  live regions, reduced-motion support, 44px touch targets, keyboard
+  navigation, and focus management.
+- **Mobile groundwork** — pull-to-refresh, bottom tab nav, back-stack
+  support, and haptic feedback hooks.
+- **Engine fix** — `cheats.rs` compile fix for Android (NDK rustc type
+  inference).
+
+---
+
 ## 4.3.2
 
 Version-number fix — the v4.3.0 and v4.3.1 releases shipped code fixes

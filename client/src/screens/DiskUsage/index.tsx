@@ -2,9 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   PieChart,
   RefreshCw,
-  Loader2,
   ChevronUp,
-  AlertTriangle,
 } from "lucide-react";
 import { invoke } from "../../lib/invokeLogged";
 
@@ -42,7 +40,9 @@ import {
   PageHeader,
   Button,
   EmptyState,
+  ErrorCard,
   ConnectionGate,
+  Spinner,
 } from "../../components";
 import { useTr } from "../../state/lang";
 import { formatBytes } from "../../lib/format";
@@ -239,16 +239,11 @@ export default function DiskUsageScreen() {
             ))}
           </div>
 
-          {error && (
-            <div className="flex items-start gap-1 rounded-md border border-[var(--color-bad)] p-2 text-xs text-[var(--color-bad)]">
-              <AlertTriangle size={11} className="mt-0.5 shrink-0" />
-              {error}
-            </div>
-          )}
+          {error && <ErrorCard title={error} />}
 
           {loading && nodes === null && (
             <div className="text-center text-xs text-[var(--color-muted)]">
-              <Loader2 size={12} className="mr-2 inline animate-spin" />
+              <Spinner size={12} className="mr-2 inline" />
               {tr("disk_usage_walking", undefined, "Walking…")}
             </div>
           )}

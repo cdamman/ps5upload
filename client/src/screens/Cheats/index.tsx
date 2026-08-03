@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   Gamepad2,
-  Loader2,
   RefreshCw,
   Power,
   Trash2,
@@ -18,6 +17,7 @@ import {
   ConnectionGate,
   EmptyState,
   Card,
+  Spinner,
 } from "../../components";
 import { useTr } from "../../state/lang";
 import { useConnectionStore } from "../../state/connection";
@@ -184,7 +184,7 @@ export default function CheatsScreen() {
               disabled={loading || payloadStatus !== "up" || !addr}
             >
               {loading ? (
-                <Loader2 size={14} className="animate-spin" />
+                <Spinner size={14} tone="inherit" />
               ) : (
                 <RefreshCw size={14} />
               )}
@@ -217,11 +217,15 @@ export default function CheatsScreen() {
                     )}
                   </div>
                   <div className="text-xs text-[var(--color-muted)]">
-                    {status.enabled ? "Enabled" : "Disabled"}
+                    {status.enabled
+                      ? tr("cheats_status_enabled", "Enabled")
+                      : tr("cheats_status_disabled", "Disabled")}
                     {status.game_running && (
                       <span className="ml-2 text-[var(--color-accent)]">
-                        Game: {status.game_title_id || "unknown"} (PID:{" "}
-                        {status.game_pid})
+                        {tr("cheats_game_label", "Game:")}{" "}
+                        {status.game_title_id ||
+                          tr("cheats_unknown", "unknown")}{" "}
+                        {tr("cheats_pid_label", "(PID:")} {status.game_pid})
                       </span>
                     )}
                   </div>
@@ -231,7 +235,8 @@ export default function CheatsScreen() {
                 {status.patches_total > 0 && (
                   <span className="flex items-center gap-1 text-xs text-[var(--color-muted)]">
                     <Zap size={12} />
-                    {status.patches_total} patches applied
+                    {status.patches_total}{" "}
+                    {tr("cheats_patches_applied", "patches applied")}
                   </span>
                 )}
                 <Button
@@ -239,7 +244,7 @@ export default function CheatsScreen() {
                   size="sm"
                   onClick={handleEngineToggle}
                 >
-                  {status.enabled ? "Disable" : "Enable"}
+                  {status.enabled ? tr("cheats_disable", "Disable") : tr("cheats_enable", "Enable")}
                 </Button>
               </div>
             </div>
@@ -333,7 +338,7 @@ export default function CheatsScreen() {
                 {modsError && <ErrorCard title={modsError} />}
                 {modsLoading ? (
                   <div className="flex items-center justify-center py-8">
-                    <Loader2 size={20} className="animate-spin text-[var(--color-muted)]" />
+                    <Spinner size={20} />
                   </div>
                 ) : mods.length === 0 ? (
                   <EmptyState
@@ -380,7 +385,7 @@ export default function CheatsScreen() {
                             className="flex-shrink-0"
                           >
                             {toggling === m.index ? (
-                              <Loader2 size={20} className="animate-spin" />
+                              <Spinner size={20} tone="inherit" />
                             ) : m.on ? (
                               <ToggleRight
                                 size={24}

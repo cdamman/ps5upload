@@ -5,7 +5,6 @@ import {
   ExternalLink,
   RefreshCw,
   CheckCircle2,
-  Loader2,
   HardDrive,
   AlertTriangle,
   Activity as ActivityIcon,
@@ -34,7 +33,7 @@ import {
   downloadableReleases,
   isLatestTag,
 } from "../../lib/payloadVersions";
-import { Button, ErrorCard } from "../../components";
+import { Button, ErrorCard, Spinner } from "../../components";
 import { useTr } from "../../state/lang";
 import UsbAutoloaderModal from "./UsbAutoloaderModal";
 
@@ -639,7 +638,7 @@ function PayloadCard({
               size="sm"
               leftIcon={
                 busy ? (
-                  <Loader2 size={11} className="animate-spin" />
+                  <Spinner size={12} tone="inherit" />
                 ) : (
                   <RefreshCw size={11} />
                 )

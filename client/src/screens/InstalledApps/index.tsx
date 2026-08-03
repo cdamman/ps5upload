@@ -9,7 +9,6 @@ import {
   Package,
   AlertTriangle,
   Play,
-  Loader2,
   Download,
   ShieldCheck,
   Square,
@@ -51,6 +50,7 @@ import {
   ConnectionGate,
   Skeleton,
   PlatformBadge,
+  Spinner,
 } from "../../components";
 // Direct import to avoid the barrel's circular-dep warning at build.
 import { useConfirm } from "../../components/ConfirmDialog";
@@ -394,7 +394,7 @@ function AppCard({
             className="shrink-0 rounded-md border border-[var(--color-border)] p-2.5 text-[var(--color-muted)] transition-colors hover:border-[var(--color-bad)] hover:text-[var(--color-bad)] disabled:cursor-not-allowed disabled:opacity-40"
           >
             {busy ? (
-              <Loader2 size={15} className="animate-spin" />
+              <Spinner size={16} />
             ) : (
               <Trash2 size={15} />
             )}
@@ -946,7 +946,7 @@ export default function InstalledAppsScreen() {
                   onClick={() => void handleSendSmp()}
                 >
                   {smpSending ? (
-                    <Loader2 size={14} className="animate-spin" />
+                    <Spinner size={14} />
                   ) : (
                     <Download size={14} />
                   )}

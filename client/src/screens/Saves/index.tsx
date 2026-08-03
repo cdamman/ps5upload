@@ -4,7 +4,6 @@ import { useNavigate } from "react-router";
 import {
   Save,
   RefreshCw,
-  Loader2,
   Download,
   Upload as UploadIcon,
   FolderOpen,
@@ -38,6 +37,7 @@ import {
   ErrorCard,
   ConnectionGate,
   GameIcon,
+  Spinner,
 } from "../../components";
 // Direct import to avoid the barrel's circular-dep warning at build.
 import { useConfirm } from "../../components/ConfirmDialog";
@@ -767,7 +767,7 @@ export default function SavesScreen() {
                   size="sm"
                   leftIcon={
                     bulkBackupBusy ? (
-                      <Loader2 size={12} className="animate-spin" />
+                      <Spinner size={12} tone="inherit" />
                     ) : (
                       <HardDrive size={12} />
                     )
@@ -790,7 +790,7 @@ export default function SavesScreen() {
                   size="sm"
                   leftIcon={
                     bulkRestoreBusy ? (
-                      <Loader2 size={12} className="animate-spin" />
+                      <Spinner size={12} tone="inherit" />
                     ) : (
                       <UploadIcon size={12} />
                     )
@@ -842,7 +842,7 @@ export default function SavesScreen() {
               "No saves found. Either no users have ever saved a game, or the savedata folders aren't where we expect them.",
             )}
             action={
-              <Button variant="secondary" onClick={() => navigate("/library")}>
+              <Button variant="secondary" size="md" onClick={() => navigate("/games")}>
                 {tr("saves_empty_cta", "Browse Library")}
               </Button>
             }
@@ -961,7 +961,7 @@ export default function SavesScreen() {
 
         {loading && saves === null && (
           <div className="mt-4 text-center text-xs text-[var(--color-muted)]">
-            <Loader2 size={12} className="mr-2 inline animate-spin" />
+            <Spinner size={12} className="mr-2 inline" />
             {tr("saves_loading", undefined, "Reading saves…")}
           </div>
         )}

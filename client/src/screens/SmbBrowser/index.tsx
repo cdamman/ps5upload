@@ -1,7 +1,6 @@
 import { useCallback, useState } from "react";
 import {
   Network,
-  Loader2,
   Folder,
   File,
   ChevronLeft,
@@ -10,7 +9,7 @@ import {
   Download,
   Home,
 } from "lucide-react";
-import { PageHeader, Button, ErrorCard, ConnectionGate, Card, EmptyState } from "../../components";
+import { PageHeader, Button, ErrorCard, ConnectionGate, Card, EmptyState, Spinner } from "../../components";
 import { useTr } from "../../state/lang";
 import { humanizePs5Error } from "../../lib/humanizeError";
 import {
@@ -203,7 +202,7 @@ export default function SmbBrowserScreen() {
                   value={user}
                   onChange={(e) => setUser(e.target.value)}
                   className="input"
-                  placeholder="guest"
+                  placeholder={tr("smb_user_placeholder", "guest")}
                 />
               </label>
               <label className="space-y-1">
@@ -218,8 +217,8 @@ export default function SmbBrowserScreen() {
                 />
               </label>
             </div>
-            <Button variant="primary" onClick={() => void handleConnect()} disabled={loading}>
-              {loading ? <Loader2 size={16} className="animate-spin" /> : <Network size={16} />}
+            <Button variant="primary" size="md" onClick={() => void handleConnect()} disabled={loading}>
+                {loading ? <Spinner size={16} tone="inherit" /> : <Network size={16} />}
               {tr("smb_connect", undefined, "Connect")}
             </Button>
           </Card>
@@ -298,7 +297,7 @@ export default function SmbBrowserScreen() {
 
             {loading ? (
               <div className="flex items-center justify-center py-12">
-                <Loader2 size={32} className="animate-spin text-[var(--color-muted)]" />
+                <Spinner size={32} />
               </div>
             ) : !currentShare ? (
               shares.length === 0 ? (
@@ -367,7 +366,7 @@ export default function SmbBrowserScreen() {
                         title={tr("smb_download", undefined, "Download")}
                       >
                         {downloading === e.name ? (
-                          <Loader2 size={14} className="animate-spin" />
+                          <Spinner size={14} tone="inherit" />
                         ) : (
                           <Download size={14} />
                         )}

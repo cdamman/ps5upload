@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Image as ImageIcon,
   RefreshCw,
-  Loader2,
   Download,
   FileImage,
   CheckSquare,
@@ -24,7 +23,7 @@ import { useConnectionStore, PS5_PAYLOAD_PORT } from "../../state/connection";
 import { mgmtAddr } from "../../lib/addr";
 import { useScrollLock } from "../../lib/useScrollLock";
 import { useStaleHostGuard } from "../../lib/staleHostGuard";
-import { PageHeader, Button, EmptyState, ErrorCard } from "../../components";
+import { PageHeader, Button, EmptyState, ErrorCard, Spinner } from "../../components";
 import { useTr } from "../../state/lang";
 import { pickPath } from "../../lib/pickPath";
 import { formatBytes } from "../../lib/format";
@@ -527,7 +526,7 @@ export default function ScreenshotsScreen() {
                 size="sm"
                 leftIcon={
                   bulkBusy ? (
-                    <Loader2 size={12} className="animate-spin" />
+                    <Spinner size={12} tone="inherit" />
                   ) : (
                     <Download size={12} />
                   )
@@ -663,7 +662,7 @@ export default function ScreenshotsScreen() {
                     size="sm"
                     leftIcon={
                       convertingPaths.has(item.path) ? (
-                        <Loader2 size={11} className="animate-spin" />
+                        <Spinner size={12} tone="inherit" />
                       ) : (
                         <FileImage size={11} />
                       )
@@ -687,7 +686,7 @@ export default function ScreenshotsScreen() {
                     size="sm"
                     leftIcon={
                       busyPaths.has(item.path) ? (
-                        <Loader2 size={11} className="animate-spin" />
+                        <Spinner size={12} tone="inherit" />
                       ) : (
                         <Download size={11} />
                       )
@@ -708,7 +707,7 @@ export default function ScreenshotsScreen() {
 
       {loading && items === null && (
         <div className="mt-4 text-center text-xs text-[var(--color-muted)]">
-          <Loader2 size={12} className="mr-2 inline animate-spin" />
+          <Spinner size={12} className="mr-2 inline" />
           {tr("screenshots_loading", undefined, "Reading screenshots…")}
         </div>
       )}
@@ -736,7 +735,7 @@ export default function ScreenshotsScreen() {
                   size="sm"
                   leftIcon={
                     busyPaths.has(preview.item.path) ? (
-                      <Loader2 size={12} className="animate-spin" />
+                      <Spinner size={12} tone="inherit" />
                     ) : (
                       <Download size={12} />
                     )
@@ -760,7 +759,7 @@ export default function ScreenshotsScreen() {
             <div className="flex min-h-[40vh] min-w-[40vw] items-center justify-center overflow-hidden rounded-md bg-[var(--color-surface-2)]">
               {preview.loading ? (
                 <div className="flex flex-col items-center gap-2 p-10 text-xs text-[var(--color-muted)]">
-                  <Loader2 size={20} className="animate-spin" />
+                  <Spinner size={20} />
                   {tr(
                     "screenshots_preview_loading",
                     undefined,

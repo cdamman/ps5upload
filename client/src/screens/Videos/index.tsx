@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Video as VideoIcon,
   RefreshCw,
-  Loader2,
   Download,
   CheckSquare,
   Square,
@@ -22,7 +21,7 @@ import { useConnectionStore, PS5_PAYLOAD_PORT } from "../../state/connection";
 import { mgmtAddr } from "../../lib/addr";
 import { useScrollLock } from "../../lib/useScrollLock";
 import { useStaleHostGuard } from "../../lib/staleHostGuard";
-import { PageHeader, Button, EmptyState, ErrorCard } from "../../components";
+import { PageHeader, Button, EmptyState, ErrorCard, Spinner } from "../../components";
 import { useTr } from "../../state/lang";
 import { pickPath } from "../../lib/pickPath";
 import { formatBytes } from "../../lib/format";
@@ -289,7 +288,7 @@ export default function VideosScreen() {
                 size="sm"
                 leftIcon={
                   bulkBusy ? (
-                    <Loader2 size={12} className="animate-spin" />
+                    <Spinner size={12} tone="inherit" />
                   ) : (
                     <Download size={12} />
                   )
@@ -406,7 +405,7 @@ export default function VideosScreen() {
                     aria-label={tr("videos_download", undefined, "Download")}
                   >
                     {rowBusy ? (
-                      <Loader2 size={13} className="animate-spin" />
+                      <Spinner size={14} tone="inherit" />
                     ) : (
                       <Download size={13} />
                     )}
@@ -438,7 +437,7 @@ export default function VideosScreen() {
             <div className="flex min-h-[240px] min-w-[320px] items-center justify-center p-2">
               {preview.loading && (
                 <div className="flex items-center gap-2 text-sm text-[var(--color-muted)]">
-                  <Loader2 size={16} className="animate-spin" />
+                  <Spinner size={16} />
                   {tr("videos_preview_loading", undefined, "Downloading clip…")}
                 </div>
               )}

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Camera, Check, Loader2, AlertTriangle, Zap } from "lucide-react";
+import { Camera, Check, AlertTriangle, Zap } from "lucide-react";
 
 import { useConnectionStore, EMPTY_HOST_RUNTIME } from "../state/connection";
 import { parsePS5Firmware } from "../lib/ps5Firmware";
@@ -13,6 +13,7 @@ import {
 import { useActivityHistoryStore } from "../state/activityHistory";
 import { useUploadSettingsStore } from "../state/uploadSettings";
 import { getEngineUrl } from "../state/engine";
+import { Spinner } from "../components/Spinner";
 import { hostOf } from "../lib/addr";
 
 /**
@@ -99,7 +100,7 @@ export default function StatusBar() {
     .join("\n");
 
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 whitespace-nowrap border-t border-[var(--color-border)] bg-[var(--color-surface-2)] px-4 pt-1.5 pb-[calc(env(safe-area-inset-bottom)_+_0.375rem)] pl-[calc(env(safe-area-inset-left)_+_1rem)] pr-[calc(env(safe-area-inset-right)_+_1rem)] text-xs text-[var(--color-muted)]">
+    <div className="hidden md:flex flex-wrap items-center gap-x-4 gap-y-1 whitespace-nowrap border-t border-[var(--color-border)] bg-[var(--color-surface-2)] px-4 pt-1.5 pb-[calc(env(safe-area-inset-bottom)_+_0.375rem)] pl-[calc(env(safe-area-inset-left)_+_1rem)] pr-[calc(env(safe-area-inset-right)_+_1rem)] text-xs text-[var(--color-muted)]">
       {/* Group 1 — the Engine (our local backend). */}
       <div
         className="flex items-center gap-2"
@@ -243,7 +244,7 @@ function CaptureButton() {
 
   const icon =
     state === "busy" ? (
-      <Loader2 size={13} className="animate-spin" />
+      <Spinner size={14} />
     ) : state === "done" ? (
       <Check size={13} className="text-[var(--color-good)]" />
     ) : state === "fail" ? (

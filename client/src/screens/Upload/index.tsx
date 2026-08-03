@@ -6,7 +6,6 @@ import {
   HardDrive,
   Gamepad2,
   FileArchive,
-  Loader2,
   Info,
   Check,
   Package,
@@ -53,7 +52,14 @@ import { useScrollLock } from "../../lib/useScrollLock";
 import { pushNotification } from "../../state/notifications";
 import { useRosterStore } from "../../state/roster";
 import { useNavigate } from "react-router";
-import { PageHeader, WarningCard, Button, ConsoleChip } from "../../components";
+import {
+  PageHeader,
+  WarningCard,
+  ErrorCard,
+  Button,
+  ConsoleChip,
+  Spinner,
+} from "../../components";
 import { OverflowMenu } from "../../components/OverflowMenu";
 import FfpkgInspectorPanel from "./FfpkgInspectorPanel";
 import FolderDiffPanel from "./FolderDiffPanel";
@@ -852,7 +858,7 @@ function Step2Options(props: {
               </span>
               {detecting && (
                 <span className="inline-flex items-center gap-1 text-xs text-[var(--color-muted)]">
-                  <Loader2 size={12} className="animate-spin" />
+                  <Spinner size={12} />
                   {tr("upload_inspecting", "Inspecting…")}
                 </span>
               )}
@@ -877,9 +883,10 @@ function Step2Options(props: {
               // actually moving (especially valuable when the
               // archive is on a spun-down USB HDD).
               <div className="mt-2 flex items-start gap-2 rounded-md border border-[var(--color-accent)]/40 bg-[var(--color-accent)]/5 p-2 text-xs">
-                <Loader2
+                <Spinner
                   size={14}
-                  className="mt-0.5 shrink-0 animate-spin text-[var(--color-accent)]"
+                  tone="accent"
+                  className="mt-0.5 shrink-0"
                 />
                 <div>
                   <div className="font-medium text-[var(--color-text)]">
@@ -913,8 +920,11 @@ function Step2Options(props: {
               </div>
             )}
             {detectError && !isRarSource && (
-              <div className="mt-2 rounded-md border border-[var(--color-bad)] bg-[var(--color-surface-3)] p-2 text-xs text-[var(--color-bad)]">
-                {humanizePs5Error(detectError)}
+              <div className="mt-2">
+                <ErrorCard
+                  title={tr("upload_detect_error_title", "Error")}
+                  detail={humanizePs5Error(detectError)}
+                />
               </div>
             )}
           </div>
@@ -1140,12 +1150,15 @@ function Step2Options(props: {
         </button>
       </div>
       {preflightError && (
-        <div className="mt-2 rounded-md border border-[var(--color-bad)] bg-[var(--color-surface)] p-2 text-xs text-[var(--color-bad)]">
-          {tr(
-            "upload_preflight_failed",
-            { msg: preflightError },
-            `Couldn't check the destination: ${preflightError}. Make sure the PS5 is reachable, then try again.`,
-          )}
+        <div className="mt-2">
+          <ErrorCard
+            title={tr("upload_preflight_error_title", "Preflight check failed")}
+            detail={tr(
+              "upload_preflight_failed",
+              { msg: preflightError },
+              `Couldn't check the destination: ${preflightError}. Make sure the PS5 is reachable, then try again.`,
+            )}
+          />
         </div>
       )}
       <MirrorToRosterButton
@@ -1352,7 +1365,9 @@ function ExistingDestinationDialog({
             }
           >
             <span className="font-medium">
-              {hasExisting ? "Override" : "Start upload"}
+              {hasExisting
+                ? tr("upload_override", "Override")
+                : tr("upload_start_upload", "Start upload")}
             </span>
             <span
               className={
@@ -1361,8 +1376,8 @@ function ExistingDestinationDialog({
               }
             >
               {hasExisting
-                ? "Replace everything — re-send the entire source."
-                : "Send all files to the PS5."}
+                ? tr("upload_override_desc", "Replace everything — re-send the entire source.")
+                : tr("upload_start_desc", "Send all files to the PS5.")}
             </span>
           </button>
           <button
@@ -1375,8 +1390,8 @@ function ExistingDestinationDialog({
             </span>
             <span className="text-xs text-[var(--color-muted)]">
               {hasExisting
-                ? "Don't upload. Pick a different destination or source."
-                : "Don't upload."}
+                ? tr("upload_cancel_existing_desc", "Don't upload. Pick a different destination or source.")
+                : tr("upload_cancel_desc", "Don't upload.")}
             </span>
           </button>
         </div>
@@ -1413,10 +1428,7 @@ function TransferStatus({ phase }: { phase: TransferPhase }) {
   if (phase.kind === "starting") {
     return (
       <div className="mb-3 flex items-center gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] p-3 text-sm">
-        <Loader2
-          size={14}
-          className="animate-spin text-[var(--color-accent)]"
-        />
+        <Spinner size={14} tone="accent" />
         {tr("upload_status_preparing", "Preparing upload…")}
       </div>
     );
@@ -1437,10 +1449,7 @@ function TransferStatus({ phase }: { phase: TransferPhase }) {
     if (totalBytes === 0 && files.length === 0) {
       return (
         <div className="mb-3 flex items-center gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] p-3 text-sm">
-          <Loader2
-            size={14}
-            className="animate-spin text-[var(--color-accent)]"
-          />
+          <Spinner size={14} tone="accent" />
           {tr(
             "upload_status_checking_existing",
             "Checking what's already on your PS5…",
@@ -1460,10 +1469,7 @@ function TransferStatus({ phase }: { phase: TransferPhase }) {
     if (bytesSent === 0 && files.length > 0) {
       return (
         <div className="mb-3 flex items-center gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] p-3 text-sm">
-          <Loader2
-            size={14}
-            className="animate-spin text-[var(--color-accent)]"
-          />
+          <Spinner size={14} tone="accent" />
           <span>
             {tr(
               "upload_status_preparing_files",
@@ -1498,10 +1504,7 @@ function TransferStatus({ phase }: { phase: TransferPhase }) {
       <div className="mb-3 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] p-3 text-sm">
         <div className="mb-2 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <Loader2
-              size={14}
-              className="animate-spin text-[var(--color-accent)]"
-            />
+            <Spinner size={14} tone="accent" />
             <span className="font-medium">
               {isFinalizing
                 ? tr("upload_status_finalizing", "Finalizing on PS5")
@@ -1612,7 +1615,9 @@ function TransferStatus({ phase }: { phase: TransferPhase }) {
     return (
       <div className="mb-3 rounded-md border border-[var(--color-good)] bg-[var(--color-surface-2)] p-4 text-sm">
         <div className="mb-2 font-medium text-[var(--color-good)]">
-          {allSkipped ? "Already up to date" : "Upload complete"}
+          {allSkipped
+            ? tr("upload_already_up_to_date", "Already up to date")
+            : tr("upload_complete", "Upload complete")}
         </div>
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-xs text-[var(--color-muted)]">
           {!allSkipped && (
@@ -1633,7 +1638,9 @@ function TransferStatus({ phase }: { phase: TransferPhase }) {
           )}
           {phase.skippedFiles > 0 && (
             <>
-              <dt>{allSkipped ? "Already present" : "Skipped"}</dt>
+              <dt>{allSkipped
+                ? tr("upload_already_present", "Already present")
+                : tr("upload_skipped", "Skipped")}</dt>
               <dd className="text-[var(--color-text)]">
                 {phase.skippedFiles.toLocaleString()}{" "}
                 {tr("upload_done_skipped_files", "files (")}
@@ -1696,7 +1703,7 @@ function TransferStatus({ phase }: { phase: TransferPhase }) {
               variant="primary"
               size="sm"
               className="ml-auto shrink-0"
-              onClick={() => navigate("/library")}
+              onClick={() => navigate("/games")}
             >
               {tr("upload_done_open_library", "Open Library")}
             </Button>
@@ -1708,13 +1715,11 @@ function TransferStatus({ phase }: { phase: TransferPhase }) {
 
   // failed
   return (
-    <div className="mb-3 rounded-md border border-[var(--color-bad)] bg-[var(--color-surface-2)] p-3 text-sm">
-      <div className="font-medium text-[var(--color-bad)]">
-        {tr("upload_failed_title", "Upload failed")}
-      </div>
-      <div className="mt-0.5 text-xs text-[var(--color-muted)]">
-        {humanizeUploadError(phase.error)}
-      </div>
+    <div className="mb-3">
+      <ErrorCard
+        title={tr("upload_failed_title", "Upload failed")}
+        detail={humanizeUploadError(phase.error)}
+      />
     </div>
   );
 }
@@ -2671,7 +2676,7 @@ function BandwidthCard() {
           className="w-20 rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 text-xs"
           placeholder="0"
         />
-        <span className="text-xs text-[var(--color-muted)]">MB/s</span>
+        <span className="text-xs text-[var(--color-muted)]">{tr("upload_unit_mbs", "MB/s")}</span>
         {cap > 0 && (
           <button
             type="button"
@@ -2770,7 +2775,7 @@ function MountAfterUploadCard({
  *  managers already look for, so uploads appear where users expect —
  *  but hint copy stays neutral and describes the destination in plain
  *  "what goes here" terms rather than naming specific managers. */
-const DESTINATION_PRESETS: { label: string; subpath: string; hint: string }[] =
+const DESTINATION_PRESETS: { label: string; subpath: string; hintKey: string; hintFallback: string }[] =
   [
     // homebrew is first because it's the community-standard scan path
     // — most PS5 game scanners read from <volume>/homebrew, so files
@@ -2778,20 +2783,23 @@ const DESTINATION_PRESETS: { label: string; subpath: string; hint: string }[] =
     {
       label: "homebrew",
       subpath: "homebrew",
-      hint: "Homebrew apps & games (recommended)",
+      hintKey: "upload_preset_homebrew_hint",
+      hintFallback: "Homebrew apps & games (recommended)",
     },
     // etaHEN's app loader scans <volume>/etaHEN/games — common for users who
     // jailbreak via etaHEN/Backpork and launch from there. Requested by users.
     {
       label: "etaHEN/games",
       subpath: "etaHEN/games",
-      hint: "etaHEN game folder (etaHEN app loader scans here)",
+      hintKey: "upload_preset_etahen_hint",
+      hintFallback: "etaHEN game folder (etaHEN app loader scans here)",
     },
-    { label: "exfat", subpath: "exfat", hint: "Disk images" },
+    { label: "exfat", subpath: "exfat", hintKey: "upload_preset_exfat_hint", hintFallback: "Disk images" },
     {
       label: "ps5upload",
       subpath: "ps5upload",
-      hint: "Tool-specific generic folder",
+      hintKey: "upload_preset_ps5upload_hint",
+      hintFallback: "Tool-specific generic folder",
     },
   ];
 
@@ -2887,7 +2895,7 @@ function DestinationCard({
               key={p.subpath}
               type="button"
               onClick={() => onChange(volume, p.subpath)}
-              title={p.hint}
+              title={tr(p.hintKey, p.hintFallback)}
               className={clsx(
                 "rounded-full border px-2.5 py-0.5 text-xs transition-colors",
                 active
@@ -2945,13 +2953,13 @@ function ExcludesCard({
       <div className="mb-3 grid gap-2 sm:grid-cols-2">
         <ModeRadio
           label={tr("upload_include_all_files", "Include all files")}
-          hint="Default. Nothing is filtered."
+          hint={tr("upload_mode_all_hint", "Default. Nothing is filtered.")}
           checked={mode === "all"}
           onCheck={() => onSetMode("all")}
         />
         <ModeRadio
           label={tr("upload_apply_exclude_rules", "Apply exclude rules")}
-          hint="Skip junk files and anything you add below."
+          hint={tr("upload_mode_rules_hint", "Skip junk files and anything you add below.")}
           checked={mode === "rules"}
           onCheck={() => onSetMode("rules")}
         />
@@ -2998,7 +3006,7 @@ function ExcludesCard({
             <input
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
-              placeholder="Add pattern (e.g. *.log)"
+              placeholder={tr("upload_add_pattern_placeholder", "Add pattern (e.g. *.log)")}
               className="flex-1 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-sm"
             />
             <button

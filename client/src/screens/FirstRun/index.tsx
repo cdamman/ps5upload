@@ -5,7 +5,6 @@ import {
   CheckCircle2,
   XCircle,
   CircleDashed,
-  Loader2,
   Send,
   ArrowRight,
   Cable,
@@ -23,7 +22,7 @@ import {
   type PayloadReleaseInfo,
 } from "../../api/ps5";
 import { useConnectionStore, PS5_LOADER_PORT } from "../../state/connection";
-import { PageHeader, Button } from "../../components";
+import { PageHeader, Button, Spinner } from "../../components";
 import { useTr } from "../../state/lang";
 import { pushNotification } from "../../state/notifications";
 import { withConsolePrefix } from "../../state/roster";
@@ -167,7 +166,7 @@ export default function FirstRunScreen() {
 
     const sequence: InstallStep[] = [
       { id: kstuffId, label: kstuffId, state: "idle" },
-      { id: SMP_ID, label: "ShadowMount+", state: "idle" },
+      { id: SMP_ID, label: tr("firstrun_shadowmount_label", "ShadowMount+"), state: "idle" },
       { id: "ps5upload", label: "ps5upload", state: "idle" },
     ];
     setStep3Detail([...sequence]);
@@ -405,7 +404,7 @@ export default function FirstRunScreen() {
               size="md"
               leftIcon={
                 step3 === "busy" ? (
-                  <Loader2 size={14} className="animate-spin" />
+                  <Spinner size={14} tone="inherit" />
                 ) : (
                   <Send size={14} />
                 )
@@ -479,7 +478,7 @@ export default function FirstRunScreen() {
                 variant="primary"
                 size="md"
                 rightIcon={<ArrowRight size={14} />}
-                onClick={() => navigate("/library")}
+                onClick={() => navigate("/games")}
               >
                 {tr("first_run_go_library", undefined, "Open Library")}
               </Button>
@@ -512,7 +511,7 @@ function StepIcon({ state }: { state: StepState }) {
     return <XCircle size={14} className="text-[var(--color-bad)]" />;
   if (state === "busy")
     return (
-      <Loader2 size={14} className="animate-spin text-[var(--color-accent)]" />
+      <Spinner size={14} tone="accent" />
     );
   return <CircleDashed size={14} className="text-[var(--color-muted)]" />;
 }

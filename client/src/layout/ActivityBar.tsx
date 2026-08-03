@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
-import { Loader2, ChevronUp, ChevronDown } from "lucide-react";
+import { ChevronUp, ChevronDown } from "lucide-react";
 import { useNavigate } from "react-router";
 
 import {
@@ -10,6 +10,7 @@ import {
 import { formatBytes, formatDuration } from "../lib/format";
 import { useTr } from "../state/lang";
 import { ConsoleChip } from "../components";
+import { Spinner } from "../components/Spinner";
 import { profileNameForAddr, useRosterStore } from "../state/roster";
 
 /**
@@ -75,7 +76,7 @@ export default function ActivityBar() {
       : null;
 
   return (
-    <div className="border-t border-[var(--color-border)] bg-[var(--color-surface-2)]">
+    <div className="hidden md:block border-t border-[var(--color-border)] bg-[var(--color-surface-2)]">
       <div className="flex w-full items-center gap-2 px-4 py-1.5 text-xs">
         <button
           type="button"
@@ -88,10 +89,7 @@ export default function ActivityBar() {
             "Toggle activity panel",
           )}
         >
-          <Loader2
-            size={12}
-            className="animate-spin text-[var(--color-accent)]"
-          />
+          <Spinner size={12} tone="accent" />
           <span className="font-medium">
             {tr(
               "activity_bar_in_flight",

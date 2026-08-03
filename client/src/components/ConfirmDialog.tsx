@@ -380,7 +380,7 @@ export function usePrompt(): {
             }
           }}
           placeholder={pending.placeholder}
-          className="mb-4 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1.5 text-sm outline-none focus:border-[var(--color-accent)]"
+          className="input mb-4"
         />
         <div className="flex items-center justify-end gap-2">
           <Button variant="ghost" size="sm" onClick={() => settle(null)}>

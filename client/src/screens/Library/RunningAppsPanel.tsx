@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Activity,
   RefreshCw,
-  Loader2,
   Pause,
   Play,
   X,
@@ -17,7 +16,7 @@ import {
   type AppDbEntry,
   type RunningApp,
 } from "../../api/ps5";
-import { Button } from "../../components";
+import { Button, EmptyState, Spinner } from "../../components";
 // Direct import to avoid the barrel's circular-dep warning at build.
 import { useConfirm } from "../../components/ConfirmDialog";
 import { useTr } from "../../state/lang";
@@ -230,7 +229,7 @@ export default function RunningAppsPanel({ mgmtAddr }: { mgmtAddr: string }) {
           size="sm"
           leftIcon={
             loading ? (
-              <Loader2 size={11} className="animate-spin" />
+              <Spinner size={12} tone="inherit" />
             ) : (
               <RefreshCw size={11} />
             )
@@ -248,9 +247,7 @@ export default function RunningAppsPanel({ mgmtAddr }: { mgmtAddr: string }) {
         </div>
       )}
       {apps.length === 0 ? (
-        <div className="text-xs text-[var(--color-muted)]">
-          {tr("running_apps_empty", undefined, "No apps currently running.")}
-        </div>
+        <EmptyState message={tr("running_apps_empty", undefined, "No apps currently running.")} />
       ) : (
         <ul className="space-y-1.5">
           {apps.map((a) => (

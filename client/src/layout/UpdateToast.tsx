@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import { Download, X, Loader2, Sparkles } from "lucide-react";
+import { Download, X, Sparkles } from "lucide-react";
 
 import { useUpdateStore } from "../state/update";
 import { useTr } from "../state/lang";
+import { Spinner } from "../components/Spinner";
 
 /**
  * Non-intrusive update banner. The update store already auto-checks on launch
@@ -80,7 +81,7 @@ export function UpdateToast() {
           className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-[var(--color-accent)] px-2.5 py-1 text-xs font-medium text-[var(--color-accent)] disabled:opacity-60"
         >
           {downloading ? (
-            <Loader2 size={13} className="animate-spin" />
+            <Spinner size={14} />
           ) : (
             <Download size={13} />
           )}

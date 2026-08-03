@@ -8,7 +8,6 @@ import {
   Trash2,
   Download,
   RotateCcw,
-  Loader2,
   CheckCircle2,
   XCircle,
   AlertTriangle,
@@ -31,6 +30,7 @@ import {
   GameIcon,
   OverflowMenu,
   PlatformBadge,
+  Spinner,
   type OverflowMenuItem,
 } from "../../components";
 import { openInFileSystem } from "../../state/fsNavigation";
@@ -219,13 +219,13 @@ function PkgRow({
         )}
         {installingThis && (
           <div className="flex shrink-0 items-center gap-2 text-xs text-[var(--color-accent)]">
-            <Loader2 size={14} className="animate-spin" />
+            <Spinner size={14} tone="inherit" />
             {tr("pkglib.installing", "Installing…")}
           </div>
         )}
         {queued && (
           <div className="flex shrink-0 items-center gap-2 text-xs text-[var(--color-muted)]">
-            <Loader2 size={14} className="animate-spin" />
+            <Spinner size={14} />
             {tr(
               "pkglib.queued",
               undefined,
@@ -721,7 +721,7 @@ export default function InstallPackageScreen() {
                   size="sm"
                   leftIcon={
                     streaming ? (
-                      <Loader2 size={14} className="animate-spin" />
+                      <Spinner size={14} tone="inherit" />
                     ) : (
                       <Download size={14} />
                     )
@@ -837,9 +837,10 @@ export default function InstallPackageScreen() {
       {busyNotice && (
         <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-[var(--color-accent)] bg-[var(--color-accent-soft)] px-4 py-3 text-sm">
           <div className="flex items-start gap-2">
-            <Loader2
+            <Spinner
               size={14}
-              className="mt-0.5 shrink-0 animate-spin text-[var(--color-accent)]"
+              tone="accent"
+              className="mt-0.5 shrink-0"
             />
             <span>{busyNotice}</span>
           </div>
@@ -1078,7 +1079,7 @@ function ExternalPackages({ host }: { host: string }) {
           size="sm"
           leftIcon={
             scanning ? (
-              <Loader2 size={13} className="animate-spin" />
+              <Spinner size={14} tone="inherit" />
             ) : (
               <RotateCcw size={13} />
             )
@@ -1115,7 +1116,7 @@ function ExternalPackages({ host }: { host: string }) {
       {firstScan ? (
         // Stable scanning state — no more "suddenly appears" pop-in.
         <div className="flex items-center gap-2 rounded-md border border-dashed border-[var(--color-border)] px-3 py-4 text-xs text-[var(--color-muted)]">
-          <Loader2 size={14} className="animate-spin" />
+          <Spinner size={14} />
           {tr("pkglib.external.scanningDrives", "Scanning connected drives…")}
         </div>
       ) : !scanned ? (
@@ -1232,7 +1233,7 @@ function ExternalPackages({ host }: { host: string }) {
                   size="sm"
                   leftIcon={
                     installingPath === p.path ? (
-                      <Loader2 size={13} className="animate-spin" />
+                      <Spinner size={14} tone="inherit" />
                     ) : (
                       <Download size={13} />
                     )

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   MonitorPlay,
-  Loader2,
   RefreshCw,
   X,
   KeyRound,
@@ -15,6 +14,7 @@ import {
   Button,
   ErrorCard,
   ConnectionGate,
+  Spinner,
 } from "../../components";
 import { useTr } from "../../state/lang";
 import { useConnectionStore } from "../../state/connection";
@@ -46,9 +46,10 @@ export default function RemotePlayScreen() {
   const [copiedAcct, setCopiedAcct] = useState(false);
   const [copiedChiaki, setCopiedChiaki] = useState(false);
 
+  const accountId = status?.account_id;
   const chiakiNumeric = useMemo(
-    () => (status?.account_id ? accountIdToChiakiNumeric(status.account_id) : ""),
-    [status?.account_id],
+    () => (accountId ? accountIdToChiakiNumeric(accountId) : ""),
+    [accountId],
   );
 
   const isActive =
@@ -179,11 +180,12 @@ export default function RemotePlayScreen() {
             <div className="flex gap-2">
               <Button
                 variant="primary"
+                size="md"
                 onClick={handleRequest}
                 disabled={busy || payloadStatus !== "up" || !addr}
               >
                 {busy ? (
-                  <Loader2 size={14} className="animate-spin" />
+                  <Spinner size={14} tone="inherit" />
                 ) : (
                   <MonitorPlay size={14} />
                 )}
@@ -284,7 +286,7 @@ export default function RemotePlayScreen() {
                 {/* Numeric ID for pxplay / Chiaki classic */}
                 {chiakiNumeric && (
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-[var(--color-muted)]">pxplay:</span>
+                    <span className="text-xs text-[var(--color-muted)]">{tr("remotePlay_pxplay_label", "pxplay:")}</span>
                     <span className="font-mono break-all text-sm text-[var(--color-text)]">
                       {chiakiNumeric}
                     </span>

@@ -151,7 +151,7 @@ const items: NavItem[] = [
 
   // ─ Browse PS5: navigate what's on the console ─
   {
-    to: "/library",
+    to: "/games",
     key: "library",
     fallback: "Library",
     icon: LibraryBig,
@@ -164,7 +164,7 @@ const items: NavItem[] = [
     icon: Gamepad2,
   },
   {
-    to: "/file-system",
+    to: "/files",
     key: "file_system",
     fallback: "File System",
     icon: FolderTree,
@@ -180,7 +180,7 @@ const items: NavItem[] = [
 
   // ─ System: observe + manage the PS5 itself ─
   {
-    to: "/hardware",
+    to: "/console",
     key: "hardware",
     fallback: "Hardware",
     icon: Cpu,
@@ -259,7 +259,7 @@ const items: NavItem[] = [
 
   // ─ Diagnostics: history, logs, debugging ─
   {
-    to: "/activity",
+    to: "/tasks",
     key: "transfer_log",
     fallback: "Transfer Log",
     icon: ActivityIcon,

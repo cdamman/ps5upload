@@ -383,7 +383,7 @@ pub fn cheats_repo_search(query: &str) -> Result<CheatRepoSearchResponse> {
         }
     }
     // De-duplicate by filename (multiple repos may list the same file).
-    entries.dedup_by(|a, b| a.filename == b.filename);
+    entries.dedup_by(|a: &mut CheatRepoEntry, b: &mut CheatRepoEntry| a.filename == b.filename);
     Ok(CheatRepoSearchResponse { entries, error: None })
 }
 

@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import {
   Disc3,
   Power,
-  Loader2,
   AlertTriangle,
   CheckCircle2,
 } from "lucide-react";
@@ -12,7 +11,7 @@ import {
   peripheralBdOn,
   type PeripheralAck,
 } from "../../api/ps5";
-import { Button } from "../../components";
+import { Button, Spinner } from "../../components";
 import { useTr } from "../../state/lang";
 import { pushNotification } from "../../state/notifications";
 import { withConsolePrefix } from "../../state/roster";
@@ -84,7 +83,7 @@ export default function PeripheralPanel({ mgmtAddr }: { mgmtAddr: string }) {
           size="sm"
           leftIcon={
             busy === "eject" ? (
-              <Loader2 size={11} className="animate-spin" />
+              <Spinner size={12} tone="inherit" />
             ) : (
               <Disc3 size={11} />
             )
@@ -99,7 +98,7 @@ export default function PeripheralPanel({ mgmtAddr }: { mgmtAddr: string }) {
           size="sm"
           leftIcon={
             busy === "off" ? (
-              <Loader2 size={11} className="animate-spin" />
+              <Spinner size={12} tone="inherit" />
             ) : (
               <Power size={11} />
             )
@@ -114,7 +113,7 @@ export default function PeripheralPanel({ mgmtAddr }: { mgmtAddr: string }) {
           size="sm"
           leftIcon={
             busy === "on" ? (
-              <Loader2 size={11} className="animate-spin" />
+              <Spinner size={12} tone="inherit" />
             ) : (
               <Power size={11} />
             )

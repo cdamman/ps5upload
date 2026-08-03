@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { Layers, Loader2, RefreshCw, Wrench, AlertTriangle, CheckCircle2, Undo2 } from "lucide-react";
-import { PageHeader, Button, ErrorCard, ConnectionGate, EmptyState, Card } from "../../components";
+import { Layers, RefreshCw, Wrench, AlertTriangle, CheckCircle2, Undo2 } from "lucide-react";
+import { PageHeader, Button, ErrorCard, ConnectionGate, EmptyState, Card, Spinner } from "../../components";
 import { useTr } from "../../state/lang";
 import { useConnectionStore } from "../../state/connection";
 import { transferAddr } from "../../lib/addr";
@@ -112,7 +112,7 @@ export default function SdkChangerScreen() {
           )}
           right={
             <Button variant="ghost" onClick={() => void refresh()} disabled={loading}>
-              {loading ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
+              {loading ? <Spinner size={16} tone="inherit" /> : <RefreshCw size={16} />}
               {tr("refresh", undefined, "Refresh")}
             </Button>
           }
@@ -155,7 +155,7 @@ export default function SdkChangerScreen() {
 
         {loading ? (
           <div className="flex items-center justify-center py-12">
-            <Loader2 size={32} className="animate-spin text-[var(--color-muted)]" />
+            <Spinner size={32} />
           </div>
         ) : titles.length === 0 ? (
           <EmptyState
@@ -202,7 +202,7 @@ export default function SdkChangerScreen() {
                         disabled={patching}
                       >
                         {patching ? (
-                          <Loader2 size={14} className="animate-spin" />
+                          <Spinner size={14} tone="inherit" />
                         ) : (
                           tr("sdk_confirm", undefined, "Confirm")
                         )}
@@ -235,7 +235,7 @@ export default function SdkChangerScreen() {
                         title={tr("sdk_restore_tooltip", undefined, "Restore original files from .bak backups")}
                       >
                         {restoreTitleId === t.title_id ? (
-                          <Loader2 size={14} className="animate-spin" />
+                          <Spinner size={14} tone="inherit" />
                         ) : (
                           <Undo2 size={14} />
                         )}

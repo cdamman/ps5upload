@@ -6,7 +6,6 @@ import {
   Activity,
   Clock,
   RefreshCw,
-  Loader2,
   Fan,
   Check,
   HardDrive,
@@ -19,6 +18,7 @@ import {
   ErrorCard,
   Button,
   ConnectionGate,
+  Spinner,
 } from "../../components";
 import { useTr } from "../../state/lang";
 import PowerTelemetryPanel from "./PowerTelemetryPanel";
@@ -383,7 +383,7 @@ export default function HardwareScreen() {
               size="sm"
               leftIcon={
                 sensorLoading ? (
-                  <Loader2 size={12} className="animate-spin" />
+                  <Spinner size={12} tone="inherit" />
                 ) : (
                   <Thermometer size={12} />
                 )
@@ -774,13 +774,15 @@ function StatRow({
  * numbers. 55 °C = fan always running quietly but never at turbo;
  * 65 °C ~ Sony's default behavior; 75 °C = only turbo under real
  * load. Values must be inside [FAN_THRESHOLD_MIN_C, _MAX_C]. */
-const FAN_PRESETS: ReadonlyArray<{ label: string; c: number; hint: string }> = [
-  { label: "Quiet", c: 55, hint: "Fan engages earlier — cooler, louder" },
-  { label: "Balanced", c: 65, hint: "Close to Sony's default" },
+const FAN_PRESETS: ReadonlyArray<{ labelKey: string; labelFallback: string; c: number; hintKey: string; hintFallback: string }> = [
+  { labelKey: "hw_fan_preset_quiet", labelFallback: "Quiet", c: 55, hintKey: "hw_fan_preset_quiet_hint", hintFallback: "Fan engages earlier — cooler, louder" },
+  { labelKey: "hw_fan_preset_balanced", labelFallback: "Balanced", c: 65, hintKey: "hw_fan_preset_balanced_hint", hintFallback: "Close to Sony's default" },
   {
-    label: "Performance",
+    labelKey: "hw_fan_preset_performance",
+    labelFallback: "Performance",
     c: 75,
-    hint: "Fan ramps only under load — quieter idle",
+    hintKey: "hw_fan_preset_performance_hint",
+    hintFallback: "Fan ramps only under load — quieter idle",
   },
 ];
 
@@ -839,10 +841,7 @@ function FanThresholdCard({
           {tr("hardware_fan_threshold", "Fan threshold")}
         </span>
         {busy && (
-          <Loader2
-            size={12}
-            className="animate-spin text-[var(--color-accent)]"
-          />
+          <Spinner size={12} tone="accent" />
         )}
       </header>
 
@@ -851,11 +850,11 @@ function FanThresholdCard({
           const active = lastSetC === p.c;
           return (
             <button
-              key={p.label}
+              key={p.labelKey}
               type="button"
               onClick={() => applyThreshold(p.c)}
               disabled={!canSet}
-              title={p.hint}
+              title={tr(p.hintKey, p.hintFallback)}
               className={`flex flex-col items-center gap-0.5 rounded-md border px-2 py-2 text-xs transition ${
                 active
                   ? "border-[var(--color-accent)] bg-[var(--color-accent-soft)] text-[var(--color-accent)]"
@@ -864,7 +863,7 @@ function FanThresholdCard({
             >
               <span className="flex items-center gap-1 font-medium">
                 {active && <Check size={10} />}
-                {p.label}
+                {tr(p.labelKey, p.labelFallback)}
               </span>
               <span className="font-mono tabular-nums">{p.c}°C</span>
             </button>
@@ -1188,10 +1187,7 @@ function SmpMetaCard({
           {tr("smp_meta_title", "SMP appmeta heal")}
         </span>
         {busy && (
-          <Loader2
-            size={12}
-            className="animate-spin text-[var(--color-accent)]"
-          />
+          <Spinner size={12} tone="accent" />
         )}
         <span className="ml-auto flex items-center gap-1 text-xs font-medium">
           {running ? (

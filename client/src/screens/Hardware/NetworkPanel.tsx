@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { Network, RefreshCw, Loader2 } from "lucide-react";
+import { Network, RefreshCw } from "lucide-react";
 import { netInterfacesGet, type NetInterfaceList } from "../../api/ps5";
-import { Button } from "../../components";
+import { Button, ErrorCard, Spinner } from "../../components";
 import { useTr } from "../../state/lang";
 
 export default function NetworkPanel({ mgmtAddr }: { mgmtAddr: string }) {
@@ -57,7 +57,7 @@ export default function NetworkPanel({ mgmtAddr }: { mgmtAddr: string }) {
           size="sm"
           leftIcon={
             loading ? (
-              <Loader2 size={11} className="animate-spin" />
+              <Spinner size={12} tone="inherit" />
             ) : (
               <RefreshCw size={11} />
             )
@@ -68,11 +68,7 @@ export default function NetworkPanel({ mgmtAddr }: { mgmtAddr: string }) {
           {tr("refresh", undefined, "Refresh")}
         </Button>
       </header>
-      {error && (
-        <div className="rounded-md border border-[var(--color-bad)] p-2 text-xs text-[var(--color-bad)]">
-          {error}
-        </div>
-      )}
+      {error && <ErrorCard title={error} />}
       {data && data.interfaces.length === 0 && (
         <div className="text-xs text-[var(--color-muted)]">
           {tr("network_panel_empty", undefined, "No interfaces reported.")}

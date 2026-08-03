@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import {
   GitCompare,
-  Loader2,
   ChevronDown,
   ChevronRight,
   AlertTriangle,
@@ -10,6 +9,7 @@ import { dirDiffPreview, type DirDiffPreview } from "../../api/ps5";
 import { useTr } from "../../state/lang";
 import { formatBytes } from "../../lib/format";
 import { useUploadQueueStore } from "../../state/uploadQueue";
+import { Spinner } from "../../components";
 import { useTransferStore, phaseForHost } from "../../state/transfer";
 import { hostOf } from "../../lib/addr";
 
@@ -135,7 +135,7 @@ export default function FolderDiffPanel({
           {tr("folder_diff_title", undefined, "Diff vs PS5")}
         </h4>
         {loading && (
-          <Loader2 size={11} className="animate-spin text-[var(--color-muted)]" />
+          <Spinner size={12} />
         )}
         {data && data.sample_to_send.length > 0 && (
           <button

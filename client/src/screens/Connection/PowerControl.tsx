@@ -3,7 +3,6 @@ import {
   Power,
   RotateCw,
   Moon,
-  Loader2,
   AlertTriangle,
   CheckCircle2,
 } from "lucide-react";
@@ -14,7 +13,7 @@ import {
   type PowerControlAck,
 } from "../../api/ps5";
 import { mgmtAddr } from "../../lib/addr";
-import { Button } from "../../components";
+import { Button, Spinner } from "../../components";
 // Direct import to avoid the barrel's circular-dep warning at build.
 import { useConfirm } from "../../components/ConfirmDialog";
 import { useTr } from "../../state/lang";
@@ -147,7 +146,7 @@ export default function PowerControl({ host }: { host: string }) {
           size="sm"
           leftIcon={
             busy === "standby" ? (
-              <Loader2 size={11} className="animate-spin" />
+              <Spinner size={12} tone="inherit" />
             ) : (
               <Moon size={11} />
             )
@@ -172,7 +171,7 @@ export default function PowerControl({ host }: { host: string }) {
           size="sm"
           leftIcon={
             busy === "reboot" ? (
-              <Loader2 size={11} className="animate-spin" />
+              <Spinner size={12} tone="inherit" />
             ) : (
               <RotateCw size={11} />
             )
@@ -197,7 +196,7 @@ export default function PowerControl({ host }: { host: string }) {
           size="sm"
           leftIcon={
             busy === "shutdown" ? (
-              <Loader2 size={11} className="animate-spin" />
+              <Spinner size={12} tone="inherit" />
             ) : (
               <Power size={11} />
             )

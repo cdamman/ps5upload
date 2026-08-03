@@ -22,6 +22,7 @@ export function GameIcon({
   titleId,
   gamePath,
   fallbackSrc,
+  alt = "",
   size = 56,
   rounded = "rounded-md",
   className = "",
@@ -31,6 +32,10 @@ export function GameIcon({
   gamePath?: string | null;
   /** Last-resort cover URL (e.g. external CDN) tried after the local sources. */
   fallbackSrc?: string | null;
+  /** Alt text for the icon. Defaults to "" (decorative — use when the
+   *  game title is already shown next to the icon). Pass the title
+   *  when the icon stands alone (grid tiles, hero cards). */
+  alt?: string;
   /** Square edge length in px. */
   size?: number;
   /** Tailwind rounding class for the frame. */
@@ -63,7 +68,7 @@ export function GameIcon({
       {src ? (
         <img
           src={src}
-          alt=""
+          alt={alt}
           className="h-full w-full object-cover"
           loading="lazy"
           // Advance to the next candidate on failure; the glyph shows once idx

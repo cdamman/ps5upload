@@ -27,14 +27,13 @@ import {
   CheckCircle2,
   CircleDashed,
   XCircle,
-  Loader2,
   Send,
   ArrowRight,
   Plug,
   Radar,
   Sparkles,
 } from "lucide-react";
-import { PageHeader, Button } from "../../components";
+import { PageHeader, Button, Spinner, ErrorCard } from "../../components";
 import { useTr } from "../../state/lang";
 import PowerControl from "./PowerControl";
 import { BringUpPanel } from "./BringUpPanel";
@@ -106,10 +105,7 @@ function StepIcon({ state }: { state: StepState }) {
     return <XCircle size={size} className="text-[var(--color-bad)]" />;
   if (state === "busy")
     return (
-      <Loader2
-        size={size}
-        className="animate-spin text-[var(--color-accent)]"
-      />
+      <Spinner size={size} tone="accent" />
     );
   return <CircleDashed size={size} className="text-[var(--color-muted)]" />;
 }
@@ -759,7 +755,7 @@ function DiscoverPanel({
         size="sm"
         leftIcon={
           scanning ? (
-            <Loader2 size={12} className="animate-spin" />
+            <Spinner size={12} tone="inherit" />
           ) : (
             <Radar size={12} />
           )
@@ -810,8 +806,8 @@ function DiscoverResults({
   const tr = useTr();
   if (error) {
     return (
-      <div className="mt-2 rounded-md border border-[var(--color-bad)] bg-[var(--color-surface)] p-2 text-xs text-[var(--color-bad)]">
-        {error}
+      <div className="mt-2">
+        <ErrorCard title={tr("connection_discover_error_title", "Error")} detail={error} />
       </div>
     );
   }
@@ -982,31 +978,35 @@ function BundledPayloadBanner() {
      *   - disk full
      *   - gzip in the bundle is corrupted (very rare; fresh build fixes) */
     return (
-      <div className="mb-3 rounded-md border border-[var(--color-bad)] bg-[var(--color-surface)] p-2 text-xs text-[var(--color-bad)]">
-        <div className="font-semibold">
-          {tr(
+      <div className="mb-3">
+        <ErrorCard
+          title={tr(
             "connection_bundled_payload_unavailable",
             "Bundled helper not available",
           )}
-        </div>
-        <div className="mt-0.5 break-words font-mono text-xs opacity-90">
-          {err}
-        </div>
-        <div className="mt-1 text-xs opacity-80">
-          {tr(
-            "connection_rebuild_shell_hint",
-            "If you've just rebuilt the helper, also rebuild the desktop shell (",
-          )}
-          <code>cargo build</code>{" "}
-          {tr("connection_rebuild_shell_in", "in")}{" "}
-          <code>client/src-tauri</code>
-          {tr(
-            "connection_rebuild_shell_embeds",
-            ") so the new bytes get embedded. The shell embeds",
-          )}{" "}
-          <code>ps5upload.elf.gz</code>{" "}
-          {tr("connection_rebuild_shell_compile_time", "at compile time.")}
-        </div>
+          detail={
+            <>
+              <div className="mt-0.5 break-words font-mono text-xs opacity-90">
+                {err}
+              </div>
+              <div className="mt-1 text-xs opacity-80">
+                {tr(
+                  "connection_rebuild_shell_hint",
+                  "If you've just rebuilt the helper, also rebuild the desktop shell (",
+                )}
+                <code>cargo build</code>{" "}
+                {tr("connection_rebuild_shell_in", "in")}{" "}
+                <code>client/src-tauri</code>
+                {tr(
+                  "connection_rebuild_shell_embeds",
+                  ") so the new bytes get embedded. The shell embeds",
+                )}{" "}
+                <code>ps5upload.elf.gz</code>{" "}
+                {tr("connection_rebuild_shell_compile_time", "at compile time.")}
+              </div>
+            </>
+          }
+        />
       </div>
     );
   }
@@ -1116,7 +1116,7 @@ function CompanionStrip({ host }: { host: string }) {
         </span>
         {loading && (
           <span className="inline-flex items-center gap-1">
-            <Loader2 size={10} className="animate-spin" />
+            <Spinner size={12} />
             {tr("connection_scene_refreshing", undefined, "refreshing")}
           </span>
         )}
@@ -1312,7 +1312,7 @@ function VersionBlock({ onResend }: { onResend?: () => void }) {
         </span>
         {payloadProbing && (
           <span className="flex items-center gap-1 normal-case tracking-normal text-xs font-normal text-[var(--color-accent)]">
-            <Loader2 size={10} className="animate-spin" />
+            <Spinner size={12} tone="accent" />
             {tr(
               "connection_block_rechecking",
               undefined,

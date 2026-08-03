@@ -3,7 +3,7 @@ import { Terminal, Play, Pause, Trash2, Copy, Filter } from "lucide-react";
 import { klogChunk } from "../../api/ps5";
 import { mgmtAddr } from "../../lib/addr";
 import { useConnectionStore } from "../../state/connection";
-import { Button, EmptyState } from "../../components";
+import { Button, EmptyState, ErrorCard } from "../../components";
 import { useTr } from "../../state/lang";
 import { pushNotification } from "../../state/notifications";
 import { withConsolePrefix } from "../../state/roster";
@@ -391,8 +391,8 @@ export default function KernelLogPanel() {
         </div>
       )}
       {error && (
-        <div className="mb-2 rounded-md border border-[var(--color-bad)] p-2 text-xs text-[var(--color-bad)]">
-          {error}
+        <div className="mb-2">
+          <ErrorCard title={error} />
         </div>
       )}
       <div

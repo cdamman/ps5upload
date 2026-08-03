@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { Server, Loader2, RefreshCw, Play, Square, CheckCircle2, AlertTriangle, Lock } from "lucide-react";
-import { PageHeader, Button, ErrorCard, ConnectionGate, Card } from "../../components";
+import { Server, RefreshCw, Play, Square, CheckCircle2, AlertTriangle, Lock } from "lucide-react";
+import { PageHeader, Button, ErrorCard, ConnectionGate, Card, Spinner } from "../../components";
 import { useTr } from "../../state/lang";
 import { useConnectionStore } from "../../state/connection";
 import { transferAddr } from "../../lib/addr";
@@ -84,7 +84,7 @@ export default function FtpServerScreen() {
           )}
           right={
             <Button variant="ghost" onClick={() => void refresh()} disabled={loading}>
-              {loading ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
+              {loading ? <Spinner size={16} tone="inherit" /> : <RefreshCw size={16} />}
               {tr("refresh", undefined, "Refresh")}
             </Button>
           }
@@ -160,7 +160,7 @@ export default function FtpServerScreen() {
                   value={user}
                   onChange={(e) => setUser(e.target.value)}
                   className="input"
-                  placeholder="anonymous"
+                  placeholder={tr("ftp_user_placeholder", "anonymous")}
                 />
               </label>
 
@@ -189,8 +189,8 @@ export default function FtpServerScreen() {
               {tr("ftp_readonly", undefined, "Read-only (recommended — prevents writes/deletes)")}
             </label>
 
-            <Button variant="primary" onClick={() => void handleStart()} disabled={actionLoading}>
-              {actionLoading ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
+            <Button variant="primary" size="md" onClick={() => void handleStart()} disabled={actionLoading}>
+              {actionLoading ? <Spinner size={16} tone="inherit" /> : <Play size={16} />}
               {tr("ftp_start", undefined, "Start FTP Server")}
             </Button>
           </Card>

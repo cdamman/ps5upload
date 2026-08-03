@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { Activity, Loader2, RefreshCw, Database, Clock, TrendingUp } from "lucide-react";
-import { PageHeader, Button, ErrorCard, ConnectionGate, EmptyState, Card } from "../../components";
+import { Activity, RefreshCw, Database, Clock, TrendingUp } from "lucide-react";
+import { PageHeader, Button, ErrorCard, ConnectionGate, EmptyState, Card, Spinner } from "../../components";
 import { useTr } from "../../state/lang";
 import { useConnectionStore } from "../../state/connection";
 import { transferAddr } from "../../lib/addr";
@@ -83,7 +83,7 @@ export default function GameActivityScreen() {
           )}
           right={
             <Button variant="ghost" onClick={() => void refresh()} disabled={loading}>
-              {loading ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
+              {loading ? <Spinner size={16} tone="inherit" /> : <RefreshCw size={16} />}
               {tr("refresh", undefined, "Refresh")}
             </Button>
           }
@@ -108,7 +108,7 @@ export default function GameActivityScreen() {
 
         {loading ? (
           <div className="flex items-center justify-center py-12">
-            <Loader2 size={32} className="animate-spin text-[var(--color-muted)]" />
+            <Spinner size={32} />
           </div>
         ) : tab === "tracked" ? (
           entries.length === 0 ? (

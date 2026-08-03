@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Bell,
-  Loader2,
   RefreshCw,
   CheckCheck,
   Mail,
@@ -13,6 +12,7 @@ import {
   ErrorCard,
   ConnectionGate,
   EmptyState,
+  Spinner,
 } from "../../components";
 import { useTr } from "../../state/lang";
 import { useConnectionStore } from "../../state/connection";
@@ -106,7 +106,7 @@ export default function NotificationsScreen() {
             disabled={loading || payloadStatus !== "up" || !addr}
           >
             {loading ? (
-              <Loader2 size={14} className="animate-spin" />
+              <Spinner size={14} tone="inherit" />
             ) : (
               <RefreshCw size={14} />
             )}

@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Archive,
   RefreshCw,
-  Loader2,
   RotateCcw,
   Trash2,
   Plus,
@@ -17,6 +16,7 @@ import {
   ConnectionGate,
   EmptyState,
   Card,
+  Spinner,
 } from "../../components";
 import { useConfirm } from "../../components/ConfirmDialog";
 import { useTr } from "../../state/lang";
@@ -56,8 +56,9 @@ export default function BackupScreen() {
   const reqIdRef = useRef(0);
 
   useEffect(() => {
+    const id = reqIdRef.current;
     return () => {
-      reqIdRef.current++;
+      reqIdRef.current = id + 1;
     };
   }, []);
 
@@ -191,7 +192,7 @@ export default function BackupScreen() {
               disabled={loading || busy}
             >
               {loading ? (
-                <Loader2 size={16} className="animate-spin" />
+                <Spinner size={16} tone="inherit" />
               ) : (
                 <RefreshCw size={16} />
               )}
@@ -245,7 +246,7 @@ export default function BackupScreen() {
                 size="sm"
               >
                 {busy ? (
-                  <Loader2 size={16} className="animate-spin" />
+                  <Spinner size={16} tone="inherit" />
                 ) : (
                   <Archive size={16} />
                 )}
@@ -323,7 +324,7 @@ export default function BackupScreen() {
 
           {busy && (
             <div className="flex items-center justify-center gap-2 py-4 text-sm text-[var(--color-muted)]">
-              <Loader2 size={16} className="animate-spin" />
+              <Spinner size={16} />
               {tr("backup_working", undefined, "Working...")}
             </div>
           )}

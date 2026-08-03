@@ -3,8 +3,6 @@ import {
   HardDrive,
   RefreshCw,
   CheckCircle2,
-  AlertTriangle,
-  Loader2,
 } from "lucide-react";
 import {
   usbListRemovable,
@@ -14,7 +12,7 @@ import {
   type PayloadLocalEntry,
   type AutoloaderInstallResult,
 } from "../../api/ps5";
-import { Button, Modal } from "../../components";
+import { Button, ErrorCard, Modal, Spinner } from "../../components";
 import { useTr } from "../../state/lang";
 import { formatBytes } from "../../lib/format";
 import { isMobile } from "../../lib/platform";
@@ -156,14 +154,10 @@ export default function UsbAutoloaderModal({
                   </Button>
                 }
               />
-              {drivesError && (
-                <div className="rounded-md border border-[var(--color-bad)] p-2 text-xs text-[var(--color-bad)]">
-                  {drivesError}
-                </div>
-              )}
+              {drivesError && <ErrorCard title={drivesError} />}
               {!drives ? (
                 <div className="text-xs text-[var(--color-muted)]">
-                  <Loader2 size={12} className="mr-2 inline animate-spin" />
+                  <Spinner size={12} className="mr-2 inline" />
                   {tr("usb_wizard_scanning", undefined, "Scanning…")}
                 </div>
               ) : drives.length === 0 ? (
@@ -308,7 +302,7 @@ export default function UsbAutoloaderModal({
                   size="md"
                   leftIcon={
                     installing ? (
-                      <Loader2 size={12} className="animate-spin" />
+                      <Spinner size={12} tone="inherit" />
                     ) : (
                       <CheckCircle2 size={12} />
                     )
@@ -325,9 +319,8 @@ export default function UsbAutoloaderModal({
                       )}
                 </Button>
                 {installError && (
-                  <div className="mt-2 flex items-start gap-2 rounded-md border border-[var(--color-bad)] p-2 text-xs text-[var(--color-bad)]">
-                    <AlertTriangle size={11} className="mt-0.5 shrink-0" />
-                    {installError}
+                  <div className="mt-2">
+                    <ErrorCard title={installError} />
                   </div>
                 )}
                 {result && (

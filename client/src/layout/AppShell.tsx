@@ -1,7 +1,6 @@
 import { Outlet, useLocation, useNavigate } from "react-router";
 import { useEffect, useRef, useState } from "react";
-import { Lock, Menu, RefreshCw, X } from "lucide-react";
-import Sidebar from "./Sidebar";
+import { Lock, RefreshCw, X } from "lucide-react";
 import StatusBar from "./StatusBar";
 import ConsoleTabs from "./ConsoleTabs";
 import ActivityBar from "./ActivityBar";
@@ -40,6 +39,10 @@ import { transferScreenBusy } from "../lib/ps5Transfers";
 import { CommandPalette } from "../components/CommandPalette";
 import { ShortcutsOverlay } from "../components/ShortcutsOverlay";
 import { LocalPathPicker } from "../components/LocalPathPicker";
+import { Toaster } from "../components/Toaster";
+import { LiveRegion } from "../components/LiveRegion";
+import { SkipNav } from "../components/SkipNav";
+import { TabRail, TabBottomNav } from "./TabNav";
 import { useWindowStatePersistence } from "../lib/windowState";
 import { mgmtAddr, hostOf } from "../lib/addr";
 import { safeGetItem, safeSetItem } from "../lib/safeStorage";
@@ -897,11 +900,6 @@ export default function AppShell() {
     }
   }, [activeProfile, multiConsoleTitle]);
 
-  // Mobile nav drawer open/closed. Only consulted below the md
-  // breakpoint; on desktop the sidebar is always inline.
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const tr = useTr();
-
   // Request OS notification permission once at startup (unless the user
   // disabled the mirror), so the macOS prompt / Android 13+
   // POST_NOTIFICATIONS dialog appears up front rather than mid-transfer.
@@ -913,21 +911,15 @@ export default function AppShell() {
 
   return (
     <div className="flex h-full flex-col bg-[var(--color-surface)] text-[var(--color-text)]">
+      {/* v5 global a11y infrastructure — mounted once at shell root. */}
+      <SkipNav />
+      <LiveRegion />
       {/* Global in-app file/folder picker (Android real-path browser).
           Mounted once; screens drive it via pickLocalPath(). */}
       <LocalPathPicker />
-      {/* Mobile top bar — only below the md breakpoint, where the fixed
-          240px sidebar would otherwise eat most of a phone screen. The
-          hamburger opens the sidebar as a slide-in drawer. */}
-      <div className="flex items-center gap-2 border-b border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 pb-2 pt-[calc(env(safe-area-inset-top)_+_0.5rem)] md:hidden">
-        <button
-          type="button"
-          aria-label={tr("nav_open_aria", "Open navigation")}
-          onClick={() => setMobileNavOpen(true)}
-          className="rounded-md p-2 text-[var(--color-text)] hover:bg-[var(--color-surface-3)]"
-        >
-          <Menu size={22} />
-        </button>
+      {/* v5 mobile top bar — kept slim; primary nav is the bottom
+          tab bar. Only renders below md. */}
+      <div className="h-top-bar flex items-center gap-2 border-b border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 pb-2 pt-[calc(env(safe-area-inset-top)_+_0.5rem)] md:hidden">
         <img
           src="/logo-square.png"
           alt="PS5Upload"
@@ -938,29 +930,15 @@ export default function AppShell() {
       <AndroidStorageAccessBanner />
 
       <div className="flex min-h-0 flex-1">
-        {/* Desktop: inline sidebar. Hidden on phones — the drawer below
-            takes over so content gets the full width. */}
-        <div className="hidden md:flex">
-          <Sidebar />
-        </div>
+        {/* v5 desktop: 5-tab left rail. The legacy 40-item Sidebar is
+            reachable via the "More" button at the bottom of the rail. */}
+        <TabRail />
 
-        {/* Mobile drawer: scrim + slide-in sidebar. The scrim and any nav
-            item (via Sidebar's onNavigate) close it. */}
-        {mobileNavOpen && (
-          <div className="fixed inset-0 z-50 md:hidden">
-            <button
-              type="button"
-              aria-label={tr("nav_close_aria", "Close navigation")}
-              onClick={() => setMobileNavOpen(false)}
-              className="anim-scrim absolute inset-0 bg-[var(--overlay-scrim)]"
-            />
-            <div className="anim-drawer elev-3 absolute inset-y-0 left-0 flex max-w-[85%]">
-              <Sidebar onNavigate={() => setMobileNavOpen(false)} />
-            </div>
-          </div>
-        )}
-
-        <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <main
+          id="main"
+          tabIndex={-1}
+          className="flex min-w-0 flex-1 flex-col overflow-hidden outline-none"
+        >
           {/* Console tab strip — one tab per PS5; switches the viewed console
               while every console's uploads/installs keep running in their own
               background loops. Hidden for single-console users. */}
@@ -982,7 +960,7 @@ export default function AppShell() {
           <div
             key={location.pathname}
             data-scroll-root
-            className="anim-screen flex-1 overflow-y-auto overflow-x-hidden"
+            className="anim-screen flex-1 overflow-y-auto overflow-x-hidden pb-[calc(56px+env(safe-area-inset-bottom))] md:pb-0 [overscroll-behavior:contain]"
           >
             <Outlet />
           </div>
@@ -992,6 +970,13 @@ export default function AppShell() {
       <StatusBar />
       <CommandPalette />
       <ShortcutsOverlay />
+      {/* v5 mobile bottom nav — replaces the hamburger drawer. Renders
+          only below md; the TabRail handles desktop. The "More" tab
+          opens the full v4 Sidebar as a bottom sheet. */}
+      <TabBottomNav />
+      {/* v5 Toaster — critical-toast overlay. Mounted last so it
+          sits above all other chrome in DOM order. */}
+      <Toaster />
     </div>
   );
 }

@@ -1,3 +1,5 @@
+import { useTr } from "../state/lang";
+
 /**
  * The app's signature loading mark: the four PlayStation face symbols
  * (triangle, circle, cross, square) pulsing in sequence. Used for
@@ -24,6 +26,7 @@ export function ShapesLoader({
   /** Optional caption rendered under the shapes. */
   label?: string;
 }) {
+  const tr = useTr();
   const common = {
     width: size,
     height: size,
@@ -62,7 +65,7 @@ export function ShapesLoader({
   return (
     <div
       role="status"
-      aria-label={label ?? "Loading"}
+      aria-label={label ?? tr("shapes_loader_default", "Loading")}
       className={`inline-flex flex-col items-center gap-3 ${className}`}
     >
       <div className="flex items-center" style={{ gap: size * 0.55 }}>

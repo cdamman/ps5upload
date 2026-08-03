@@ -8,7 +8,6 @@ import {
   UserPen,
   Check,
   Info,
-  Loader2,
   UserPlus,
   Trash2,
 } from "lucide-react";
@@ -21,6 +20,7 @@ import {
   SuccessCard,
   ConnectionGate,
   EmptyState,
+  Spinner,
 } from "../../components";
 import { useTr } from "../../state/lang";
 import { useConnectionStore } from "../../state/connection";
@@ -459,7 +459,7 @@ function UsernameSection({
         // users" empty state here would briefly tell every connected user
         // they have no profiles — gate it on a completed load instead.
         <div className="flex items-center gap-2 text-xs text-[var(--color-muted)]">
-          <Loader2 size={12} className="animate-spin" />
+          <Spinner size={12} />
           {tr("profile.username.loading", "Reading console users…")}
         </div>
       ) : users.length === 0 ? (
@@ -641,13 +641,13 @@ function UserRow({
           className="shrink-0 rounded-md border border-[var(--color-border)] p-1.5 text-[var(--color-warn)] hover:bg-[var(--color-surface-3)] disabled:opacity-50"
         >
           {deleting ? (
-            <Loader2 size={14} className="animate-spin" />
+            <Spinner size={14} />
           ) : (
             <Trash2 size={14} />
           )}
         </button>
       </div>
-      {error && <p className="mt-1 text-xs text-[var(--color-warn)]">{error}</p>}
+      {error && <p className="mt-1 text-xs text-[var(--color-bad)]">{error}</p>}
       {savedOk && (
         <p className="mt-1 text-xs text-[var(--color-good)]">
           {tr(
@@ -726,7 +726,7 @@ function CreateUserRow({
           {tr("profile.username.cancel", "Cancel")}
         </Button>
       </div>
-      {error && <p className="mt-1 text-xs text-[var(--color-warn)]">{error}</p>}
+      {error && <p className="mt-1 text-xs text-[var(--color-bad)]">{error}</p>}
     </div>
   );
 }
@@ -810,7 +810,7 @@ function SlotRow({
           {tr("profile.username.save", "Save")}
         </Button>
       </div>
-      {error && <p className="mt-1 text-xs text-[var(--color-warn)]">{error}</p>}
+      {error && <p className="mt-1 text-xs text-[var(--color-bad)]">{error}</p>}
       {savedOk && (
         <p className="mt-1 text-xs text-[var(--color-good)]">
           {tr(

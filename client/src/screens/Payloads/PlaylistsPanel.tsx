@@ -8,7 +8,6 @@ import {
   Clock,
   FilePlus,
   FolderOpen,
-  Loader2,
   ListPlus,
   Package as PackageIcon,
   Pencil,
@@ -22,7 +21,7 @@ import {
 } from "lucide-react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 
-import { Button, Modal } from "../../components";
+import { Button, ErrorCard, Modal, Spinner } from "../../components";
 import { ConsoleChip } from "../../components/ConsoleChip";
 import { useTr } from "../../state/lang";
 import {
@@ -510,10 +509,7 @@ function RunStatusBanner({ host }: { host: string }) {
     const step = playlist?.steps[runStatus.stepIndex];
     return (
       <div className="mb-3 flex items-center gap-2 rounded-md border border-[var(--color-accent)] bg-[var(--color-surface)] p-2 text-xs">
-        <Loader2
-          size={14}
-          className="animate-spin text-[var(--color-accent)]"
-        />
+        <Spinner size={14} tone="accent" />
         <span className="font-medium">{name}</span>
         <ConsoleChip addr={runStatus.host} />
         <span className="text-[var(--color-muted)]">
@@ -596,18 +592,15 @@ function RunStatusBanner({ host }: { host: string }) {
   }
 
   return (
-    <div className="mb-3 flex items-start gap-2 rounded-md border border-[var(--color-bad)] bg-[var(--color-surface)] p-2 text-xs text-[var(--color-bad)]">
-      <XCircle size={14} className="mt-0.5 shrink-0" />
-      <div className="min-w-0 flex-1">
-        <div className="font-medium">{name}</div>
-        <div className="mt-0.5">
-          {tr(
-            "playlist_status_failed",
-            { step: runStatus.stepIndex + 1, error: runStatus.error },
-            "Step {step} failed: {error}",
-          )}
-        </div>
-      </div>
+    <div className="mb-3">
+      <ErrorCard
+        title={name}
+        detail={tr(
+          "playlist_status_failed",
+          { step: runStatus.stepIndex + 1, error: runStatus.error },
+          "Step {step} failed: {error}",
+        )}
+      />
     </div>
   );
 }
@@ -1115,7 +1108,7 @@ function PlaylistCard({
             <div className="max-h-[50vh] overflow-y-auto">
               {catalog === null ? (
                 <div className="flex items-center gap-2 p-4 text-xs text-[var(--color-muted)]">
-                  <Loader2 size={14} className="animate-spin" />
+                  <Spinner size={14} />
                   {tr("playlist_repo_picker_loading", undefined, "Loading catalogue…")}
                 </div>
               ) : (
@@ -1187,9 +1180,10 @@ function StepStatusIcon({
   }
   if (index === activeIndex) {
     return (
-      <Loader2
+      <Spinner
         size={14}
-        className="shrink-0 animate-spin text-[var(--color-accent)]"
+        tone="accent"
+        className="shrink-0"
       />
     );
   }

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { Gauge, Loader2, Play, AlertTriangle } from "lucide-react";
+import { Gauge, Play, AlertTriangle } from "lucide-react";
 import { netSpeedTestRun, type NetSpeedTestResult } from "../../api/ps5";
-import { Button } from "../../components";
+import { Button, Spinner } from "../../components";
 import { useTr } from "../../state/lang";
 
 /**
@@ -73,7 +73,7 @@ export default function SpeedTestPanel({ mgmtAddr }: { mgmtAddr: string }) {
           size="sm"
           leftIcon={
             busy ? (
-              <Loader2 size={11} className="animate-spin" />
+              <Spinner size={12} tone="inherit" />
             ) : (
               <Play size={11} />
             )

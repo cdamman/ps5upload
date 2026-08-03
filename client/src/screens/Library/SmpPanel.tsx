@@ -5,13 +5,11 @@ import {
   ChevronDown,
   ChevronRight,
   RefreshCw,
-  Loader2,
-  AlertTriangle,
   Activity,
   HardDrive,
 } from "lucide-react";
 import { smpStatus, type SmpStatus } from "../../api/ps5";
-import { Button } from "../../components";
+import { Button, ErrorCard, Spinner } from "../../components";
 import { useTr } from "../../state/lang";
 
 /**
@@ -133,7 +131,7 @@ export default function SmpPanel({ mgmtAddr }: { mgmtAddr: string | null }) {
           size="sm"
           leftIcon={
             loading ? (
-              <Loader2 size={11} className="animate-spin" />
+              <Spinner size={12} tone="inherit" />
             ) : (
               <RefreshCw size={11} />
             )
@@ -149,12 +147,7 @@ export default function SmpPanel({ mgmtAddr }: { mgmtAddr: string | null }) {
 
       {expanded && (
         <div className="space-y-3 border-t border-[var(--color-border)] p-4 text-xs">
-          {error && (
-            <div className="flex items-start gap-2 rounded-md border border-[var(--color-bad)] p-2 text-[var(--color-bad)]">
-              <AlertTriangle size={11} className="mt-0.5 shrink-0" />
-              {error}
-            </div>
-          )}
+          {error && <ErrorCard title={error} />}
 
           {status?.mounted_images.length ? (
             <SmpSection title={tr("smp_section_mounts", undefined, "Mounted images")}>

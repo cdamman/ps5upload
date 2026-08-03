@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import {
   Activity as ActivityIcon,
-  Loader2,
   CheckCircle2,
   XCircle,
   StopCircle,
@@ -9,7 +8,7 @@ import {
   Eye,
 } from "lucide-react";
 
-import { PageHeader, Button, EmptyState, Modal } from "../../components";
+import { PageHeader, Button, EmptyState, Modal, Spinner } from "../../components";
 import { useConfirm } from "../../components/ConfirmDialog";
 import { useTr } from "../../state/lang";
 import {
@@ -143,7 +142,7 @@ export default function ActivityScreen() {
       {view === "list" && running.length > 0 && (
         <section className="mb-6">
           <header className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
-            <Loader2 size={13} className="animate-spin" />
+            <Spinner size={14} />
             {tr("activity_running", undefined, "Running now")}
             <span className="text-xs">· {running.length}</span>
             {/* Bulk clear of running rows. Same effect as the per-row
@@ -626,7 +625,7 @@ function ActivityDetailModal({
 function OutcomeIcon({ outcome }: { outcome: ActivityOutcome }) {
   if (outcome === "running")
     return (
-      <Loader2 size={13} className="animate-spin text-[var(--color-accent)]" />
+      <Spinner size={14} tone="accent" />
     );
   if (outcome === "done")
     return <CheckCircle2 size={13} className="text-[var(--color-good)]" />;

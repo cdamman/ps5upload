@@ -1,14 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   Search,
-  Loader2,
   Download,
   X,
   CheckCircle2,
   ExternalLink,
   Package,
 } from "lucide-react";
-import { Button, ErrorCard, Card } from "../../components";
+import { Button, ErrorCard, Card, Spinner } from "../../components";
 import { useTr } from "../../state/lang";
 import {
   cheatsReposList,
@@ -143,7 +142,7 @@ export function RepoBrowser({ addr, onDownloaded, onClose }: RepoBrowserProps) {
               size="sm"
             >
               {searching ? (
-                <Loader2 size={14} className="animate-spin" />
+                <Spinner size={14} tone="inherit" />
               ) : (
                 <Search size={14} />
               )}
@@ -182,7 +181,7 @@ export function RepoBrowser({ addr, onDownloaded, onClose }: RepoBrowserProps) {
                         disabled={downloading === e.filename}
                       >
                         {downloading === e.filename ? (
-                          <Loader2 size={14} className="animate-spin" />
+                          <Spinner size={14} tone="inherit" />
                         ) : (
                           <Download size={14} />
                         )}

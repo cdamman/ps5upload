@@ -33,5 +33,5 @@ export function openInFileSystem(
   path: string,
 ): void {
   useFsNavStore.getState().requestPath(path);
-  navigate("/file-system");
+  navigate("/files");
 }

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { Battery, RefreshCw, Loader2 } from "lucide-react";
+import { Battery, RefreshCw } from "lucide-react";
 import { powerTelemetryGet, type PowerTelemetry } from "../../api/ps5";
-import { Button } from "../../components";
+import { Button, ErrorCard, Spinner } from "../../components";
 import { useTr } from "../../state/lang";
 
 /**
@@ -62,7 +62,7 @@ export default function PowerTelemetryPanel({ mgmtAddr }: { mgmtAddr: string }) 
           size="sm"
           leftIcon={
             loading ? (
-              <Loader2 size={11} className="animate-spin" />
+              <Spinner size={12} tone="inherit" />
             ) : (
               <RefreshCw size={11} />
             )
@@ -73,11 +73,7 @@ export default function PowerTelemetryPanel({ mgmtAddr }: { mgmtAddr: string }) 
           {tr("power_telemetry_refresh", undefined, "Refresh")}
         </Button>
       </header>
-      {error && (
-        <div className="rounded-md border border-[var(--color-bad)] p-2 text-xs text-[var(--color-bad)]">
-          {error}
-        </div>
-      )}
+      {error && <ErrorCard title={error} />}
       {data && (
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-xs">
           <dt className="text-[var(--color-muted)]">

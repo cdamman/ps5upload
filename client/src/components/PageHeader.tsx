@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react";
-import { Loader2 } from "lucide-react";
+
+import { Spinner } from "./Spinner";
 
 /**
  * Canonical page header used by every screen. Enforces a single
@@ -50,12 +51,7 @@ export function PageHeader({
               {count}
             </span>
           )}
-          {loading && (
-            <Loader2
-              size={14}
-              className="animate-spin text-[var(--color-accent)]"
-            />
-          )}
+          {loading && <Spinner size={14} tone="accent" />}
         </div>
         {right && <div className="shrink-0">{right}</div>}
       </div>

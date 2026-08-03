@@ -1,6 +1,6 @@
-import { CheckCircle2, Loader2, XCircle, Zap } from "lucide-react";
+import { CheckCircle2, Zap } from "lucide-react";
 
-import { Button } from "../../components";
+import { Button, Spinner, ErrorCard } from "../../components";
 import { useConnectionStore } from "../../state/connection";
 import { useBringUpStore, type BringUpStatus } from "../../state/bringUp";
 import { usePayloadPlaylistsStore } from "../../state/payloadPlaylists";
@@ -63,7 +63,7 @@ export function BringUpPanel() {
           variant="primary"
           size="sm"
           leftIcon={
-            running ? <Loader2 size={12} className="animate-spin" /> : <Zap size={12} />
+            running ? <Spinner size={12} tone="inherit" /> : <Zap size={12} />
           }
           onClick={() => void run(host)}
           disabled={!canRun}
@@ -103,7 +103,7 @@ function BringUpStatusLine({ status }: { status: BringUpStatus }) {
             );
     return (
       <div className="flex items-center gap-2 rounded-md border border-[var(--color-accent)] bg-[var(--color-surface)] p-2 text-xs">
-        <Loader2 size={14} className="animate-spin text-[var(--color-accent)]" />
+        <Spinner size={14} tone="accent" />
         <span>{phaseText}</span>
       </div>
     );
@@ -118,15 +118,13 @@ function BringUpStatusLine({ status }: { status: BringUpStatus }) {
   }
   // failed
   return (
-    <div className="flex items-start gap-2 rounded-md border border-[var(--color-bad)] bg-[var(--color-surface)] p-2 text-xs text-[var(--color-bad)]">
-      <XCircle size={14} className="mt-0.5 shrink-0" />
-      <span>
-        {tr(
-          "bringup_failed",
-          { phase: status.phase, error: status.error },
-          "Bring-up failed at {phase}: {error}",
-        )}
-      </span>
-    </div>
+    <ErrorCard
+      title={tr("bringup_failed_title", "Bring-up failed")}
+      detail={tr(
+        "bringup_failed",
+        { phase: status.phase, error: status.error },
+        "Bring-up failed at {phase}: {error}",
+      )}
+    />
   );
 }

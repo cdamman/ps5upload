@@ -8,6 +8,7 @@ import { RootErrorBoundary } from "./components";
 // complete before React paints.
 import "./state/theme";
 import "./state/uiScale";
+import "./state/accessibility";
 import "./state/lang";
 import "./index.css";
 import {

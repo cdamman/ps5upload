@@ -7,7 +7,6 @@ import {
   Cable,
   CheckCircle2,
   XCircle,
-  Loader2,
   Power,
 } from "lucide-react";
 import { useConnectionStore } from "../../state/connection";
@@ -20,7 +19,7 @@ import {
   type HwTemps,
   type HwPower,
 } from "../../api/ps5";
-import { PageHeader, ConnectionGate, ConsoleChip } from "../../components";
+import { PageHeader, ConnectionGate, ConsoleChip, Spinner } from "../../components";
 import { useTr } from "../../state/lang";
 import { useDocumentVisible } from "../../lib/visibility";
 import { transferAddr } from "../../lib/addr";
@@ -191,7 +190,7 @@ export default function DashboardScreen() {
               </>
             ) : (
               <div className="flex items-center gap-2 text-xs text-[var(--color-muted)]">
-                <Loader2 size={12} className="animate-spin" />
+                <Spinner size={12} />
                 {tr("dashboard_loading_sensors", "Reading sensors…")}
               </div>
             )}
@@ -260,9 +259,10 @@ export default function DashboardScreen() {
                       />
                     )}
                     {e.outcome === "running" && (
-                      <Loader2
+                      <Spinner
                         size={10}
-                        className="mt-0.5 shrink-0 animate-spin text-[var(--color-warn)]"
+                        tone="inherit"
+                        className="mt-0.5 shrink-0 text-[var(--color-warn)]"
                       />
                     )}
                     <span className="min-w-0 flex-1 truncate">{e.label}</span>
