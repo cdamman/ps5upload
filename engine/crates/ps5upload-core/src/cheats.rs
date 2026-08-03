@@ -298,6 +298,7 @@ pub fn cheat_repos() -> Vec<CheatRepo> {
 }
 
 /// Infer cheat format from the index file that contained the entry.
+#[cfg(not(target_os = "android"))]
 fn format_from_index(index_name: &str) -> &'static str {
     match index_name {
         "json.txt" => "json",
@@ -320,6 +321,7 @@ fn repo_fetch(url: &str) -> Result<Vec<u8>> {
 }
 
 /// Parse one line of `filename=game_title` format.
+#[cfg(not(target_os = "android"))]
 fn parse_index_line(line: &str) -> Option<(String, String)> {
     let line = line.trim();
     if line.is_empty() || line.starts_with('#') {
@@ -338,13 +340,15 @@ fn parse_index_line(line: &str) -> Option<(String, String)> {
 /// `query` may match either the filename (e.g. a CUSA ID) or the game
 /// title. Matching is case-insensitive substring.
 pub fn cheats_repo_search(query: &str) -> Result<CheatRepoSearchResponse> {
-    let q = query.to_lowercase();
+    #[cfg(target_os = "android")]
+    let _ = query;
     let mut entries = Vec::new();
     for repo in cheat_repos() {
         for idx in &repo.index_files {
             let url = format!("{}{}", repo.raw_base, idx);
             #[cfg(not(target_os = "android"))]
             {
+                let q = query.to_lowercase();
                 match repo_fetch(&url) {
                     Ok(bytes) => {
                         let text = String::from_utf8_lossy(&bytes);
@@ -388,6 +392,7 @@ pub fn cheats_repo_search(query: &str) -> Result<CheatRepoSearchResponse> {
 /// The payload's cheat engine scans `/data/ps5upload/cheats/{json,shn,mc4}/`
 /// and matches files by filename prefix (title_id). So we install into
 /// the correct format subdirectory based on the cheat format.
+#[cfg(not(target_os = "android"))]
 fn cheat_install_path(filename: &str, format: &str) -> String {
     let safe = filename.replace("..", "");
     let subdir = match format {
@@ -411,13 +416,14 @@ pub fn cheats_repo_download(
     title_id: &str,
 ) -> Result<CheatDownloadResponse> {
     let _ = title_id; // title_id is extracted from filename by the payload
-    let repo = cheat_repos()
-        .into_iter()
-        .find(|r| r.id == repo_id)
-        .ok_or_else(|| anyhow::anyhow!("unknown repo: {repo_id}"))?;
 
     #[cfg(not(target_os = "android"))]
     {
+        let repo = cheat_repos()
+            .into_iter()
+            .find(|r| r.id == repo_id)
+            .ok_or_else(|| anyhow::anyhow!("unknown repo: {repo_id}"))?;
+
         // Try each format subdirectory until one succeeds.
         let mut bytes = None;
         for subdir in &["json", "shn", "mc4", "misc"] {
@@ -493,7 +499,7 @@ pub fn cheats_repo_download(
 
     #[cfg(target_os = "android")]
     {
-        let _ = (addr, title_id);
+        let _ = (addr, filename, repo_id);
         Ok(CheatDownloadResponse {
             ok: false,
             error: Some("repo download not available on android".into()),

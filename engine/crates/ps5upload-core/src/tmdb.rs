@@ -353,6 +353,9 @@ pub fn tmdb_fetch(
     refresh: bool,
     region: Option<&str>,
 ) -> Result<TmdbFetchResponse> {
+    #[cfg(target_os = "android")]
+    let _ = region;
+
     let req = serde_json::json!({ "title_id": input, "refresh": refresh });
     let resp = send_recv(
         addr,
