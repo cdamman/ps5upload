@@ -412,7 +412,11 @@ pub fn hw_set_fan_threshold(addr: &str, threshold_c: u8) -> Result<()> {
 /// `"threshold reapply_sec"` — the payload parses both and updates the
 /// watcher's interval atomically. `None` sends just `"threshold"`,
 /// preserving backward compatibility with older payloads.
-pub fn hw_set_fan_threshold_ex(addr: &str, threshold_c: u8, reapply_sec: Option<u32>) -> Result<()> {
+pub fn hw_set_fan_threshold_ex(
+    addr: &str,
+    threshold_c: u8,
+    reapply_sec: Option<u32>,
+) -> Result<()> {
     if !(FAN_THRESHOLD_MIN_C..=FAN_THRESHOLD_MAX_C).contains(&threshold_c) {
         bail!(
             "threshold {threshold_c}°C is outside the safe range \

@@ -174,7 +174,8 @@ mod tests {
 
     #[test]
     fn deserialize_sdk_restore_no_backup() {
-        let json = r#"{"ok":true,"title_id":"CUSA00001","restored":0,"error":"no .bak files found"}"#;
+        let json =
+            r#"{"ok":true,"title_id":"CUSA00001","restored":0,"error":"no .bak files found"}"#;
         let resp: SdkRestoreResponse = serde_json::from_str(json).unwrap();
         assert!(resp.ok);
         assert_eq!(resp.restored, 0);

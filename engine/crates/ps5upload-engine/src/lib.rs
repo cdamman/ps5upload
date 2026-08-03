@@ -2003,11 +2003,8 @@ async fn ps5_time_sync_route(
         match ntp_result {
             Ok(ts) => ts,
             Err(e) => {
-                return json_err(
-                    StatusCode::BAD_GATEWAY,
-                    format!("NTP query failed: {e:#}"),
-                )
-                .into_response();
+                return json_err(StatusCode::BAD_GATEWAY, format!("NTP query failed: {e:#}"))
+                    .into_response();
             }
         }
     } else {
@@ -2429,16 +2426,18 @@ async fn ps5_hw_set_fan_threshold(
     let addr = mgmt_addr_or_default(q.addr, &state.default_ps5_addr);
     let threshold = q.threshold_c;
     let reapply = q.reapply_sec;
-    crate::log_info!("hw_set_fan_threshold: addr={addr} threshold_c={threshold} reapply_sec={reapply:?}");
-    match tokio::task::spawn_blocking(move || {
-        hw_set_fan_threshold_ex(&addr, threshold, reapply)
-    })
-    .await
-    .map_err(anyhow::Error::from)
-    .and_then(|r| r)
+    crate::log_info!(
+        "hw_set_fan_threshold: addr={addr} threshold_c={threshold} reapply_sec={reapply:?}"
+    );
+    match tokio::task::spawn_blocking(move || hw_set_fan_threshold_ex(&addr, threshold, reapply))
+        .await
+        .map_err(anyhow::Error::from)
+        .and_then(|r| r)
     {
         Ok(()) => {
-            crate::log_info!("hw_set_fan_threshold ok: threshold_c={threshold} reapply_sec={reapply:?}");
+            crate::log_info!(
+                "hw_set_fan_threshold ok: threshold_c={threshold} reapply_sec={reapply:?}"
+            );
             (
                 StatusCode::OK,
                 Json(serde_json::json!({ "ok": true, "threshold_c": threshold, "reapply_sec": reapply })),
@@ -4654,12 +4653,11 @@ async fn cheats_get_handler(
 ) -> impl IntoResponse {
     let addr = mgmt_addr_or_default(q.addr, &state.default_ps5_addr);
     let title_id = q.title_id;
-    let r = tokio::task::spawn_blocking(move || {
-        ps5upload_core::cheats::cheats_get(&addr, &title_id)
-    })
-    .await
-    .map_err(anyhow::Error::from)
-    .and_then(|r| r);
+    let r =
+        tokio::task::spawn_blocking(move || ps5upload_core::cheats::cheats_get(&addr, &title_id))
+            .await
+            .map_err(anyhow::Error::from)
+            .and_then(|r| r);
     match r {
         Ok(result) => (StatusCode::OK, Json(result)).into_response(),
         Err(e) => json_err(StatusCode::BAD_GATEWAY, format!("{e:#}")).into_response(),
@@ -4760,9 +4758,7 @@ struct CheatsRepoSearchQuery {
     query: String,
 }
 
-async fn cheats_repos_list_handler(
-    State(_state): State<AppState>,
-) -> impl IntoResponse {
+async fn cheats_repos_list_handler(State(_state): State<AppState>) -> impl IntoResponse {
     let repos = ps5upload_core::cheats::cheat_repos();
     (StatusCode::OK, Json(repos)).into_response()
 }
@@ -4771,12 +4767,11 @@ async fn cheats_repos_search_handler(
     State(_state): State<AppState>,
     Query(q): Query<CheatsRepoSearchQuery>,
 ) -> impl IntoResponse {
-    let r = tokio::task::spawn_blocking(move || {
-        ps5upload_core::cheats::cheats_repo_search(&q.query)
-    })
-    .await
-    .map_err(anyhow::Error::from)
-    .and_then(|r| r);
+    let r =
+        tokio::task::spawn_blocking(move || ps5upload_core::cheats::cheats_repo_search(&q.query))
+            .await
+            .map_err(anyhow::Error::from)
+            .and_then(|r| r);
     match r {
         Ok(result) => (StatusCode::OK, Json(result)).into_response(),
         Err(e) => json_err(StatusCode::BAD_GATEWAY, format!("{e:#}")).into_response(),
@@ -4797,7 +4792,12 @@ async fn cheats_repos_download_handler(
 ) -> impl IntoResponse {
     let addr = mgmt_addr_or_default(req.addr, &state.default_ps5_addr);
     let r = tokio::task::spawn_blocking(move || {
-        ps5upload_core::cheats::cheats_repo_download(&addr, &req.repo_id, &req.filename, &req.title_id)
+        ps5upload_core::cheats::cheats_repo_download(
+            &addr,
+            &req.repo_id,
+            &req.filename,
+            &req.title_id,
+        )
     })
     .await
     .map_err(anyhow::Error::from)
@@ -7036,10 +7036,19 @@ async fn run(cfg: EngineConfig) -> anyhow::Result<()> {
         .route("/api/ps5/cheats/delete", get(cheats_delete_handler))
         .route("/api/ps5/cheats/reload", get(cheats_reload_handler))
         .route("/api/ps5/cheats/status", get(cheats_status_handler))
-        .route("/api/ps5/cheats/engine-set", post(cheats_engine_set_handler))
+        .route(
+            "/api/ps5/cheats/engine-set",
+            post(cheats_engine_set_handler),
+        )
         .route("/api/ps5/cheats/repos/list", get(cheats_repos_list_handler))
-        .route("/api/ps5/cheats/repos/search", get(cheats_repos_search_handler))
-        .route("/api/ps5/cheats/repos/download", post(cheats_repos_download_handler))
+        .route(
+            "/api/ps5/cheats/repos/search",
+            get(cheats_repos_search_handler),
+        )
+        .route(
+            "/api/ps5/cheats/repos/download",
+            post(cheats_repos_download_handler),
+        )
         .route("/api/ps5/activity/get", get(activity_get_handler))
         .route("/api/ps5/activity/db-query", get(activity_db_query_handler))
         .route("/api/ps5/sdk/scan", get(sdk_scan_handler))

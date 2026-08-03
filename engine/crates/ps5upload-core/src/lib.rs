@@ -1,5 +1,5 @@
-pub mod app_lifecycle;
 pub mod activity;
+pub mod app_lifecycle;
 pub mod backup;
 pub mod cheats;
 pub mod cleanup;

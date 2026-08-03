@@ -17,17 +17,13 @@ const STORE_BASE: &str = "https://store.playstation.com/en-us/product/";
 
 #[cfg(not(target_os = "android"))]
 const REGION_PREFIXES: &[&str] = &[
-    "IP9100", "UP9000", "UP0006", "UP0002", "UP0700", "UP0177", "UP0082",
-    "UP4040", "UP4108", "UP4415", "EP9000", "EP0006", "EP0002", "EP0700",
-    "EP0177", "EP4108", "EP4415", "EP1018", "HP9000", "JP9000", "JP9001",
-    "UB1019", "UB0335", "UB1229", "UB0006",
+    "IP9100", "UP9000", "UP0006", "UP0002", "UP0700", "UP0177", "UP0082", "UP4040", "UP4108",
+    "UP4415", "EP9000", "EP0006", "EP0002", "EP0700", "EP0177", "EP4108", "EP4415", "EP1018",
+    "HP9000", "JP9000", "JP9001", "UB1019", "UB0335", "UB1229", "UB0006",
 ];
 
 #[cfg(not(target_os = "android"))]
-const TRAILING_LABELS: &[&str] = &[
-    "PREINMASTER00000",
-    "0000000000000000",
-];
+const TRAILING_LABELS: &[&str] = &["PREINMASTER00000", "0000000000000000"];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TmdbFetchRequest {
@@ -103,7 +99,9 @@ fn send_recv(
 }
 
 fn is_valid_title_id(s: &str) -> bool {
-    if s.len() != 12 { return false; }
+    if s.len() != 12 {
+        return false;
+    }
     let b = s.as_bytes();
     b[0..4].iter().all(|&c| c.is_ascii_uppercase())
         && b[4..9].iter().all(|&c| c.is_ascii_digit())
@@ -113,14 +111,18 @@ fn is_valid_title_id(s: &str) -> bool {
 
 /// Check if string is a valid 36-char content ID: `PPPPPP-TITLEID_00-YYYYYYYYYYYYYYYY`
 fn is_valid_content_id(s: &str) -> bool {
-    if s.len() != 36 { return false; }
+    if s.len() != 36 {
+        return false;
+    }
     let b = s.as_bytes();
     b[6] == b'-' && b[19] == b'-'
 }
 
 /// Extract the 12-char title_id from a 36-char content_id.
 fn title_id_from_content_id(cid: &str) -> Option<&str> {
-    if !is_valid_content_id(cid) { return None; }
+    if !is_valid_content_id(cid) {
+        return None;
+    }
     Some(&cid[7..19])
 }
 
@@ -157,9 +159,10 @@ fn fetch_url_sync(url: &str) -> Result<Vec<u8>> {
 
 #[cfg(not(target_os = "android"))]
 fn mem_find(hay: &[u8], needle: &[u8]) -> Option<usize> {
-    if needle.is_empty() || hay.len() < needle.len() { return None; }
-    hay.windows(needle.len())
-        .position(|w| w == needle)
+    if needle.is_empty() || hay.len() < needle.len() {
+        return None;
+    }
+    hay.windows(needle.len()).position(|w| w == needle)
 }
 
 #[cfg(not(target_os = "android"))]
@@ -195,42 +198,59 @@ fn extract_jsonld(html: &[u8]) -> Option<String> {
 fn parse_store_json(jsonld: &str, content_id: &str, title_id: &str) -> TmdbFetchResponse {
     let v: serde_json::Value = match serde_json::from_str(jsonld) {
         Ok(v) => v,
-        Err(_) => return TmdbFetchResponse {
-            ok: false,
-            title_id: title_id.to_string(),
-            error: Some("parse_failed".to_string()),
-            ..Default::default()
-        },
+        Err(_) => {
+            return TmdbFetchResponse {
+                ok: false,
+                title_id: title_id.to_string(),
+                error: Some("parse_failed".to_string()),
+                ..Default::default()
+            }
+        }
     };
 
     let name = v.get("name").and_then(|n| n.as_str()).map(String::from);
-    let description = v.get("description").and_then(|d| d.as_str()).map(String::from);
+    let description = v
+        .get("description")
+        .and_then(|d| d.as_str())
+        .map(String::from);
     let category = v.get("category").and_then(|c| c.as_str()).map(String::from);
-    let icon = v.get("image")
+    let icon = v
+        .get("image")
         .or_else(|| v.get("icon"))
         .and_then(|i| i.as_str())
         .map(String::from);
-    let publisher = v.get("publisher")
+    let publisher = v
+        .get("publisher")
         .and_then(|p| p.as_str())
-        .or_else(|| v.get("publisher").and_then(|p| p.get("name")).and_then(|n| n.as_str()))
+        .or_else(|| {
+            v.get("publisher")
+                .and_then(|p| p.get("name"))
+                .and_then(|n| n.as_str())
+        })
         .map(String::from);
-    let release_date = v.get("releaseDate")
+    let release_date = v
+        .get("releaseDate")
         .and_then(|d| d.as_str())
         .map(String::from);
-    let genre = v.get("genre")
-        .and_then(|g| {
-            if let Some(s) = g.as_str() {
-                Some(s.to_string())
-            } else if let Some(arr) = g.as_array() {
-                let names: Vec<String> = arr.iter()
-                    .filter_map(|item| item.as_str().map(String::from))
-                    .collect();
-                if names.is_empty() { None } else { Some(names.join(", ")) }
-            } else {
+    let genre = v.get("genre").and_then(|g| {
+        if let Some(s) = g.as_str() {
+            Some(s.to_string())
+        } else if let Some(arr) = g.as_array() {
+            let names: Vec<String> = arr
+                .iter()
+                .filter_map(|item| item.as_str().map(String::from))
+                .collect();
+            if names.is_empty() {
                 None
+            } else {
+                Some(names.join(", "))
             }
-        });
-    let sku = v.get("sku")
+        } else {
+            None
+        }
+    });
+    let sku = v
+        .get("sku")
         .or_else(|| v.get("productID"))
         .and_then(|s| s.as_str())
         .map(String::from);
@@ -327,7 +347,12 @@ fn tmdb_store_on_payload(addr: &str, title_id: &str, json: &str) -> Result<()> {
 /// `region` optionally narrows the PS Store URL search to a single prefix
 /// (e.g. "UP9000" for US Sony) instead of brute-forcing all 24 known
 /// prefixes × 2 trailing labels = 48 attempts.
-pub fn tmdb_fetch(addr: &str, input: &str, refresh: bool, region: Option<&str>) -> Result<TmdbFetchResponse> {
+pub fn tmdb_fetch(
+    addr: &str,
+    input: &str,
+    refresh: bool,
+    region: Option<&str>,
+) -> Result<TmdbFetchResponse> {
     let req = serde_json::json!({ "title_id": input, "refresh": refresh });
     let resp = send_recv(
         addr,
@@ -341,10 +366,7 @@ pub fn tmdb_fetch(addr: &str, input: &str, refresh: bool, region: Option<&str>) 
         return Ok(serde_json::from_value(v).unwrap_or_default());
     }
 
-    let err = v
-        .get("error")
-        .and_then(|e| e.as_str())
-        .unwrap_or("unknown");
+    let err = v.get("error").and_then(|e| e.as_str()).unwrap_or("unknown");
 
     if err == "invalid_title_id" {
         return Ok(TmdbFetchResponse {
@@ -372,7 +394,11 @@ pub fn tmdb_fetch(addr: &str, input: &str, refresh: bool, region: Option<&str>) 
     };
 
     #[cfg(not(target_os = "android"))]
-    let known_cid = if is_valid_content_id(input) { Some(input) } else { None };
+    let known_cid = if is_valid_content_id(input) {
+        Some(input)
+    } else {
+        None
+    };
 
     #[cfg(not(target_os = "android"))]
     {
@@ -397,7 +423,8 @@ mod tests {
 
     #[test]
     fn deserialize_cached_response() {
-        let json = r#"{"ok":true,"title_id":"CUSA00001","np_title_id":"CUSA00001","name":"Test Game"}"#;
+        let json =
+            r#"{"ok":true,"title_id":"CUSA00001","np_title_id":"CUSA00001","name":"Test Game"}"#;
         let resp: TmdbFetchResponse = serde_json::from_str(json).unwrap();
         assert!(resp.ok);
         assert_eq!(resp.title_id, "CUSA00001");
@@ -545,7 +572,10 @@ mod tests {
         assert_eq!(resp.name.as_deref(), Some("God of War"));
         assert_eq!(resp.category.as_deref(), Some("GAME"));
         assert_eq!(resp.icon.as_deref(), Some("http://img.com/a.png"));
-        assert_eq!(resp.content_id.as_deref(), Some("UP9000-CUSA00001_00-LABEL"));
+        assert_eq!(
+            resp.content_id.as_deref(),
+            Some("UP9000-CUSA00001_00-LABEL")
+        );
     }
 
     #[test]
@@ -627,7 +657,10 @@ mod tests {
 
     #[test]
     fn normalize_title_id_from_title() {
-        assert_eq!(normalize_title_id("CUSA00001_00"), Some("CUSA00001_00".to_string()));
+        assert_eq!(
+            normalize_title_id("CUSA00001_00"),
+            Some("CUSA00001_00".to_string())
+        );
     }
 
     #[test]

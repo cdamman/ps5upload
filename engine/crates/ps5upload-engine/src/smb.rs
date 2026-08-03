@@ -22,14 +22,20 @@ fn smb_err(e: anyhow::Error) -> (StatusCode, String) {
         || lower.contains("denied")
         || lower.contains("nt_status_logon_failure")
     {
-        (StatusCode::UNAUTHORIZED, format!("SMB authentication failed: {msg}"))
+        (
+            StatusCode::UNAUTHORIZED,
+            format!("SMB authentication failed: {msg}"),
+        )
     } else if lower.contains("refused")
         || lower.contains("timeout")
         || lower.contains("unreachable")
         || lower.contains("resolve")
         || lower.contains("timed out")
     {
-        (StatusCode::BAD_GATEWAY, format!("SMB connection failed: {msg}"))
+        (
+            StatusCode::BAD_GATEWAY,
+            format!("SMB connection failed: {msg}"),
+        )
     } else if lower.contains("not found")
         || lower.contains("no such")
         || lower.contains("bad_netpath")
@@ -63,9 +69,7 @@ pub struct SmbListSharesResponse {
     pub shares: Vec<SmbShare>,
 }
 
-pub async fn smb_list_shares(
-    Json(q): Json<SmbListSharesRequest>,
-) -> impl IntoResponse {
+pub async fn smb_list_shares(Json(q): Json<SmbListSharesRequest>) -> impl IntoResponse {
     if q.server.trim().is_empty() {
         return json_err(StatusCode::BAD_REQUEST, "server is required").into_response();
     }
@@ -125,9 +129,7 @@ pub struct SmbListDirResponse {
     pub entries: Vec<SmbDirEntry>,
 }
 
-pub async fn smb_list_dir(
-    Json(q): Json<SmbListDirRequest>,
-) -> impl IntoResponse {
+pub async fn smb_list_dir(Json(q): Json<SmbListDirRequest>) -> impl IntoResponse {
     if q.server.trim().is_empty() {
         return json_err(StatusCode::BAD_REQUEST, "server is required").into_response();
     }
@@ -184,9 +186,7 @@ pub struct SmbDownloadRequest {
     pub path: String,
 }
 
-pub async fn smb_download_file(
-    Json(q): Json<SmbDownloadRequest>,
-) -> impl IntoResponse {
+pub async fn smb_download_file(Json(q): Json<SmbDownloadRequest>) -> impl IntoResponse {
     if q.server.trim().is_empty() {
         return json_err(StatusCode::BAD_REQUEST, "server is required").into_response();
     }
@@ -240,17 +240,9 @@ pub async fn smb_download_file(
             );
             let cd = format!("attachment; filename=\"{}\"", filename);
             if let Ok(hv) = HeaderValue::from_str(&cd) {
-                headers.insert(
-                    HeaderName::from_static("content-disposition"),
-                    hv,
-                );
+                headers.insert(HeaderName::from_static("content-disposition"), hv);
             }
-            (
-                StatusCode::OK,
-                headers,
-                Body::from(data),
-            )
-                .into_response()
+            (StatusCode::OK, headers, Body::from(data)).into_response()
         }
         Err(e) => {
             let (code, msg) = smb_err(e);

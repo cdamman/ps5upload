@@ -127,12 +127,7 @@ fn send_recv(
 }
 
 pub fn cheats_list(addr: &str) -> Result<CheatsListResponse> {
-    let resp = send_recv(
-        addr,
-        FrameType::CheatsList,
-        FrameType::CheatsListAck,
-        None,
-    )?;
+    let resp = send_recv(addr, FrameType::CheatsList, FrameType::CheatsListAck, None)?;
     Ok(serde_json::from_slice(&resp)?)
 }
 
@@ -288,13 +283,15 @@ pub fn cheat_repos() -> Vec<CheatRepo> {
         CheatRepo {
             id: "goldhen".into(),
             name: "GoldHEN/GoldHEN_Cheat_Repository".into(),
-            raw_base: "https://raw.githubusercontent.com/GoldHEN/GoldHEN_Cheat_Repository/main/".into(),
+            raw_base: "https://raw.githubusercontent.com/GoldHEN/GoldHEN_Cheat_Repository/main/"
+                .into(),
             index_files: vec!["json.txt".into(), "shn.txt".into(), "mc4.txt".into()],
         },
         CheatRepo {
             id: "henmix".into(),
             name: "TeeKay87/HEN-Cheats-Collection".into(),
-            raw_base: "https://raw.githubusercontent.com/TeeKay87/HEN-Cheats-Collection/main/".into(),
+            raw_base: "https://raw.githubusercontent.com/TeeKay87/HEN-Cheats-Collection/main/"
+                .into(),
             index_files: vec!["json.txt".into(), "shn.txt".into(), "mc4.txt".into()],
         },
     ]
@@ -316,10 +313,7 @@ fn repo_fetch(url: &str) -> Result<Vec<u8>> {
         .timeout_global(Some(std::time::Duration::from_secs(20)))
         .build();
     let agent = ureq::Agent::new_with_config(config);
-    let resp = agent
-        .get(url)
-        .header("User-Agent", "ps5upload")
-        .call()?;
+    let resp = agent.get(url).header("User-Agent", "ps5upload").call()?;
     let mut buf = Vec::with_capacity(32 * 1024);
     resp.into_body().into_reader().read_to_end(&mut buf)?;
     Ok(buf)
@@ -384,7 +378,10 @@ pub fn cheats_repo_search(query: &str) -> Result<CheatRepoSearchResponse> {
     }
     // De-duplicate by filename (multiple repos may list the same file).
     entries.dedup_by(|a: &mut CheatRepoEntry, b: &mut CheatRepoEntry| a.filename == b.filename);
-    Ok(CheatRepoSearchResponse { entries, error: None })
+    Ok(CheatRepoSearchResponse {
+        entries,
+        error: None,
+    })
 }
 
 /// Determine the on-PS5 install path for a cheat file.

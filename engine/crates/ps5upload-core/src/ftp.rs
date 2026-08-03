@@ -71,7 +71,12 @@ fn send_recv(
 
 pub fn ftp_start(addr: &str, req: &FtpStartRequest) -> Result<FtpStartResponse> {
     let body = serde_json::to_vec(req)?;
-    let resp = send_recv(addr, FrameType::FtpStart, FrameType::FtpStartAck, Some(&body))?;
+    let resp = send_recv(
+        addr,
+        FrameType::FtpStart,
+        FrameType::FtpStartAck,
+        Some(&body),
+    )?;
     Ok(serde_json::from_slice(&resp)?)
 }
 
