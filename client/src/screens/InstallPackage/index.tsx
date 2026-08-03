@@ -31,6 +31,7 @@ import {
   OverflowMenu,
   PlatformBadge,
   Spinner,
+  Badge,
   type OverflowMenuItem,
 } from "../../components";
 import { openInFileSystem } from "../../state/fsNavigation";
@@ -136,19 +137,19 @@ function PkgRow({
                 PS5). Helps users tell at a glance which console a pkg targets. */}
             <PlatformBadge platform={entry.platform} />
             {installed && !busy && (
-              <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-[var(--color-good)] bg-[var(--color-good-soft)] px-1.5 py-0.5 text-xs font-medium uppercase tracking-wide text-[var(--color-good)]">
+              <Badge tone="good" variant="soft">
                 {tr("pkglib.badge.installed", "installed")}
-              </span>
+              </Badge>
             )}
             {/* Update / DLC badge — a base game and its update share a
                 ContentID, so without this they look identical. */}
             {pkgCategoryLabel(entry.category) &&
               pkgCategoryLabel(entry.category) !== "Base" && (
-                <span className="inline-flex shrink-0 items-center rounded-full border border-[var(--color-accent)] bg-[var(--color-accent-soft,transparent)] px-1.5 py-0.5 text-xs font-medium uppercase tracking-wide text-[var(--color-accent)]">
+                <Badge tone="accent" variant="soft">
                   {pkgCategoryLabel(entry.category) === "Update"
                     ? tr("pkglib.badge.update", "update")
                     : tr("pkglib.badge.dlc", "DLC")}
-                </span>
+                </Badge>
               )}
             {/* Authoritative PARAM.SFO version — the definitive "which update
                 is this" (updates share a ContentID and a title). */}
@@ -1163,16 +1164,16 @@ function ExternalPackages({ host }: { host: string }) {
                       {heading}
                     </span>
                     {catLabel && catLabel !== "Base" && (
-                      <span className="inline-flex shrink-0 items-center rounded-full border border-[var(--color-accent)] px-1.5 py-0.5 text-xs font-medium uppercase tracking-wide text-[var(--color-accent)]">
+                      <Badge tone="accent" variant="outline">
                         {catLabel === "Update"
                           ? tr("pkglib.badge.update", "update")
                           : tr("pkglib.badge.dlc", "DLC")}
-                      </span>
+                      </Badge>
                     )}
                     {m?.appVer && (
-                      <span className="inline-flex shrink-0 items-center rounded-full border border-[var(--color-border)] px-1.5 py-0.5 font-mono text-xs font-medium tabular-nums text-[var(--color-muted)]">
+                      <Badge tone="neutral" variant="outline" className="font-mono">
                         v{m.appVer}
-                      </span>
+                      </Badge>
                     )}
                   </div>
                   {/* Filename — often the clearest identifier (carries the

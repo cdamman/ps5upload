@@ -9,6 +9,7 @@ import {
   ErrorCard,
   Button,
   ConnectionGate,
+  Badge,
 } from "../../components";
 // Direct import to avoid the barrel's circular-dep warning at build.
 import { useConfirm } from "../../components/ConfirmDialog";
@@ -295,9 +296,9 @@ function MountedImageCard({
             </div>
           )}
         </div>
-        <span className="shrink-0 rounded-full border border-[var(--color-accent)] bg-[var(--color-accent-soft)] px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-[var(--color-accent)]">
+        <Badge tone="accent" variant="soft" size="md">
           {tr("volumes_mounted", undefined, "mounted")}
-        </span>
+        </Badge>
       </div>
 
       {v.total_bytes > 0 && (
@@ -362,9 +363,9 @@ function StorageCard({ volume: v }: { volume: Volume }) {
           </div>
         </div>
         {!v.writable && (
-          <span className="shrink-0 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-3)] px-2 py-0.5 text-xs uppercase tracking-wide text-[var(--color-muted)]">
+          <Badge tone="neutral" variant="soft" size="md">
             {tr("volumes_read_only", undefined, "read-only")}
-          </span>
+          </Badge>
         )}
       </div>
 

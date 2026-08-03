@@ -27,6 +27,7 @@ const SIZES = {
   md: "max-w-md",
   lg: "max-w-xl",
   xl: "max-w-3xl",
+  full: "max-w-full",
 } as const;
 
 export function Modal({
@@ -37,6 +38,7 @@ export function Modal({
   children,
   footer,
   size = "md",
+  variant = "center",
   closeOnScrim = true,
   role = "dialog",
   ariaLabel,
@@ -52,6 +54,10 @@ export function Modal({
   /** Optional footer row (buttons), rendered with a top border. */
   footer?: ReactNode;
   size?: keyof typeof SIZES;
+  /** "center" (default) centers the panel. "sheet" renders as a bottom
+   *  sheet on mobile (≤640px) and centers on desktop — useful for
+   *  modals that need to feel native on touch. */
+  variant?: "center" | "sheet";
   /** Whether clicking the backdrop closes the modal. Default true. */
   closeOnScrim?: boolean;
   role?: "dialog" | "alertdialog";
@@ -107,13 +113,22 @@ export function Modal({
 
   if (!open) return null;
 
+  // Sheet variant: bottom-anchored on mobile, centered on ≥640px.
+  const isSheet = variant === "sheet";
+  const wrapperCls = isSheet
+    ? "anim-scrim fixed inset-0 z-50 flex items-end justify-center bg-[var(--overlay-scrim)] sm:items-center sm:p-4"
+    : "anim-scrim fixed inset-0 z-50 flex items-center justify-center bg-[var(--overlay-scrim)] p-4";
+  const panelCls = isSheet
+    ? `anim-sheet-up elev-3 flex max-h-[90dvh] w-full ${SIZES[size]} flex-col overflow-hidden rounded-t-xl border border-[var(--color-border)] bg-[var(--color-surface-2)] sm:rounded-lg ${panelClassName}`
+    : `anim-pop elev-3 flex max-h-[90dvh] w-full ${SIZES[size]} flex-col overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] ${panelClassName}`;
+
   return (
     // z-50 is the modal layer. The confirm/alert/prompt dialogs (ConfirmDialog)
     // sit at z-[60] so a confirm opened from WITHIN a Modal (e.g. the Manage
     // PS5s delete) paints ON TOP of the panel instead of being hidden behind
     // it — previously both were z-50 and the wider panel occluded the confirm.
     <div
-      className="anim-scrim fixed inset-0 z-50 flex items-center justify-center bg-[var(--overlay-scrim)] p-4"
+      className={wrapperCls}
       onClick={closeOnScrim ? onClose : undefined}
     >
       <div
@@ -124,7 +139,7 @@ export function Modal({
         aria-label={!title ? ariaLabel : undefined}
         tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
-        className={`anim-pop elev-3 flex max-h-[90dvh] w-full ${SIZES[size]} flex-col overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] ${panelClassName}`}
+        className={panelCls}
       >
         {title && (
           <header className="flex items-center justify-between gap-3 border-b border-[var(--color-border)] px-4 py-3">

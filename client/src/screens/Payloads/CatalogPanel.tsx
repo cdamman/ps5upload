@@ -33,7 +33,7 @@ import {
   downloadableReleases,
   isLatestTag,
 } from "../../lib/payloadVersions";
-import { Button, ErrorCard, Spinner } from "../../components";
+import { Button, ErrorCard, Spinner, Badge } from "../../components";
 import { useTr } from "../../state/lang";
 import UsbAutoloaderModal from "./UsbAutoloaderModal";
 
@@ -572,9 +572,9 @@ function PayloadCard({
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="text-sm font-semibold">{info.display_name}</h3>
             {info.is_custom && (
-              <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-xs uppercase tracking-wide text-[var(--color-muted)]">
+              <Badge tone="neutral" variant="outline">
                 {tr("payloads_custom_badge", undefined, "Custom")}
-              </span>
+              </Badge>
             )}
             <button
               type="button"
@@ -737,14 +737,13 @@ function PayloadCard({
               )}
             </span>
             {selectedIsPrerelease && (
-              <span className="inline-flex items-center gap-1 rounded-full border border-[var(--color-warn)] px-1.5 py-0.5 font-medium text-[var(--color-warn)]">
-                <AlertTriangle size={10} />
+              <Badge tone="warn" variant="outline" icon={AlertTriangle}>
                 {tr(
                   "payloads_prerelease_warn",
                   undefined,
                   "pre-release — may be unstable",
                 )}
-              </span>
+              </Badge>
             )}
             {release.picked_asset_name && (
               <span title={release.picked_asset_url}>

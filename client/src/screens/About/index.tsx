@@ -13,7 +13,7 @@ import { openExternalUrl as openExternal } from "../../lib/openExternalUrl";
 import { getAppVersion } from "../../lib/appVersion";
 
 import { useTr } from "../../state/lang";
-import { Button, Card } from "../../components";
+import { Button, Card, Badge } from "../../components";
 
 const AUTHOR_EMAIL = "phantomptr@gmail.com";
 
@@ -100,13 +100,11 @@ export default function AboutScreen() {
         <h1 className="text-4xl font-semibold tracking-tight">PS5Upload</h1>
         <div className="mt-2 flex items-center gap-2">
           {version && (
-            <span className="rounded-full border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2.5 py-0.5 font-mono text-xs text-[var(--color-muted)]">
+            <Badge tone="neutral" variant="outline" size="md" className="font-mono">
               v{version}
-            </span>
+            </Badge>
           )}
-          <span className="rounded-full border border-[var(--color-good)] bg-[var(--color-good-soft)] px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-[var(--color-good)]">
-            GPL-3
-          </span>
+          <Badge tone="good" variant="soft" size="md">GPL-3</Badge>
         </div>
         <p className="mt-5 max-w-xl text-base leading-relaxed text-[var(--color-muted)]">
           {tr(

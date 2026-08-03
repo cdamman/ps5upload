@@ -8,7 +8,7 @@ import {
   Eye,
 } from "lucide-react";
 
-import { PageHeader, Button, EmptyState, Modal, Spinner } from "../../components";
+import { PageHeader, Button, EmptyState, Modal, Spinner, Badge } from "../../components";
 import { useConfirm } from "../../components/ConfirmDialog";
 import { useTr } from "../../state/lang";
 import {
@@ -331,13 +331,13 @@ function ActivityRow({ entry }: { entry: ActivityEntry }) {
           </span>
         )}
         {entry.files !== undefined && entry.files > 1 && (
-          <span className="rounded-full bg-[var(--color-surface-3)] px-1.5 py-0.5 text-xs text-[var(--color-muted)]">
+          <Badge tone="neutral" variant="soft">
             {tr(
               "activity_files_badge",
               { count: entry.files },
               `${entry.files} files`,
             )}
-          </span>
+          </Badge>
         )}
         <span className="ml-auto text-xs text-[var(--color-muted)]">
           {formatRelative(entry.startedAtMs, tr)} ·{" "}

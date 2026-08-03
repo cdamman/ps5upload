@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 
-import { Button, ErrorCard, Modal, Spinner } from "../../components";
+import { Button, ErrorCard, Modal, Spinner, Badge } from "../../components";
 import { ConsoleChip } from "../../components/ConsoleChip";
 import { useTr } from "../../state/lang";
 import {
@@ -930,9 +930,9 @@ function PlaylistCard({
                   // instead of a host path (there may be none yet — it's
                   // resolved from the repo at run time).
                   <div className="flex min-w-0 flex-1 items-center gap-1.5">
-                    <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-xs uppercase tracking-wide text-[var(--color-muted)]">
+                    <Badge tone="neutral" variant="outline">
                       {tr("playlist_step_repo_badge", undefined, "Repo")}
-                    </span>
+                    </Badge>
                     <span
                       className="min-w-0 flex-1 truncate text-xs"
                       title={tr(
@@ -1145,9 +1145,9 @@ function PlaylistCard({
                             <span className="block truncate font-medium text-[var(--color-text)]">
                               {p.display_name}
                               {p.is_custom && (
-                                <span className="ml-1.5 rounded-full border border-[var(--color-border)] px-1 py-0.5 text-xs uppercase text-[var(--color-muted)]">
+                                <Badge tone="neutral" variant="outline" className="ml-1.5">
                                   {tr("payloads_custom_badge", undefined, "Custom")}
-                                </span>
+                                </Badge>
                               )}
                             </span>
                             <span className="block truncate text-[var(--color-muted)]">

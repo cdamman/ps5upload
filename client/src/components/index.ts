@@ -21,6 +21,10 @@ export type {
   PromptOptions,
 } from "./ConfirmDialog";
 export { OverflowMenu, type OverflowMenuItem } from "./OverflowMenu";
+export { MenuList, MenuDropdown, type MenuItem } from "./Menu";
+export { ContextMenu, type ContextMenuItem } from "./ContextMenu";
+export { Table, type TableColumn, type TableProps, type SortDirection } from "./Table";
+export { Spotlight, type SpotlightAction, type SpotlightProps } from "./Spotlight";
 export { GameIcon } from "./GameIcon";
 export { PlatformBadge } from "./PlatformBadge";
 export { Modal } from "./Modal";

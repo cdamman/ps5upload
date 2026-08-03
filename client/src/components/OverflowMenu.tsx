@@ -1,6 +1,5 @@
 import {
   type ReactNode,
-  type CSSProperties,
   useEffect,
   useRef,
   useState,
@@ -8,6 +7,7 @@ import {
 import { ChevronDown, MoreHorizontal } from "lucide-react";
 
 import { Button, type ButtonVariant } from "./Button";
+import { MenuDropdown } from "./Menu";
 
 /**
  * One action inside an OverflowMenu.
@@ -40,6 +40,10 @@ export interface OverflowMenuItem {
  * action surface minimal — primary action stays as a Button, every
  * other action lives behind this menu so the row reads as one
  * verb at a glance instead of seven.
+ *
+ * v5: Now wraps the shared Menu primitive (§22.27) which adds
+ * WAI-ARIA arrow-key navigation, type-ahead, and Home/End support.
+ * OverflowMenu retains its trigger UI and positioning logic.
  *
  * Closes on:
  *   - selecting an item (after the onSelect runs)
@@ -134,9 +138,6 @@ export function OverflowMenu({
 
   if (items.length === 0) return null;
 
-  const menuPositionStyle: CSSProperties =
-    align === "right" ? { right: 0 } : { left: 0 };
-
   return (
     <div ref={wrapperRef} className="relative inline-block">
       {triggerLabel ? (
@@ -166,47 +167,12 @@ export function OverflowMenu({
         />
       )}
       {open && (
-        <div
-          role="menu"
-          className="anim-rise elev-2 absolute z-30 my-1 min-w-[200px] max-w-[calc(100vw-1rem)] overflow-y-auto overflow-x-hidden rounded-md border border-[var(--color-border)] bg-[var(--color-surface)]"
-          style={{
-            ...menuPositionStyle,
-            ...(placement.dropUp ? { bottom: "100%" } : { top: "100%" }),
-            maxHeight: placement.maxHeight || undefined,
-          }}
-        >
-          {items.map((item, i) => (
-            <button
-              key={`${item.label}-${i}`}
-              type="button"
-              role="menuitem"
-              disabled={item.disabled || item.loading}
-              onClick={() => {
-                if (item.disabled || item.loading) return;
-                setOpen(false);
-                item.onSelect();
-              }}
-              title={item.title}
-              className={
-                "flex w-full items-center gap-2 whitespace-nowrap px-3 py-2 text-left text-xs transition-colors " +
-                "disabled:cursor-not-allowed disabled:opacity-50 " +
-                (item.destructive
-                  ? "text-[var(--color-bad)] hover:bg-[var(--color-bad-soft)]"
-                  : "text-[var(--color-text)] hover:bg-[var(--color-surface-3)]")
-              }
-            >
-              {item.icon && (
-                <span className="flex h-4 w-4 shrink-0 items-center justify-center">
-                  {item.icon}
-                </span>
-              )}
-              <span className="flex-1">{item.label}</span>
-              {item.loading && (
-                <span className="ml-2 text-xs text-[var(--color-muted)]">…</span>
-              )}
-            </button>
-          ))}
-        </div>
+        <MenuDropdown
+          items={items}
+          onClose={() => setOpen(false)}
+          align={align}
+          placement={placement}
+        />
       )}
     </div>
   );

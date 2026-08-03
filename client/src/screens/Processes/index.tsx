@@ -16,6 +16,7 @@ import {
   EmptyState,
   ErrorCard,
   Modal,
+  Badge,
 } from "../../components";
 import { GameIcon } from "../../components/GameIcon";
 import { PlatformBadge } from "../../components/PlatformBadge";
@@ -490,9 +491,9 @@ function ProcessRowImpl({
           <KindBadge kind={proc.kind} />
           {platform && <PlatformBadge platform={platform} />}
           {isSelf && (
-            <span className="shrink-0 rounded-full border border-[var(--color-accent)] px-1.5 py-px text-xs font-medium text-[var(--color-accent)]">
+            <Badge tone="accent" variant="outline">
               {tr("processes_this_tool", undefined, "this tool")}
-            </span>
+            </Badge>
           )}
         </div>
         <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 font-mono text-xs text-[var(--color-muted)] tabular-nums">

@@ -4,6 +4,64 @@ What's new in ps5upload, written for humans.
 
 ---
 
+## 5.0.0
+
+**The v5 redesign is here.** This release delivers the complete v5
+component primitive library — all 28 primitives from the master spec
+are now implemented — plus Badge adoption across 8 screens.
+
+### New component primitives (6 new)
+
+- **`Table` / `DataGrid`** (§22.13) — WAI-ARIA Grid pattern with
+  arrow-key cell navigation, sortable headers, selectable rows,
+  sticky header, and progressive-render virtualization (no new
+  dependency). Full keyboard support: arrows, Home/End, Ctrl+Home/End.
+- **`ContextMenu`** (§22.16) — right-click (desktop) / long-press
+  (mobile) menu. Portaled to `document.body`, viewport-clamped,
+  WAI-ARIA Menu pattern with arrow keys, type-ahead, Home/End.
+- **`Spotlight`** (§22.21) — Games-tab hero overlay. Full-screen on
+  mobile, large panel on desktop. Blurred backdrop from game icon.
+  Focus trap, Escape-to-close, primary + secondary action bar.
+
+### Evolved primitives (3 evolved)
+
+- **`Modal`** (§22.26) — new `size="full"` for fullscreen modals,
+  new `variant="sheet"` for bottom-sheet-on-mobile / centered-on-
+  desktop. New `anim-sheet-up` CSS animation with proper reduced-
+  motion / data-motion guards.
+- **`Menu`** (§22.27) — new primitive with full WAI-ARIA Menu
+  keyboard nav (arrows, type-ahead, Home/End, Escape). `OverflowMenu`
+  now wraps `Menu` internally — all existing overflow menus gain
+  proper keyboard navigation for free.
+- **`EmptyState`** (§22.29) — new `body` (ReactNode), `hero`,
+  `role` ("status" / "alert"), and `headingTag` props. `min-height`
+  fixed to canonical 55vh (was the 72vh v4 bug). Full backward
+  compat with the v4 `icon` / `message` props.
+
+### Badge adoption (8 screens)
+
+Migrated 13 raw `<span className="rounded-full …">` pills to the
+typed `<Badge>` primitive across About, Activity, InstallPackage,
+Processes, Profile, Volumes, and Payloads (CatalogPanel +
+PlaylistsPanel). Badges now use consistent semantic tones (good,
+warn, accent, neutral) and variants (soft, outline).
+
+### i18n
+
+- 3 new translation keys: `table_select_all`, `table_select_row`,
+  `table_loading_more`.
+- i18n allowlist regenerated for 18 languages.
+
+### What's NOT in this release
+
+- **Card adoption** — 249 raw `rounded-lg border …` card patterns
+  still exist across screens (Upload, FileSystem, Library are the
+  top offenders). Deferred to a follow-up mechanical refactor.
+- **MC4 encrypted XML cheat format** — still requires AES-256-CBC.
+- **PS Store scraping** — still broken (client-side rendering).
+
+---
+
 ## 4.6.1
 
 Hotfix release — eliminates 7 compiler warnings that appeared when

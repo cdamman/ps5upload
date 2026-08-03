@@ -21,6 +21,7 @@ import {
   ConnectionGate,
   EmptyState,
   Spinner,
+  Badge,
 } from "../../components";
 import { useTr } from "../../state/lang";
 import { useConnectionStore } from "../../state/connection";
@@ -795,10 +796,9 @@ function SlotRow({
           }}
         />
         {activated && (
-          <span className="flex shrink-0 items-center gap-1 rounded-full bg-[var(--color-good)]/15 px-2 py-0.5 text-xs text-[var(--color-good)]">
-            <Check size={11} />
+          <Badge tone="good" variant="soft" size="md" icon={Check}>
             {tr("profile.username.activated", "active")}
-          </span>
+          </Badge>
         )}
         <Button
           variant="secondary"
