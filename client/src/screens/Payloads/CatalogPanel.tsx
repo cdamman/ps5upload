@@ -33,7 +33,7 @@ import {
   downloadableReleases,
   isLatestTag,
 } from "../../lib/payloadVersions";
-import { Button, ErrorCard, Spinner, Badge } from "../../components";
+import { Button, ErrorCard, Spinner, Badge, Input } from "../../components";
 import { useTr } from "../../state/lang";
 import UsbAutoloaderModal from "./UsbAutoloaderModal";
 
@@ -342,7 +342,7 @@ export default function CatalogPanel() {
             )}
           </div>
           <div className="flex items-center gap-2">
-            <input
+            <Input
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -352,7 +352,8 @@ export default function CatalogPanel() {
                 "Search payloads…",
               )}
               aria-label={tr("payloads_search", undefined, "Search payloads")}
-              className="w-44 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1.5 text-xs outline-none focus:border-[var(--color-accent)]"
+              block={false}
+              className="w-44 text-xs"
             />
             <Button
               variant="secondary"
@@ -402,7 +403,7 @@ export default function CatalogPanel() {
               )}
             </p>
             <div className="flex flex-wrap items-center gap-2">
-              <input
+              <Input
                 type="text"
                 value={addRepo}
                 onChange={(e) => setAddRepo(e.target.value)}
@@ -415,7 +416,8 @@ export default function CatalogPanel() {
                   "owner/name or https://github.com/owner/name",
                 )}
                 spellCheck={false}
-                className="min-w-[260px] flex-1 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1.5 text-xs outline-none focus:border-[var(--color-accent)]"
+                block={false}
+                className="min-w-[260px] flex-1 text-xs"
               />
               <label className="flex items-center gap-1 text-xs text-[var(--color-muted)]">
                 {tr("payloads_add_repo_host", undefined, "Host")}

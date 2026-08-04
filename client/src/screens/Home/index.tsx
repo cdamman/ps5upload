@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Link } from "react-router";
 import {
   LayoutDashboard,
@@ -21,12 +21,9 @@ import { useConnectionStore } from "../../state/connection";
 import { useActivityHistoryStore } from "../../state/activityHistory";
 import { useNotificationsStore } from "../../state/notifications";
 import { useRunningAppsStore } from "../../state/runningApps";
-import { fetchHwTemps, fetchHwPower, type HwTemps, type HwPower } from "../../api/ps5";
-import { Card, Badge, Spinner, ConsoleChip } from "../../components";
+import { useSensors } from "../../state/sensors";
+import { Card, Badge, Spinner, ConsoleChip, Sparkline } from "../../components";
 import { useTr } from "../../state/lang";
-import { useDocumentVisible } from "../../lib/visibility";
-import { transferAddr } from "../../lib/addr";
-import { transferScreenBusy } from "../../lib/ps5Transfers";
 
 /**
  * v5 Home tab — at-a-glance dashboard with quick actions.
@@ -53,9 +50,9 @@ export default function HomeScreen() {
   const payloadVersion = useConnectionStore((s) => s.payloadVersion);
   const ps5Kernel = useConnectionStore((s) => s.ps5Kernel);
   const ucredElevated = useConnectionStore((s) => s.ucredElevated);
-  const visible = useDocumentVisible();
-  const [temps, setTemps] = useState<HwTemps | null>(null);
-  const [power, setPower] = useState<HwPower | null>(null);
+  const { sample: sensorSample, history } = useSensors(host);
+  const temps = sensorSample?.temps ?? null;
+  const power = sensorSample?.power ?? null;
 
   const allActivity = useActivityHistoryStore((s) => s.entries);
   const allNotifs = useNotificationsStore((s) => s.entries);
@@ -66,45 +63,11 @@ export default function HomeScreen() {
   const recentNotifs = useMemo(() => allNotifs.slice(0, 5), [allNotifs]);
   const runningTitleIds = useRunningAppsStore((s) => s.titleIds);
 
-  useEffect(() => {
-    setTemps(null);
-    setPower(null);
-  }, [host]);
-
-  useEffect(() => {
-    if (!visible || !host?.trim() || payloadStatus !== "up") return;
-    let cancelled = false;
-    // Guard against pile-up: if the previous tick is still in flight
-    // (slow network), skip this interval firing rather than queuing
-    // another request.
-    let inFlight = false;
-    const tick = async () => {
-      if (inFlight) return;
-      if (transferScreenBusy(host)) return;
-      inFlight = true;
-      const addr = transferAddr(host.trim());
-      try {
-        const [t, p] = await Promise.all([
-          fetchHwTemps(addr).catch(() => null),
-          fetchHwPower(addr).catch(() => null),
-        ]);
-        if (!cancelled) {
-          if (t) setTemps(t);
-          if (p) setPower(p);
-        }
-      } catch {
-        // ignore
-      } finally {
-        inFlight = false;
-      }
-    };
-    tick();
-    const id = window.setInterval(tick, 5000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(id);
-    };
-  }, [visible, host, payloadStatus]);
+  // CPU temp sparkline data — last 30 samples (~2.5 min at 5s cadence).
+  const cpuHistory = useMemo(
+    () => history.slice(-30).map((s) => s.temps.cpu_temp),
+    [history],
+  );
 
   const connected = engineStatus === "up" && payloadStatus === "up";
 
@@ -188,7 +151,7 @@ export default function HomeScreen() {
           </div>
         </Card>
 
-        {/* 2. Live sensors — CPU/SoC temps. */}
+        {/* 2. Live sensors — CPU/SoC temps with sparkline. */}
         <Card>
           <CardHeader
             icon={Cpu}
@@ -196,15 +159,30 @@ export default function HomeScreen() {
           />
           {temps ? (
             <div className="space-y-2">
-              <KvRow
-                label={tr("v5_home_cpu", "CPU")}
-                value={`${temps.cpu_temp?.toFixed(0) ?? "?"}°C`}
-                tone={
-                  (temps.cpu_temp ?? 0) >= 85
-                    ? "warn"
-                    : undefined
-                }
-              />
+              <div className="flex items-center justify-between">
+                <KvRow
+                  label={tr("v5_home_cpu", "CPU")}
+                  value={`${temps.cpu_temp?.toFixed(0) ?? "?"}°C`}
+                  tone={
+                    (temps.cpu_temp ?? 0) >= 85
+                      ? "warn"
+                      : undefined
+                  }
+                />
+                {cpuHistory.length >= 2 && (
+                  <Sparkline
+                    data={cpuHistory}
+                    width={70}
+                    height={22}
+                    color={
+                      (temps.cpu_temp ?? 0) >= 85
+                        ? "var(--color-warn)"
+                        : "var(--color-text)"
+                    }
+                    fill
+                  />
+                )}
+              </div>
               <KvRow
                 label={tr("v5_home_soc", "SoC")}
                 value={`${temps.soc_temp?.toFixed(0) ?? "?"}°C`}

@@ -17,6 +17,7 @@ import {
   EmptyState,
   Card,
   Spinner,
+  Input,
 } from "../../components";
 import { useConfirm } from "../../components/ConfirmDialog";
 import { useTr } from "../../state/lang";
@@ -215,31 +216,22 @@ export default function BackupScreen() {
               {tr("backup_new_snapshot", undefined, "New snapshot")}
             </h3>
             <div className="space-y-3">
-              <label className="space-y-1">
-                <span className="block text-xs text-[var(--color-muted)]">
-                  {tr("backup_tag_label", undefined, "Tag (alphanumeric, dash, underscore)")}
-                </span>
-                <input
-                  type="text"
-                  value={tag}
-                  onChange={(e) => setTag(e.target.value)}
-                  maxLength={32}
-                  placeholder={tr("backup_tag_placeholder", undefined, "app-db")}
-                  className="input"
-                />
-              </label>
-              <label className="space-y-1">
-                <span className="block text-xs text-[var(--color-muted)]">
-                  {tr("backup_path_label", undefined, "PS5 path (file or directory)")}
-                </span>
-                <input
-                  type="text"
-                  value={path}
-                  onChange={(e) => setPath(e.target.value)}
-                  placeholder="/system_data/priv/mms/app.db"
-                  className="input font-mono"
-                />
-              </label>
+              <Input
+                label={tr("backup_tag_label", undefined, "Tag (alphanumeric, dash, underscore)")}
+                type="text"
+                value={tag}
+                onChange={(e) => setTag(e.target.value)}
+                maxLength={32}
+                placeholder={tr("backup_tag_placeholder", undefined, "app-db")}
+              />
+              <Input
+                label={tr("backup_path_label", undefined, "PS5 path (file or directory)")}
+                type="text"
+                value={path}
+                onChange={(e) => setPath(e.target.value)}
+                placeholder="/system_data/priv/mms/app.db"
+                className="font-mono"
+              />
               <Button
                 onClick={handleSnapshot}
                 disabled={busy || !tag.trim() || !path.trim()}

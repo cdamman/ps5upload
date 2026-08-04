@@ -59,6 +59,9 @@ import {
   Button,
   ConsoleChip,
   Spinner,
+  Input,
+  Select,
+  Checkbox,
 } from "../../components";
 import { OverflowMenu } from "../../components/OverflowMenu";
 import FfpkgInspectorPanel from "./FfpkgInspectorPanel";
@@ -1013,28 +1016,26 @@ function Step2Options(props: {
 
       {source.kind === "game-folder" && (
         <section className="mb-4 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] p-5">
-          <label className="flex items-start gap-3 text-sm">
-            <input
-              type="checkbox"
-              checked={registerAfterUpload}
-              onChange={(e) => onSetRegisterAfterUpload(e.target.checked)}
-              className="mt-0.5 accent-[var(--color-accent)]"
-            />
-            <div>
-              <div className="font-medium">
-                {tr(
-                  "upload_register_after_title",
-                  "Add to PS5 home screen when done",
-                )}
+          <Checkbox
+            checked={registerAfterUpload}
+            onChange={(c) => onSetRegisterAfterUpload(c)}
+            label={
+              <div>
+                <div className="font-medium">
+                  {tr(
+                    "upload_register_after_title",
+                    "Add to PS5 home screen when done",
+                  )}
+                </div>
+                <div className="mt-0.5 text-xs text-[var(--color-muted)]">
+                  {tr(
+                    "upload_register_after_desc",
+                    "Registers the game with the PS5 right after the upload finishes, so it's ready to launch — no Library visit needed. If this step fails the upload itself is unaffected and you can still add it from the Library.",
+                  )}
+                </div>
               </div>
-              <div className="mt-0.5 text-xs text-[var(--color-muted)]">
-                {tr(
-                  "upload_register_after_desc",
-                  "Registers the game with the PS5 right after the upload finishes, so it's ready to launch — no Library visit needed. If this step fails the upload itself is unaffected and you can still add it from the Library.",
-                )}
-              </div>
-            </div>
-          </label>
+            }
+          />
         </section>
       )}
 
@@ -2288,8 +2289,10 @@ function RarSourceCard() {
         )}
       </p>
       <div className="flex flex-wrap items-center gap-2">
-        <input
+        <Input
           type="password"
+          block={false}
+          className="min-w-0 flex-1"
           value={draft}
           autoComplete="off"
           placeholder={tr("upload_rar_password_placeholder", "Password")}
@@ -2297,7 +2300,6 @@ function RarSourceCard() {
           onKeyDown={(e) => {
             if (e.key === "Enter") onApply(draft);
           }}
-          className="min-w-0 flex-1 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1.5 text-sm"
         />
         <Button
           variant="secondary"
@@ -2377,32 +2379,26 @@ function PkgFinisherCard({ pkgInfo }: { pkgInfo: PkgSourceInfo | null }) {
           "Uploads into the PS5 package library, then installs — one queued step. The staged copy lives in the library until removed.",
         )}
       </p>
-      <label className="flex cursor-pointer items-center gap-2 text-xs text-[var(--color-text)]">
-        <input
-          type="checkbox"
-          className="h-3.5 w-3.5"
-          checked={autoInstall}
-          onChange={(e) => setAutoInstall(e.target.checked)}
-        />
-        {tr(
+      <Checkbox
+        checked={autoInstall}
+        onChange={(c) => setAutoInstall(c)}
+        className="text-xs text-[var(--color-text)]"
+        label={tr(
           "pkglib.autoInstall",
           undefined,
           "Install automatically once the upload finishes",
         )}
-      </label>
-      <label className="mt-2 flex cursor-pointer items-center gap-2 text-xs text-[var(--color-text)]">
-        <input
-          type="checkbox"
-          className="h-3.5 w-3.5"
-          checked={autoRemove}
-          onChange={(e) => setAutoRemove(e.target.checked)}
-        />
-        {tr(
+      />
+      <Checkbox
+        checked={autoRemove}
+        onChange={(c) => setAutoRemove(c)}
+        className="mt-2 text-xs text-[var(--color-text)]"
+        label={tr(
           "pkglib.autoRemove",
           undefined,
           "Auto-delete each package from the PS5 after it installs",
         )}
-      </label>
+      />
       <p className="mt-3 flex items-start gap-1.5 text-xs text-[var(--color-muted)]">
         <Info size={12} className="mt-0.5 shrink-0" />
         {tr(
@@ -2664,8 +2660,10 @@ function BandwidthCard() {
         <label className="text-sm font-medium">
           {tr("upload_bandwidth_label", undefined, "Upload speed cap")}
         </label>
-        <input
+        <Input
           type="number"
+          block={false}
+          className="w-20"
           min={0}
           step={0.5}
           value={cap}
@@ -2674,7 +2672,6 @@ function BandwidthCard() {
             const n = parseFloat(e.target.value);
             setCap(isFinite(n) && n > 0 ? n : 0);
           }}
-          className="w-20 rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 text-xs"
           placeholder="0"
         />
         <span className="text-xs text-[var(--color-muted)]">{tr("upload_unit_mbs", "MB/s")}</span>
@@ -2719,54 +2716,47 @@ function MountAfterUploadCard({
   const tr = useTr();
   return (
     <section className="mb-4 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] p-5">
-      <label className="flex items-start gap-3 text-sm">
-        <input
-          type="checkbox"
-          checked={checked}
-          onChange={(e) => onChange(e.target.checked)}
-          className="mt-0.5 accent-[var(--color-accent)]"
-        />
-        <div>
-          <div className="font-medium">
-            {tr("upload_mount_after_title", "Mount after upload")}
+      <Checkbox
+        checked={checked}
+        onChange={(c) => onChange(c)}
+        label={
+          <div>
+            <div className="font-medium">
+              {tr("upload_mount_after_title", "Mount after upload")}
+            </div>
+            <div className="mt-0.5 text-xs text-[var(--color-muted)]">
+              {tr(
+                "upload_mount_after_desc",
+                "After the image lands on the PS5, the payload mounts it via the kernel's LVD backend. Off by default — turn on if you also want the image attached so the title shows up in the launcher immediately.",
+              )}
+            </div>
           </div>
-          <div className="mt-0.5 text-xs text-[var(--color-muted)]">
-            {tr(
-              "upload_mount_after_desc",
-              "After the image lands on the PS5, the payload mounts it via the kernel's LVD backend. Off by default — turn on if you also want the image attached so the title shows up in the launcher immediately.",
-            )}
-          </div>
-        </div>
-      </label>
+        }
+      />
 
       {/* Sub-toggle: read-only mode. Visible (greyed when mount-after-upload
           is off) so users can see the option exists. Default on — keeps the
           PS5 from silently writing save-data back into the image and
           corrupting it on next mount. */}
-      <label
-        className={`mt-3 ml-6 flex items-start gap-3 text-sm ${
-          checked ? "" : "opacity-50"
-        }`}
-      >
-        <input
-          type="checkbox"
-          checked={readOnly}
-          onChange={(e) => onChangeReadOnly(e.target.checked)}
-          disabled={!checked}
-          className="mt-0.5 accent-[var(--color-accent)]"
-        />
-        <div>
-          <div className="font-medium">
-            {tr("upload_mount_readonly_title", "Mount read-only")}
+      <Checkbox
+        className={`mt-3 ml-6 ${checked ? "" : "opacity-50"}`}
+        checked={readOnly}
+        disabled={!checked}
+        onChange={(c) => onChangeReadOnly(c)}
+        label={
+          <div>
+            <div className="font-medium">
+              {tr("upload_mount_readonly_title", "Mount read-only")}
+            </div>
+            <div className="mt-0.5 text-xs text-[var(--color-muted)]">
+              {tr(
+                "upload_mount_readonly_desc",
+                "Recommended. Prevents the PS5 from writing save data into the image (which would silently corrupt the file on disk and break re-mount). Turn off only for editable scratch images.",
+              )}
+            </div>
           </div>
-          <div className="mt-0.5 text-xs text-[var(--color-muted)]">
-            {tr(
-              "upload_mount_readonly_desc",
-              "Recommended. Prevents the PS5 from writing save data into the image (which would silently corrupt the file on disk and break re-mount). Turn off only for editable scratch images.",
-            )}
-          </div>
-        </div>
-      </label>
+        }
+      />
     </section>
   );
 }
@@ -2860,10 +2850,12 @@ function DestinationCard({
       </div>
 
       <div className="mb-3 flex items-center gap-2 text-sm">
-        <select
+        <Select
+          block={false}
+          className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-sm"
           value={volume ?? ""}
           onChange={(e) => onChange(e.target.value || null)}
-          className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-sm"
+          options={[]}
         >
           <option value="">
             {tr("upload_dest_auto", "(auto — largest free)")}
@@ -2876,12 +2868,13 @@ function DestinationCard({
               </option>
             );
           })}
-        </select>
+        </Select>
         <span className="text-[var(--color-muted)]">/</span>
-        <input
+        <Input
+          block={false}
+          className="flex-1 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-sm"
           value={subpath}
           onChange={(e) => onChange(volume, e.target.value)}
-          className="flex-1 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-sm"
         />
       </div>
 
@@ -3004,11 +2997,12 @@ function ExcludesCard({
               }
             }}
           >
-            <input
+            <Input
+              block={false}
+              className="flex-1"
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               placeholder={tr("upload_add_pattern_placeholder", "Add pattern (e.g. *.log)")}
-              className="flex-1 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-sm"
             />
             <button
               type="submit"

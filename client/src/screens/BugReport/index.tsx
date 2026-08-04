@@ -13,7 +13,16 @@ import {
   Camera,
 } from "lucide-react";
 
-import { PageHeader, Card, Button, ErrorCard, Spinner } from "../../components";
+import {
+  PageHeader,
+  Card,
+  Button,
+  ErrorCard,
+  Spinner,
+  Select,
+  Textarea,
+  Checkbox,
+} from "../../components";
 import { useTr } from "../../state/lang";
 import { useDiagSettingsStore, LOG_LEVELS } from "../../state/diagSettings";
 import { useConnectionStore } from "../../state/connection";
@@ -314,7 +323,7 @@ export default function BugReportScreen() {
           title={tr("bug_report_describe_title", undefined, "What happened?")}
           icon={Bug}
         >
-          <textarea
+          <Textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             rows={6}
@@ -323,7 +332,6 @@ export default function BugReportScreen() {
               undefined,
               "Steps to reproduce, what you expected, what happened instead. Firmware, jailbreak/loader, file sizes — anything that helps.",
             )}
-            className="w-full resize-y rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
           />
 
           {/* Screenshots gallery */}
@@ -444,38 +452,28 @@ export default function BugReportScreen() {
         >
           {/* Log window + level */}
           <div className="grid grid-cols-2 gap-3">
-            <label className="text-xs">
-              <span className="mb-1 block text-[var(--color-muted)]">
-                {tr("bug_report_window", undefined, "Log time window")}
-              </span>
-              <select
-                value={windowMinutes}
-                onChange={(e) => setWindowMinutes(Number(e.target.value))}
-                className="w-full rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1.5 text-sm"
-              >
-                {WINDOWS.map((m) => (
-                  <option key={m} value={m}>
-                    {tr("bug_report_window_last", { n: m }, `Last ${m} min`)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="text-xs">
-              <span className="mb-1 block text-[var(--color-muted)]">
-                {tr("bug_report_level", undefined, "Recording level")}
-              </span>
-              <select
-                value={logLevel}
-                onChange={(e) => setLogLevel(e.target.value as LogLevel)}
-                className="w-full rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1.5 text-sm"
-              >
-                {LOG_LEVELS.map((l) => (
-                  <option key={l} value={l}>
-                    {tr(`log_level_${l}`, undefined, l[0].toUpperCase() + l.slice(1))}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <Select
+              label={tr("bug_report_window", undefined, "Log time window")}
+              value={windowMinutes}
+              onChange={(e) => setWindowMinutes(Number(e.target.value))}
+            >
+              {WINDOWS.map((m) => (
+                <option key={m} value={m}>
+                  {tr("bug_report_window_last", { n: m }, `Last ${m} min`)}
+                </option>
+              ))}
+            </Select>
+            <Select
+              label={tr("bug_report_level", undefined, "Recording level")}
+              value={logLevel}
+              onChange={(e) => setLogLevel(e.target.value as LogLevel)}
+            >
+              {LOG_LEVELS.map((l) => (
+                <option key={l} value={l}>
+                  {tr(`log_level_${l}`, undefined, l[0].toUpperCase() + l.slice(1))}
+                </option>
+              ))}
+            </Select>
           </div>
           <p className="mt-1.5 text-xs text-[var(--color-muted)]">
             {tr(
@@ -570,26 +568,22 @@ export default function BugReportScreen() {
           )}
 
           {/* Privacy */}
-          <label className="mt-4 flex items-start gap-2 text-xs">
-            <input
-              type="checkbox"
+          <div className="mt-4">
+            <Checkbox
               checked={redact}
-              onChange={(e) => setRedact(e.target.checked)}
-              className="mt-0.5"
+              onChange={setRedact}
+              label={
+                <span className="font-medium">
+                  {tr("bug_report_redact", undefined, "Redact IPs & serial")}
+                </span>
+              }
+              hint={tr(
+                "bug_report_redact_hint",
+                undefined,
+                "Strip your PS5's IP address and serial number so the zip is safe to post publicly.",
+              )}
             />
-            <span>
-              <span className="font-medium">
-                {tr("bug_report_redact", undefined, "Redact IPs & serial")}
-              </span>
-              <span className="block text-[var(--color-muted)]">
-                {tr(
-                  "bug_report_redact_hint",
-                  undefined,
-                  "Strip your PS5's IP address and serial number so the zip is safe to post publicly.",
-                )}
-              </span>
-            </span>
-          </label>
+          </div>
 
           {isTauriEnv() ? (
             <div className="mt-4 flex items-center gap-2">

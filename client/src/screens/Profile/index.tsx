@@ -22,6 +22,7 @@ import {
   EmptyState,
   Spinner,
   Badge,
+  Select,
 } from "../../components";
 import { useTr } from "../../state/lang";
 import { useConnectionStore } from "../../state/connection";
@@ -340,32 +341,29 @@ function AvatarSection({
           </p>
 
           {/* Target user */}
-          <label className="flex flex-col gap-1 text-xs text-[var(--color-muted)]">
-            {tr("profile.avatar.targetUser", "Apply to user")}
-            <select
-              className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1.5 text-sm text-[var(--color-text)]"
-              value={targetUid ?? ""}
-              onChange={(e) =>
-                setTargetUid(e.target.value ? Number(e.target.value) : null)
-              }
-            >
-              {foreground != null &&
-                !users.some((u) => u.uid === foreground) && (
-                  <option value={foreground}>
-                    {userLabel(info?.uid_hex ?? "", info?.username ?? "")} (
-                    {tr("profile.avatar.foreground", "active")})
-                  </option>
-                )}
-              {users.map((u) => (
-                <option key={u.uid} value={u.uid}>
-                  {userLabel(u.uid_hex, u.username)}
-                  {foreground === u.uid
-                    ? ` (${tr("profile.avatar.foreground", "active")})`
-                    : ""}
+          <Select
+            label={tr("profile.avatar.targetUser", "Apply to user")}
+            value={targetUid ?? ""}
+            onChange={(e) =>
+              setTargetUid(e.target.value ? Number(e.target.value) : null)
+            }
+          >
+            {foreground != null &&
+              !users.some((u) => u.uid === foreground) && (
+                <option value={foreground}>
+                  {userLabel(info?.uid_hex ?? "", info?.username ?? "")} (
+                  {tr("profile.avatar.foreground", "active")})
                 </option>
-              ))}
-            </select>
-          </label>
+              )}
+            {users.map((u) => (
+              <option key={u.uid} value={u.uid}>
+                {userLabel(u.uid_hex, u.username)}
+                {foreground === u.uid
+                  ? ` (${tr("profile.avatar.foreground", "active")})`
+                  : ""}
+              </option>
+            ))}
+          </Select>
 
           <div className="flex items-center gap-2 pt-1">
             <Button

@@ -9,6 +9,8 @@ import {
 } from "lucide-react";
 
 import { PageHeader, Button, EmptyState, Modal, Spinner, Badge } from "../../components";
+import { TaskList } from "../../components/TaskList";
+import { TelemetryDashboard } from "../../components/TelemetryDashboard";
 import { useConfirm } from "../../components/ConfirmDialog";
 import { useTr } from "../../state/lang";
 import {
@@ -43,7 +45,7 @@ export default function ActivityScreen() {
   // Canonical confirm dialog — replaces the hand-rolled modal this screen
   // used to maintain in parallel with ConfirmDialog (style drift hazard).
   const { confirm: confirmDialog, dialog: confirmDialogNode } = useConfirm();
-  const [view, setView] = useState<"list" | "timeline">("list");
+  const [view, setView] = useState<"list" | "timeline" | "telemetry">("list");
 
   const running = entries.filter((e) => e.outcome === "running");
   const past = entries.filter((e) => e.outcome !== "running");
@@ -99,13 +101,25 @@ export default function ActivityScreen() {
                 type="button"
                 onClick={() => setView("timeline")}
                 aria-pressed={view === "timeline"}
-                className={`rounded-r-md px-2 py-1 font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] ${
+                className={`px-2 py-1 font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] ${
                   view === "timeline"
                     ? "bg-[var(--color-accent)] text-[var(--color-accent-contrast)]"
                     : "text-[var(--color-muted)] hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text)]"
                 }`}
               >
                 {tr("activity_view_timeline", undefined, "Timeline")}
+              </button>
+              <button
+                type="button"
+                onClick={() => setView("telemetry")}
+                aria-pressed={view === "telemetry"}
+                className={`rounded-r-md px-2 py-1 font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] ${
+                  view === "telemetry"
+                    ? "bg-[var(--color-accent)] text-[var(--color-accent-contrast)]"
+                    : "text-[var(--color-muted)] hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text)]"
+                }`}
+              >
+                {tr("activity_view_telemetry", undefined, "Telemetry")}
               </button>
             </div>
             {entries.length > 0 ? (
@@ -126,7 +140,21 @@ export default function ActivityScreen() {
         <ActivityTimeline entries={entries} />
       )}
 
-      {entries.length === 0 && (
+      {/* v5 telemetry dashboard — live sensor charts. */}
+      {view === "telemetry" && (
+        <TelemetryDashboard />
+      )}
+
+      {/* v5 unified task list — active + recently-finished tasks from
+          the taskStore. Sits above the legacy activity history so live
+          operations are the first thing the user sees. */}
+      {view === "list" && (
+        <div className="mb-6">
+          <TaskList />
+        </div>
+      )}
+
+      {view !== "telemetry" && entries.length === 0 && (
         <EmptyState
           icon={ActivityIcon}
           size="hero"

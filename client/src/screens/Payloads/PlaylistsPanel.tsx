@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 
-import { Button, ErrorCard, Modal, Spinner, Badge } from "../../components";
+import { Button, ErrorCard, Modal, Spinner, Badge, Input, Checkbox, Select } from "../../components";
 import { ConsoleChip } from "../../components/ConsoleChip";
 import { useTr } from "../../state/lang";
 import {
@@ -408,12 +408,13 @@ function AutoLoaderCard() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <select
+          <Select
             value={autoLoader.playlistId ?? ""}
             onChange={(e) =>
               setAutoLoader({ playlistId: e.target.value || null })
             }
-            className="min-w-[min(100%,10rem)] rounded border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2 py-1 text-xs"
+            block={false}
+            className="min-w-[min(100%,10rem)] text-xs"
           >
             <option value="">
               {tr("autoloader_pick", undefined, "Choose playlist…")}
@@ -423,16 +424,13 @@ function AutoLoaderCard() {
                 {p.name}
               </option>
             ))}
-          </select>
-          <label className="flex shrink-0 items-center gap-1.5 text-xs font-medium">
-            <input
-              type="checkbox"
-              checked={autoLoader.enabled}
-              onChange={(e) => setAutoLoader({ enabled: e.target.checked })}
-              className="h-3.5 w-3.5"
-            />
-            {tr("autoloader_enable", undefined, "Enable")}
-          </label>
+          </Select>
+          <Checkbox
+            checked={autoLoader.enabled}
+            onChange={(checked) => setAutoLoader({ enabled: checked })}
+            label={tr("autoloader_enable", undefined, "Enable")}
+            className="shrink-0 text-xs font-medium"
+          />
         </div>
       </div>
       {/* Bring-up playlist: the PRE-helper chain (kernel-R/W payload, SMP, …)
@@ -446,12 +444,13 @@ function AutoLoaderCard() {
             "Bring-up playlist (kernel R/W, SMP):",
           )}
         </span>
-        <select
+        <Select
           value={autoLoader.bringUpPlaylistId ?? ""}
           onChange={(e) =>
             setAutoLoader({ bringUpPlaylistId: e.target.value || null })
           }
-          className="min-w-[min(100%,10rem)] rounded border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2 py-1 text-xs"
+          block={false}
+          className="min-w-[min(100%,10rem)] text-xs"
         >
           <option value="">
             {tr("autoloader_bringup_none", undefined, "None (send helper only)")}
@@ -461,7 +460,7 @@ function AutoLoaderCard() {
               {p.name}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
       {warn && (
         <div className="mt-2 text-xs text-[var(--color-warn)]">
@@ -785,22 +784,19 @@ function PlaylistCard({
           </span>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <label className="flex items-center gap-1.5 text-xs text-[var(--color-muted)]">
-            <input
-              type="checkbox"
-              checked={playlist.continueOnFailure}
-              onChange={(e) =>
-                setContinueOnFailure(playlist.id, e.target.checked)
-              }
-              disabled={anyRunning}
-              className="h-3 w-3"
-            />
-            {tr(
+          <Checkbox
+            checked={playlist.continueOnFailure}
+            onChange={(checked) =>
+              setContinueOnFailure(playlist.id, checked)
+            }
+            disabled={anyRunning}
+            label={tr(
               "playlist_continue_on_failure",
               undefined,
               "Continue on failure",
             )}
-          </label>
+            className="text-xs text-[var(--color-muted)]"
+          />
           <Button
             variant="primary"
             size="sm"
@@ -1101,7 +1097,7 @@ function PlaylistCard({
                 "Pick a payload. The playlist fetches its latest release and caches it when you run — so you don't keep the file on your PC. Add your own repos on the Catalog tab.",
               )}
             </p>
-            <input
+            <Input
               type="search"
               value={repoQuery}
               onChange={(e) => setRepoQuery(e.target.value)}
@@ -1111,7 +1107,6 @@ function PlaylistCard({
                 "Search payloads…",
               )}
               autoFocus
-              className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1.5 text-xs outline-none focus:border-[var(--color-accent)]"
             />
             <div className="max-h-[50vh] overflow-y-auto">
               {catalog === null ? (

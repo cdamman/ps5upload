@@ -32,6 +32,7 @@ import {
   PlatformBadge,
   Spinner,
   Badge,
+  Checkbox,
   type OverflowMenuItem,
 } from "../../components";
 import { openInFileSystem } from "../../state/fsNavigation";
@@ -779,32 +780,24 @@ export default function InstallPackageScreen() {
         <span className="text-xs font-medium uppercase tracking-wide text-[var(--color-muted)]">
           {tr("pkglib.options.heading", "Options")}
         </span>
-        <label className="flex cursor-pointer items-center gap-2 text-xs text-[var(--color-text)]">
-          <input
-            type="checkbox"
-            className="h-3.5 w-3.5"
-            checked={autoInstall}
-            onChange={(e) => setAutoInstall(e.target.checked)}
-          />
-          {tr(
+        <Checkbox
+          checked={autoInstall}
+          onChange={setAutoInstall}
+          label={tr(
             "pkglib.autoInstall",
             undefined,
             "Install automatically once the upload finishes",
           )}
-        </label>
-        <label className="flex cursor-pointer items-center gap-2 text-xs text-[var(--color-text)]">
-          <input
-            type="checkbox"
-            className="h-3.5 w-3.5"
-            checked={autoRemove}
-            onChange={(e) => setAutoRemove(e.target.checked)}
-          />
-          {tr(
+        />
+        <Checkbox
+          checked={autoRemove}
+          onChange={setAutoRemove}
+          label={tr(
             "pkglib.autoRemove",
             undefined,
             "Auto-delete each package from the PS5 after it installs",
           )}
-        </label>
+        />
       </div>
 
       {!hostReady && (
@@ -1101,18 +1094,15 @@ function ExternalPackages({ host }: { host: string }) {
           "Plug a USB stick or external drive with .pkg files into the PS5 and they show up here — no upload needed. Installing copies the file onto the console first (your drive's copy is left untouched), then installs it. Use Scan after connecting a drive.",
         )}
       </div>
-      <label className="mb-2 flex cursor-pointer items-center gap-2 text-xs text-[var(--color-muted)]">
-        <input
-          type="checkbox"
-          className="h-3.5 w-3.5"
-          checked={autoScan}
-          onChange={(e) => setAutoScan(e.target.checked)}
-        />
-        {tr(
+      <Checkbox
+        className="mb-2"
+        checked={autoScan}
+        onChange={setAutoScan}
+        label={tr(
           "pkglib.external.autoScan",
           "Automatically scan USB / external drives when this tab opens",
         )}
-      </label>
+      />
 
       {firstScan ? (
         // Stable scanning state — no more "suddenly appears" pop-in.

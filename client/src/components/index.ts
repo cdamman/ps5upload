@@ -54,3 +54,5 @@ export { Sheet } from "./Sheet";
 export { Toaster } from "./Toaster";
 export { SkipNav } from "./SkipNav";
 export { LiveRegion } from "./LiveRegion";
+export { Sparkline } from "./Sparkline";
+export { TelemetryDashboard } from "./TelemetryDashboard";

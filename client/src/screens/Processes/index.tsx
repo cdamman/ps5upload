@@ -17,6 +17,7 @@ import {
   ErrorCard,
   Modal,
   Badge,
+  Select,
 } from "../../components";
 import { GameIcon } from "../../components/GameIcon";
 import { PlatformBadge } from "../../components/PlatformBadge";
@@ -295,24 +296,18 @@ export default function ProcessesScreen() {
           {tr("processes_auto_refresh", undefined, "Auto-refresh")}
         </label>
         <div className="ml-auto flex items-center gap-2">
-          <select
+          <Select
             value={sortKey}
             onChange={(e) => setSortKey(e.target.value as SortKey)}
-            className="rounded border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2 py-1 text-xs"
-          >
-            <option value="memory">
-              {tr("processes_sort_memory", undefined, "Sort: Memory")}
-            </option>
-            <option value="threads">
-              {tr("processes_sort_threads", undefined, "Sort: Threads")}
-            </option>
-            <option value="pid">
-              {tr("processes_sort_pid", undefined, "Sort: PID")}
-            </option>
-            <option value="name">
-              {tr("processes_sort_name", undefined, "Sort: Name")}
-            </option>
-          </select>
+            block={false}
+            className="text-xs"
+            options={[
+              { value: "memory", label: tr("processes_sort_memory", undefined, "Sort: Memory") },
+              { value: "threads", label: tr("processes_sort_threads", undefined, "Sort: Threads") },
+              { value: "pid", label: tr("processes_sort_pid", undefined, "Sort: PID") },
+              { value: "name", label: tr("processes_sort_name", undefined, "Sort: Name") },
+            ]}
+          />
           <Button
             variant="secondary"
             size="sm"

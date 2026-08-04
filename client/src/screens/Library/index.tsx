@@ -113,6 +113,7 @@ import {
   EmptyState,
   ErrorCard,
   Button,
+  Input,
   OverflowMenu,
   SkeletonRows,
   Spinner,
@@ -3075,28 +3076,21 @@ function MoveModal({
             below to keep this a single-segment rename — if a user
             really wants to inject a deeper subpath, they can put it
             in the subpath field above. */}
-        <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
-          {tr("library_move_modal_name", undefined, "Name (optional rename)")}
-        </label>
-        <div className="mb-3">
-          <input
-            value={customName}
-            onChange={(e) => setCustomName(e.target.value)}
-            placeholder={sourceBasename(entry.path)}
-            className={`w-full rounded-md border bg-[var(--color-surface)] px-3 py-1.5 text-sm ${
-              nameInvalid
-                ? "border-[var(--color-bad)]"
-                : "border-[var(--color-border)]"
-            }`}
-          />
-          <p className="mt-1 text-xs text-[var(--color-muted)]">
-            {tr(
-              "library_move_modal_name_hint",
-              { default: sourceBasename(entry.path) },
-              'Leave blank or matching "{default}" to keep the original name. No slashes.',
-            )}
-          </p>
-        </div>
+        <Input
+          label={tr("library_move_modal_name", undefined, "Name (optional rename)")}
+          block={false}
+          value={customName}
+          onChange={(e) => setCustomName(e.target.value)}
+          placeholder={sourceBasename(entry.path)}
+          className={
+            nameInvalid ? "border-[var(--color-bad)]" : "border-[var(--color-border)]"
+          }
+          hint={tr(
+            "library_move_modal_name_hint",
+            { default: sourceBasename(entry.path) },
+            'Leave blank or matching "{default}" to keep the original name. No slashes.',
+          )}
+        />
 
         <div className="mb-4 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-2 text-xs">
           <div className="text-xs uppercase tracking-wide text-[var(--color-muted)]">
@@ -3458,28 +3452,21 @@ function MountModal({
           </>
         )}
 
-        <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
-          {tr("library_mount_modal_name", undefined, "Name")}
-        </label>
-        <div className="mb-3">
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder={derivedName}
-            className={`w-full rounded-md border bg-[var(--color-surface)] px-3 py-1.5 text-sm ${
-              nameInvalid
-                ? "border-[var(--color-bad)]"
-                : "border-[var(--color-border)]"
-            }`}
-          />
-          <p className="mt-1 text-xs text-[var(--color-muted)]">
-            {tr(
-              "library_mount_modal_name_hint",
-              { default: derivedName },
-              `Folder name under the chosen path. Defaults to "${derivedName}". No slashes.`,
-            )}
-          </p>
-        </div>
+        <Input
+          label={tr("library_mount_modal_name", undefined, "Name")}
+          block={false}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder={derivedName}
+          className={
+            nameInvalid ? "border-[var(--color-bad)]" : "border-[var(--color-border)]"
+          }
+          hint={tr(
+            "library_mount_modal_name_hint",
+            { default: derivedName },
+            `Folder name under the chosen path. Defaults to "${derivedName}". No slashes.`,
+          )}
+        />
 
         <div className="mb-4 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-2 text-xs">
           <div className="text-xs uppercase tracking-wide text-[var(--color-muted)]">

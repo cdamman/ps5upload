@@ -9,7 +9,7 @@ import {
   Download,
   Home,
 } from "lucide-react";
-import { PageHeader, Button, ErrorCard, ConnectionGate, Card, EmptyState, Spinner } from "../../components";
+import { PageHeader, Button, ErrorCard, ConnectionGate, Card, EmptyState, Input, Spinner } from "../../components";
 import { useTr } from "../../state/lang";
 import { humanizePs5Error } from "../../lib/humanizeError";
 import {
@@ -181,42 +181,28 @@ export default function SmbBrowserScreen() {
         {!connected && (
           <Card className="mb-4 space-y-4">
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-              <label className="space-y-1 md:col-span-1">
-                <span className="text-sm text-[var(--color-muted)]">
-                  {tr("smb_server", undefined, "Server")}
-                </span>
-                <input
-                  type="text"
-                  value={server}
-                  onChange={(e) => setServer(e.target.value)}
-                  className="input font-mono"
-                  placeholder="192.168.1.100:445"
-                  inputMode="url"
-                />
-              </label>
-              <label className="space-y-1">
-                <span className="text-sm text-[var(--color-muted)]">
-                  {tr("smb_user", undefined, "Username")}
-                </span>
-                <input
-                  type="text"
-                  value={user}
-                  onChange={(e) => setUser(e.target.value)}
-                  className="input"
-                  placeholder={tr("smb_user_placeholder", "guest")}
-                />
-              </label>
-              <label className="space-y-1">
-                <span className="text-sm text-[var(--color-muted)]">
-                  {tr("smb_password", undefined, "Password")}
-                </span>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="input"
-                />
-              </label>
+              <Input
+                label={tr("smb_server", undefined, "Server")}
+                type="text"
+                value={server}
+                onChange={(e) => setServer(e.target.value)}
+                className="font-mono"
+                placeholder="192.168.1.100:445"
+                inputMode="url"
+              />
+              <Input
+                label={tr("smb_user", undefined, "Username")}
+                type="text"
+                value={user}
+                onChange={(e) => setUser(e.target.value)}
+                placeholder={tr("smb_user_placeholder", "guest")}
+              />
+              <Input
+                label={tr("smb_password", undefined, "Password")}
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
             </div>
             <Button variant="primary" size="md" onClick={() => void handleConnect()} disabled={loading}>
                 {loading ? <Spinner size={16} tone="inherit" /> : <Network size={16} />}

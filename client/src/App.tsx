@@ -42,6 +42,7 @@ const FanCurveScreen = lazy(() => import("./screens/FanCurve"));
 const NotificationsScreen = lazy(() => import("./screens/Notifications"));
 const CheatsScreen = lazy(() => import("./screens/Cheats"));
 const GameActivityScreen = lazy(() => import("./screens/GameActivity"));
+const GameHubScreen = lazy(() => import("./screens/GameHub"));
 const SdkChangerScreen = lazy(() => import("./screens/SdkChanger"));
 const TmdbScreen = lazy(() => import("./screens/Tmdb"));
 const FwSpoofScreen = lazy(() => import("./screens/FwSpoof"));
@@ -130,6 +131,15 @@ export default function App() {
           element={
             <Suspense fallback={<ScreenLoader />}>
               <LibraryScreen />
+            </Suspense>
+          }
+        />
+        {/* v5 Game Hub: everything about one game behind one URL. */}
+        <Route
+          path="/games/:title_id"
+          element={
+            <Suspense fallback={<ScreenLoader />}>
+              <GameHubScreen />
             </Suspense>
           }
         />

@@ -12,7 +12,7 @@ import {
   type PayloadLocalEntry,
   type AutoloaderInstallResult,
 } from "../../api/ps5";
-import { Button, ErrorCard, Modal, Spinner } from "../../components";
+import { Button, ErrorCard, Modal, Spinner, Checkbox } from "../../components";
 import { useTr } from "../../state/lang";
 import { formatBytes } from "../../lib/format";
 import { isMobile } from "../../lib/platform";
@@ -273,20 +273,16 @@ export default function UsbAutoloaderModal({
                     );
                   })}
                 </ul>
-                <label className="mt-3 flex items-center gap-2 text-xs">
-                  <input
-                    type="checkbox"
-                    checked={includeUs}
-                    onChange={(e) => setIncludeUs(e.target.checked)}
-                  />
-                  <span>
-                    {tr(
-                      "usb_wizard_include_us",
-                      undefined,
-                      "Also include ps5upload.elf so the stick boots the desktop tool's payload too",
-                    )}
-                  </span>
-                </label>
+                <Checkbox
+                  checked={includeUs}
+                  onChange={(checked) => setIncludeUs(checked)}
+                  label={tr(
+                    "usb_wizard_include_us",
+                    undefined,
+                    "Also include ps5upload.elf so the stick boots the desktop tool's payload too",
+                  )}
+                  className="mt-3 text-xs"
+                />
               </section>
             )}
 

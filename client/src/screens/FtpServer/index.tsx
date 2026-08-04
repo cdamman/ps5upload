@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Server, RefreshCw, Play, Square, CheckCircle2, AlertTriangle, Lock } from "lucide-react";
-import { PageHeader, Button, ErrorCard, ConnectionGate, Card, Spinner } from "../../components";
+import { PageHeader, Button, ErrorCard, ConnectionGate, Card, Spinner, Input } from "../../components";
 import { useTr } from "../../state/lang";
 import { useConnectionStore } from "../../state/connection";
 import { transferAddr } from "../../lib/addr";
@@ -124,59 +124,40 @@ export default function FtpServerScreen() {
             </div>
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <label className="space-y-1">
-                <span className="text-sm text-[var(--color-muted)]">
-                  {tr("ftp_port_label", undefined, "Port")}
-                </span>
-                <input
-                  type="number"
-                  value={port}
-                  onChange={(e) => setPort(parseInt(e.target.value) || 2121)}
-                  className="input"
-                  min={1}
-                  max={65535}
-                  inputMode="numeric"
-                />
-              </label>
+              <Input
+                label={tr("ftp_port_label", undefined, "Port")}
+                type="number"
+                value={port}
+                onChange={(e) => setPort(parseInt(e.target.value) || 2121)}
+                min={1}
+                max={65535}
+                inputMode="numeric"
+              />
 
-              <label className="space-y-1">
-                <span className="text-sm text-[var(--color-muted)]">
-                  {tr("ftp_root_label", undefined, "Root Directory")}
-                </span>
-                <input
-                  type="text"
-                  value={root}
-                  onChange={(e) => setRoot(e.target.value)}
-                  className="input font-mono"
-                  placeholder="/"
-                />
-              </label>
+              <Input
+                label={tr("ftp_root_label", undefined, "Root Directory")}
+                type="text"
+                value={root}
+                onChange={(e) => setRoot(e.target.value)}
+                className="font-mono"
+                placeholder="/"
+              />
 
-              <label className="space-y-1">
-                <span className="text-sm text-[var(--color-muted)]">
-                  {tr("ftp_user_label", undefined, "Username (optional)")}
-                </span>
-                <input
-                  type="text"
-                  value={user}
-                  onChange={(e) => setUser(e.target.value)}
-                  className="input"
-                  placeholder={tr("ftp_user_placeholder", "anonymous")}
-                />
-              </label>
+              <Input
+                label={tr("ftp_user_label", undefined, "Username (optional)")}
+                type="text"
+                value={user}
+                onChange={(e) => setUser(e.target.value)}
+                placeholder={tr("ftp_user_placeholder", "anonymous")}
+              />
 
-              <label className="space-y-1">
-                <span className="text-sm text-[var(--color-muted)]">
-                  {tr("ftp_pass_label", undefined, "Password (optional)")}
-                </span>
-                <input
-                  type="password"
-                  value={pass}
-                  onChange={(e) => setPass(e.target.value)}
-                  className="input"
-                  placeholder=""
-                />
-              </label>
+              <Input
+                label={tr("ftp_pass_label", undefined, "Password (optional)")}
+                type="password"
+                value={pass}
+                onChange={(e) => setPass(e.target.value)}
+                placeholder=""
+              />
             </div>
 
             <label className="flex items-center gap-2 text-sm">

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
   LayoutDashboard,
   Cpu,
@@ -13,17 +13,9 @@ import { useConnectionStore } from "../../state/connection";
 import { useActivityHistoryStore } from "../../state/activityHistory";
 import { useNotificationsStore } from "../../state/notifications";
 import { useRunningAppsStore } from "../../state/runningApps";
-import {
-  fetchHwTemps,
-  fetchHwPower,
-  type HwTemps,
-  type HwPower,
-} from "../../api/ps5";
+import { useSensors } from "../../state/sensors";
 import { PageHeader, ConnectionGate, ConsoleChip, Spinner } from "../../components";
 import { useTr } from "../../state/lang";
-import { useDocumentVisible } from "../../lib/visibility";
-import { transferAddr } from "../../lib/addr";
-import { transferScreenBusy } from "../../lib/ps5Transfers";
 
 /**
  * Live status dashboard. One-pane summary of every signal the app
@@ -48,9 +40,9 @@ export default function DashboardScreen() {
   const payloadVersion = useConnectionStore((s) => s.payloadVersion);
   const ps5Kernel = useConnectionStore((s) => s.ps5Kernel);
   const ucredElevated = useConnectionStore((s) => s.ucredElevated);
-  const visible = useDocumentVisible();
-  const [temps, setTemps] = useState<HwTemps | null>(null);
-  const [power, setPower] = useState<HwPower | null>(null);
+  const { sample: sensorSample } = useSensors(host);
+  const temps = sensorSample?.temps ?? null;
+  const power = sensorSample?.power ?? null;
   // Subscribe to the raw entries arrays — selectors that return
   // .slice()/.reverse() create a fresh array on every call, which
   // zustand v5 + React's useSyncExternalStore detects as an
@@ -65,48 +57,6 @@ export default function DashboardScreen() {
   );
   const recentNotifs = useMemo(() => allNotifs.slice(0, 5), [allNotifs]);
   const runningTitleIds = useRunningAppsStore((s) => s.titleIds);
-
-  // Live sensors belong to ONE console: drop the previous console's
-  // readings the instant the tab switches, instead of showing them under
-  // the new console's name until the next 5-second tick lands.
-  useEffect(() => {
-    setTemps(null);
-    setPower(null);
-  }, [host]);
-
-  useEffect(() => {
-    if (!visible || !host?.trim() || payloadStatus !== "up") return;
-    let cancelled = false;
-    const tick = async () => {
-      // Skip the sensor/power poll while an upload to THIS console is
-      // running: fetchHwTemps/fetchHwPower hit the transfer port (:9113),
-      // the same port the upload is bursting data over. A 5s cadence poll
-      // during a large multi-GB upload adds per-request contention that
-      // can collapse effective throughput — the exact "upload speed drops
-      // until it fails" symptom from issue #164. The sensors can wait
-      // until the transfer finishes.
-      if (transferScreenBusy(host)) return;
-      const addr = transferAddr(host.trim());
-      try {
-        const [t, p] = await Promise.all([
-          fetchHwTemps(addr).catch(() => null),
-          fetchHwPower(addr).catch(() => null),
-        ]);
-        if (!cancelled) {
-          if (t) setTemps(t);
-          if (p) setPower(p);
-        }
-      } catch {
-        // ignore
-      }
-    };
-    tick();
-    const id = window.setInterval(tick, 5000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(id);
-    };
-  }, [visible, host, payloadStatus]);
 
   return (
     <div className="p-6">

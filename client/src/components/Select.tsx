@@ -13,7 +13,7 @@ export interface SelectProps
   label?: string;
   error?: string;
   hint?: string;
-  options: SelectOption[];
+  options?: SelectOption[];
   block?: boolean;
   className?: string;
 }
@@ -66,7 +66,7 @@ export function Select({
       >
         {/* Allow caller-provided <option> children OR the `options` prop. */}
         {children ??
-          options.map((o) => (
+          (options ?? []).map((o) => (
             <option key={o.value} value={o.value}>
               {o.label}
             </option>

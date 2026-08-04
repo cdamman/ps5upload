@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Gauge, Play, AlertTriangle } from "lucide-react";
 import { netSpeedTestRun, type NetSpeedTestResult } from "../../api/ps5";
-import { Button, Spinner } from "../../components";
+import { Button, Spinner, Input } from "../../components";
 import { useTr } from "../../state/lang";
 
 /**
@@ -52,23 +52,22 @@ export default function SpeedTestPanel({ mgmtAddr }: { mgmtAddr: string }) {
         </h3>
       </header>
       <div className="flex flex-wrap items-center gap-2">
-        <label className="text-xs text-[var(--color-muted)]">
-          {tr("speed_test_rounds", undefined, "Rounds")}
-          <input
-            type="number"
-            min={4}
-            max={2048}
-            step={4}
-            value={rounds}
-            inputMode="numeric"
-            onChange={(e) => {
-              const n = parseInt(e.target.value, 10);
-              if (!isNaN(n)) setRounds(Math.max(4, Math.min(2048, n)));
-            }}
-            disabled={busy}
-            className="ml-2 w-20 rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 text-xs"
-          />
-        </label>
+        <Input
+          label={tr("speed_test_rounds", undefined, "Rounds")}
+          type="number"
+          min={4}
+          max={2048}
+          step={4}
+          value={rounds}
+          inputMode="numeric"
+          onChange={(e) => {
+            const n = parseInt(e.target.value, 10);
+            if (!isNaN(n)) setRounds(Math.max(4, Math.min(2048, n)));
+          }}
+          disabled={busy}
+          block={false}
+          className="w-20 text-xs"
+        />
         <Button
           variant="primary"
           size="sm"

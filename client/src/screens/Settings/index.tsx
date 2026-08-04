@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import {
   Settings as SettingsIcon,
   Moon as SleepIcon,
-  Globe,
   Upload as UploadIcon,
   FileJson,
   Download,
@@ -33,10 +32,15 @@ import {
   uiScaleLabel,
 } from "../../state/uiScale";
 
-import { PageHeader, Spinner } from "../../components";
-import { Toggle } from "../../components/Toggle";
+import {
+  PageHeader,
+  Spinner,
+  Input,
+  Select,
+  Checkbox,
+  Toggle,
+} from "../../components";
 import { SegmentedControl } from "../../components/SegmentedControl";
-import { Select } from "../../components/Select";
 import {
   useAccessibilityStore,
   type MotionMode,
@@ -366,21 +370,23 @@ function EngineUrlSection() {
 
   return (
     <Section title={tr("settings_card_engine", undefined, "Engine")}>
-      <label className="grid gap-1.5 text-sm">
-        <span className="font-medium">
-          {tr("engine_url_label", undefined, "Engine URL")}
-        </span>
-        <div className="flex items-center gap-2">
-          <input
-            type="text"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onBlur={() => setEngineUrl(draft)}
-            placeholder={DEFAULT_ENGINE_URL}
-            spellCheck={false}
-            className="flex-1 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-sm"
-          />
-          {engineUrl !== DEFAULT_ENGINE_URL && (
+      <Input
+        label={tr("engine_url_label", undefined, "Engine URL")}
+        type="text"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => setEngineUrl(draft)}
+        placeholder={DEFAULT_ENGINE_URL}
+        spellCheck={false}
+        hint={tr(
+          "engine_url_hint",
+          undefined,
+          "Where the app reaches the ps5upload-engine. Leave as the default local sidecar, or point at a remote/self-hosted engine. Restart the app after switching between local and remote.",
+        )}
+        block={false}
+        className="flex-1"
+        rightSlot={
+          engineUrl !== DEFAULT_ENGINE_URL ? (
             <button
               type="button"
               onClick={() => {
@@ -391,16 +397,9 @@ function EngineUrlSection() {
             >
               {tr("engine_url_reset", undefined, "Reset")}
             </button>
-          )}
-        </div>
-        <span className="text-xs text-[var(--color-muted)]">
-          {tr(
-            "engine_url_hint",
-            undefined,
-            "Where the app reaches the ps5upload-engine. Leave as the default local sidecar, or point at a remote/self-hosted engine. Restart the app after switching between local and remote.",
-          )}
-        </span>
-      </label>
+          ) : null
+        }
+      />
     </Section>
   );
 }
@@ -418,21 +417,23 @@ function SavePathSection() {
 
   return (
     <Section title={tr("settings_card_save_path", undefined, "Save backups")}>
-      <label className="grid gap-1.5 text-sm">
-        <span className="font-medium">
-          {tr("save_path_label", undefined, "USB save path")}
-        </span>
-        <div className="flex items-center gap-2">
-          <input
-            type="text"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onBlur={() => setSavePath(draft)}
-            placeholder={DEFAULT_SAVE_PATH}
-            spellCheck={false}
-            className="flex-1 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-sm"
-          />
-          {savePath !== DEFAULT_SAVE_PATH && (
+      <Input
+        label={tr("save_path_label", undefined, "USB save path")}
+        type="text"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => setSavePath(draft)}
+        placeholder={DEFAULT_SAVE_PATH}
+        spellCheck={false}
+        hint={tr(
+          "save_path_hint",
+          undefined,
+          "PS5-side base folder for \"Save to USB storage\" backups (e.g. a USB stick plugged into the console). Each backup lands at <path>/<title id>/<timestamp>/<title id>.zip.",
+        )}
+        block={false}
+        className="flex-1"
+        rightSlot={
+          savePath !== DEFAULT_SAVE_PATH ? (
             <button
               type="button"
               onClick={() => {
@@ -443,16 +444,9 @@ function SavePathSection() {
             >
               {tr("save_path_reset", undefined, "Reset")}
             </button>
-          )}
-        </div>
-        <span className="text-xs text-[var(--color-muted)]">
-          {tr(
-            "save_path_hint",
-            undefined,
-            "PS5-side base folder for \"Save to USB storage\" backups (e.g. a USB stick plugged into the console). Each backup lands at <path>/<title id>/<timestamp>/<title id>.zip.",
-          )}
-        </span>
-      </label>
+          ) : null
+        }
+      />
     </Section>
   );
 }
@@ -522,20 +516,14 @@ export default function SettingsScreen() {
         </GroupHeading>
 
         <Section title={tr("language", undefined, "Language")}>
-          <label className="flex items-center gap-3 text-sm">
-            <Globe size={14} className="text-[var(--color-muted)]" />
-            <select
-              value={lang}
-              onChange={(e) => setLang(e.target.value as LanguageCode)}
-              className="flex-1 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-sm"
-            >
-              {LANGUAGES.map((l) => (
-                <option key={l.code} value={l.code}>
-                  {l.label}
-                </option>
-              ))}
-            </select>
-          </label>
+          <Select
+            value={lang}
+            onChange={(e) => setLang(e.target.value as LanguageCode)}
+            options={LANGUAGES.map((l) => ({ value: l.code, label: l.label }))}
+            block={false}
+            className="flex-1"
+            aria-label={tr("language", undefined, "Language")}
+          />
         </Section>
 
         <Section
@@ -564,31 +552,29 @@ export default function SettingsScreen() {
               : tr("keep_awake", undefined, "Keep computer awake")
           }
         >
-          <label className="flex items-start gap-3 text-sm">
-            <input
-              type="checkbox"
+          <div>
+            <Checkbox
               checked={enabled}
               disabled={!supported}
-              onChange={(e) => setEnabled(e.target.checked)}
-              className="mt-0.5 accent-[var(--color-accent)]"
-            />
-            <div>
-              <div className="flex items-center gap-2 font-medium">
-                <SleepIcon size={14} />
-                {mobile
-                  ? tr(
-                      "keep_awake_on_mobile",
-                      undefined,
-                      "Keep the screen on while PS5 Upload is in the foreground",
-                    )
-                  : tr(
-                      "keep_awake_on",
-                      undefined,
-                      "Keep the computer awake while PS5 Upload is open",
-                    )}
-              </div>
-              <div className="mt-0.5 text-xs text-[var(--color-muted)]">
-                {mobile
+              onChange={(checked) => setEnabled(checked)}
+              label={
+                <span className="inline-flex items-center gap-2 font-medium">
+                  <SleepIcon size={14} />
+                  {mobile
+                    ? tr(
+                        "keep_awake_on_mobile",
+                        undefined,
+                        "Keep the screen on while PS5 Upload is in the foreground",
+                      )
+                    : tr(
+                        "keep_awake_on",
+                        undefined,
+                        "Keep the computer awake while PS5 Upload is open",
+                      )}
+                </span>
+              }
+              hint={
+                mobile
                   ? tr(
                       "keep_awake_hint_mobile",
                       undefined,
@@ -598,30 +584,30 @@ export default function SettingsScreen() {
                       "keep_awake_hint",
                       undefined,
                       "Uploads, downloads, and installs already keep the computer awake automatically. Turn this on to also block sleep while the app is open but idle.",
+                    )
+              }
+            />
+            {!supported && (
+              <div className="mt-1 text-xs text-[var(--color-warn)]">
+                {mobile
+                  ? tr(
+                      "keep_awake_unsupported_mobile",
+                      undefined,
+                      "Screen wake lock isn't available in this WebView.",
+                    )
+                  : tr(
+                      "keep_awake_unsupported",
+                      undefined,
+                      "Not yet supported on this platform.",
                     )}
               </div>
-              {!supported && (
-                <div className="mt-1 text-xs text-[var(--color-warn)]">
-                  {mobile
-                    ? tr(
-                        "keep_awake_unsupported_mobile",
-                        undefined,
-                        "Screen wake lock isn't available in this WebView.",
-                      )
-                    : tr(
-                        "keep_awake_unsupported",
-                        undefined,
-                        "Not yet supported on this platform.",
-                      )}
-                </div>
-              )}
-              {lastError && (
-                <div className="mt-1 text-xs text-[var(--color-bad)]">
-                  {lastError}
-                </div>
-              )}
-            </div>
-          </label>
+            )}
+            {lastError && (
+              <div className="mt-1 text-xs text-[var(--color-bad)]">
+                {lastError}
+              </div>
+            )}
+          </div>
         </Section>
 
         <EngineUrlSection />
@@ -642,159 +628,116 @@ export default function SettingsScreen() {
           title={tr("settings_card_upload_behavior", undefined, "Behavior")}
         >
           <div className="grid gap-3">
-            <label className="flex items-start gap-3 text-sm">
-              <input
-                type="checkbox"
-                checked={alwaysOverwrite}
-                onChange={(e) => setAlwaysOverwrite(e.target.checked)}
-                className="mt-0.5 accent-[var(--color-accent)]"
-              />
-              <div>
-                <div className="flex items-center gap-2 font-medium">
+            <Checkbox
+              checked={alwaysOverwrite}
+              onChange={(checked) => setAlwaysOverwrite(checked)}
+              label={
+                <span className="inline-flex items-center gap-2 font-medium">
                   <UploadIcon size={14} />
                   {tr(
                     "always_overwrite",
                     undefined,
                     "Always overwrite without asking",
                   )}
-                </div>
-                <div className="mt-0.5 text-xs text-[var(--color-muted)]">
-                  {tr(
-                    "always_overwrite_hint",
-                    undefined,
-                    "Skip the confirmation dialog when a destination already has files. Leave off to see the Override / Resume / Cancel prompt.",
-                  )}
-                </div>
-              </div>
-            </label>
+                </span>
+              }
+              hint={tr(
+                "always_overwrite_hint",
+                undefined,
+                "Skip the confirmation dialog when a destination already has files. Leave off to see the Override / Resume / Cancel prompt.",
+              )}
+            />
 
-            <label className="flex items-start gap-3 text-sm">
-              <input
-                type="checkbox"
-                checked={showTransferFiles}
-                onChange={(e) => setShowTransferFiles(e.target.checked)}
-                className="mt-0.5 accent-[var(--color-accent)]"
-              />
-              <div>
-                <div className="font-medium">
-                  {tr(
-                    "show_file_list",
-                    undefined,
-                    "Show file list during transfer",
-                  )}
-                </div>
-                <div className="mt-0.5 text-xs text-[var(--color-muted)]">
-                  {tr(
-                    "show_file_list_hint",
-                    undefined,
-                    "Display the scrollable list of files being transferred beneath the progress bar. Turn off if the list feels noisy on folders with thousands of files — you'll still see overall progress, speed, and ETA.",
-                  )}
-                </div>
-              </div>
-            </label>
+            <Checkbox
+              checked={showTransferFiles}
+              onChange={(checked) => setShowTransferFiles(checked)}
+              label={tr(
+                "show_file_list",
+                undefined,
+                "Show file list during transfer",
+              )}
+              hint={tr(
+                "show_file_list_hint",
+                undefined,
+                "Display the scrollable list of files being transferred beneath the progress bar. Turn off if the list feels noisy on folders with thousands of files — you'll still see overall progress, speed, and ETA.",
+              )}
+            />
 
-            <label className="flex cursor-pointer items-start gap-3 text-sm">
-              <input
-                type="checkbox"
-                className="mt-0.5 h-4 w-4"
-                checked={autoResume}
-                onChange={(e) => setAutoResume(e.target.checked)}
-              />
-              <div>
-                <div className="font-medium">
-                  {tr(
-                    "upload_auto_resume",
-                    undefined,
-                    "Auto-resume uploads after a failure",
-                  )}
-                </div>
-                <div className="mt-0.5 text-xs text-[var(--color-muted)]">
-                  {tr(
-                    "upload_auto_resume_hint",
-                    undefined,
-                    "If an upload drops mid-transfer — most often because the PS5 payload crashed — automatically re-send the payload and resume from where it left off, retrying a few times before giving up. Fatal problems like the PS5 running out of space still stop right away. On by default.",
-                  )}
-                </div>
-              </div>
-            </label>
+            <Checkbox
+              checked={autoResume}
+              onChange={(checked) => setAutoResume(checked)}
+              label={tr(
+                "upload_auto_resume",
+                undefined,
+                "Auto-resume uploads after a failure",
+              )}
+              hint={tr(
+                "upload_auto_resume_hint",
+                undefined,
+                "If an upload drops mid-transfer — most often because the PS5 payload crashed — automatically re-send the payload and resume from where it left off, retrying a few times before giving up. Fatal problems like the PS5 running out of space still stop right away. On by default.",
+              )}
+            />
 
-            <label className="flex cursor-pointer items-start gap-3 text-sm">
-              <input
-                type="checkbox"
-                className="mt-0.5 h-4 w-4"
-                checked={autoRedeployOnWake}
-                onChange={(e) => setAutoRedeployOnWake(e.target.checked)}
-              />
-              <div>
-                <div className="font-medium">
-                  {tr(
-                    "upload_auto_redeploy_on_wake",
-                    undefined,
-                    "Reconnect automatically after rest mode / network drops",
-                  )}
-                </div>
-                <div className="mt-0.5 text-xs text-[var(--color-muted)]">
-                  {tr(
-                    "upload_auto_redeploy_on_wake_hint",
-                    undefined,
-                    "When the PS5's helper goes offline (rest mode, a WiFi switch, or a payload crash), keep trying to re-send it in the background — so the helper, your fan threshold, and the upload port come back by themselves once the console is reachable again, without clicking Connect. On by default.",
-                  )}
-                </div>
-              </div>
-            </label>
+            <Checkbox
+              checked={autoRedeployOnWake}
+              onChange={(checked) => setAutoRedeployOnWake(checked)}
+              label={tr(
+                "upload_auto_redeploy_on_wake",
+                undefined,
+                "Reconnect automatically after rest mode / network drops",
+              )}
+              hint={tr(
+                "upload_auto_redeploy_on_wake_hint",
+                undefined,
+                "When the PS5's helper goes offline (rest mode, a WiFi switch, or a payload crash), keep trying to re-send it in the background — so the helper, your fan threshold, and the upload port come back by themselves once the console is reachable again, without clicking Connect. On by default.",
+              )}
+            />
 
-            <label className="flex cursor-pointer items-start gap-3 text-sm">
-              <input
-                type="checkbox"
-                className="mt-0.5 h-4 w-4"
-                checked={systemFileRead}
-                onChange={(e) => setSystemFileRead(e.target.checked)}
-              />
-              <div>
-                <div className="font-medium">
-                  {tr(
-                    "upload_system_file_read",
-                    undefined,
-                    "Allow downloading system files (/system, /system_data)",
-                  )}
-                </div>
-                <div className="mt-0.5 text-xs text-[var(--color-muted)]">
-                  {tr(
-                    "upload_system_file_read_hint",
-                    undefined,
-                    "Lets the FileSystem browser download files from read-only system partitions that are normally blocked (e.g. /system/common/lib, /system_data/priv). Read-only — never affects delete, move, or write. Off by default; turn on only if you know what you're doing.",
-                  )}
-                </div>
-              </div>
-            </label>
+            <Checkbox
+              checked={systemFileRead}
+              onChange={(checked) => setSystemFileRead(checked)}
+              label={tr(
+                "upload_system_file_read",
+                undefined,
+                "Allow downloading system files (/system, /system_data)",
+              )}
+              hint={tr(
+                "upload_system_file_read_hint",
+                undefined,
+                "Lets the FileSystem browser download files from read-only system partitions that are normally blocked (e.g. /system/common/lib, /system_data/priv). Read-only — never affects delete, move, or write. Off by default; turn on only if you know what you're doing.",
+              )}
+            />
 
             <div className="text-sm">
               <div className="flex items-center gap-2 font-medium">
                 <Zap size={14} />
-                <label htmlFor="keep-ps5-awake-mode">
-                  {tr("keep_ps5_awake_mode", "Keep the PS5 awake")}
-                </label>
-                <select
-                  id="keep-ps5-awake-mode"
-                  value={keepPs5AwakeMode}
-                  onChange={(e) =>
-                    setKeepPs5AwakeMode(
-                      e.target.value as "off" | "transfers" | "always",
-                    )
-                  }
-                  className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 text-xs"
-                >
-                  <option value="off">
-                    {tr("keep_awake_mode_off", "Off")}
-                  </option>
-                  <option value="transfers">
-                    {tr("keep_awake_mode_transfers", "During transfers")}
-                  </option>
-                  <option value="always">
-                    {tr("keep_awake_mode_always", "Always while connected")}
-                  </option>
-                </select>
+                {tr("keep_ps5_awake_mode", "Keep the PS5 awake")}
               </div>
+              <Select
+                id="keep-ps5-awake-mode"
+                value={keepPs5AwakeMode}
+                onChange={(e) =>
+                  setKeepPs5AwakeMode(
+                    e.target.value as "off" | "transfers" | "always",
+                  )
+                }
+                options={[
+                  { value: "off", label: tr("keep_awake_mode_off", "Off") },
+                  {
+                    value: "transfers",
+                    label: tr("keep_awake_mode_transfers", "During transfers"),
+                  },
+                  {
+                    value: "always",
+                    label: tr(
+                      "keep_awake_mode_always",
+                      "Always while connected",
+                    ),
+                  },
+                ]}
+                block={false}
+                className="mt-1 text-xs"
+              />
               <div className="mt-0.5 text-xs text-[var(--color-muted)]">
                 {tr(
                   "keep_ps5_awake_mode_hint",
@@ -803,58 +746,44 @@ export default function SettingsScreen() {
               </div>
             </div>
 
-            <label className="flex cursor-pointer items-start gap-3 text-sm">
-              <input
-                type="checkbox"
-                className="mt-0.5 h-4 w-4"
-                checked={restAfterUpload}
-                onChange={(e) => setRestAfterUpload(e.target.checked)}
-              />
-              <div>
-                <div className="font-medium">
-                  {tr(
-                    "upload_rest_after",
-                    undefined,
-                    "Put the PS5 in rest mode after uploads finish",
-                  )}
-                </div>
-                <div className="mt-0.5 text-xs text-[var(--color-muted)]">
-                  {tr(
-                    "upload_rest_after_hint",
-                    undefined,
-                    "When a console's upload queue finishes, ask it to enter rest mode — handy for an overnight queue. Only fires when at least one upload actually completed (not after a Stop or an all-failed run). Off by default. Standby may be unavailable on some firmware; you'll get a notice if it's declined.",
-                  )}
-                </div>
-              </div>
-            </label>
+            <Checkbox
+              checked={restAfterUpload}
+              onChange={(checked) => setRestAfterUpload(checked)}
+              label={tr(
+                "upload_rest_after",
+                undefined,
+                "Put the PS5 in rest mode after uploads finish",
+              )}
+              hint={tr(
+                "upload_rest_after_hint",
+                undefined,
+                "When a console's upload queue finishes, ask it to enter rest mode — handy for an overnight queue. Only fires when at least one upload actually completed (not after a Stop or an all-failed run). Off by default. Standby may be unavailable on some firmware; you'll get a notice if it's declined.",
+              )}
+            />
           </div>
         </Section>
 
         <Section title={tr("settings_card_upload_speed", undefined, "Speed")}>
           <div className="grid gap-3">
             <div className="text-sm">
-              <div className="flex items-center gap-3">
-                <label htmlFor="upload-streams" className="font-medium">
-                  {tr("upload_streams", undefined, "Parallel upload streams")}
-                </label>
-                <select
-                  id="upload-streams"
-                  value={uploadStreams}
-                  onChange={(e) => setUploadStreams(Number(e.target.value))}
-                  className="rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 text-sm"
-                >
-                  {Array.from(
-                    { length: MAX_UPLOAD_STREAMS },
-                    (_, i) => i + 1,
-                  ).map((n) => (
-                    <option key={n} value={n}>
-                      {n === 1
-                        ? tr("upload_streams_off", undefined, "1 (single)")
-                        : `${n}`}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <Select
+                id="upload-streams"
+                label={tr("upload_streams", undefined, "Parallel upload streams")}
+                value={uploadStreams}
+                onChange={(e) => setUploadStreams(Number(e.target.value))}
+                options={Array.from(
+                  { length: MAX_UPLOAD_STREAMS },
+                  (_, i) => i + 1,
+                ).map((n) => ({
+                  value: String(n),
+                  label:
+                    n === 1
+                      ? tr("upload_streams_off", undefined, "1 (single)")
+                      : `${n}`,
+                }))}
+                block={false}
+                className="text-sm"
+              />
               <div className="mt-0.5 text-xs text-[var(--color-muted)]">
                 {tr(
                   "upload_streams_hint",
@@ -897,27 +826,21 @@ export default function SettingsScreen() {
         </GroupHeading>
 
         <Section title={tr("notifications", undefined, "Notifications")}>
-          <label className="flex items-start gap-3 text-sm">
-            <input
-              type="checkbox"
-              checked={osNotifyEnabled}
-              onChange={(e) => setOsNotifyEnabled(e.target.checked)}
-              className="mt-0.5 accent-[var(--color-accent)]"
-            />
-            <div>
-              <div className="flex items-center gap-2 font-medium">
+          <Checkbox
+            checked={osNotifyEnabled}
+            onChange={(checked) => setOsNotifyEnabled(checked)}
+            label={
+              <span className="inline-flex items-center gap-2 font-medium">
                 <Bell size={14} />
                 {tr("os_notify_label", undefined, "Show system notifications")}
-              </div>
-              <div className="mt-0.5 text-xs text-[var(--color-muted)]">
-                {tr(
-                  "os_notify_hint",
-                  undefined,
-                  "Mirror in-app notifications (transfer done, errors, etc.) to your operating system's notification center — but only when the app is in the background, so you're not notified twice. You may be asked to grant notification permission.",
-                )}
-              </div>
-            </div>
-          </label>
+              </span>
+            }
+            hint={tr(
+              "os_notify_hint",
+              undefined,
+              "Mirror in-app notifications (transfer done, errors, etc.) to your operating system's notification center — but only when the app is in the background, so you're not notified twice. You may be asked to grant notification permission.",
+            )}
+          />
           <div className="my-3 border-t border-[var(--color-border)]" />
           <NotifPrunePanel />
         </Section>
@@ -1109,7 +1032,7 @@ function SchedulesPanel() {
         </ul>
       )}
       <div className="flex flex-wrap items-center gap-2 rounded-md border border-dashed border-[var(--color-border)] p-2 text-xs">
-        <input
+        <Input
           type="text"
           value={labelDraft}
           onChange={(e) => setLabelDraft(e.target.value)}
@@ -1117,28 +1040,32 @@ function SchedulesPanel() {
             "settings_schedule_label_placeholder",
             "Label (e.g. nightly tick)",
           )}
-          className="flex-1 rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 text-xs"
+          block={false}
+          className="flex-1 text-xs"
         />
-        <input
+        <Input
           type="time"
           value={hhmmDraft}
           onChange={(e) => setHhmmDraft(e.target.value)}
-          className="rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 text-xs"
+          block={false}
+          className="text-xs"
         />
-        <select
+        <Select
           value={actionDraft}
           onChange={(e) =>
             setActionDraft(e.target.value as "notif" | "power_tick")
           }
-          className="rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 text-xs"
-        >
-          <option value="notif">
-            {tr("settings_notify_only", "Notify only")}
-          </option>
-          <option value="power_tick">
-            {tr("settings_ps5_power_tick", "PS5 power tick")}
-          </option>
-        </select>
+          options={[
+            { value: "notif", label: tr("settings_notify_only", "Notify only") },
+            {
+              value: "power_tick",
+              label: tr("settings_ps5_power_tick", "PS5 power tick"),
+            },
+          ]}
+          block={false}
+          className="text-xs"
+          aria-label={tr("settings_section_schedules", undefined, "Schedules")}
+        />
         <button
           type="button"
           onClick={add}
@@ -1575,7 +1502,7 @@ function BandwidthControl({
         <label htmlFor="bw-cap" className="font-medium">
           {tr("bandwidth_cap_label", undefined, "Upload speed limit")}
         </label>
-        <input
+        <Input
           id="bw-cap"
           type="number"
           min={0}
@@ -1586,7 +1513,8 @@ function BandwidthControl({
           onChange={(e) =>
             onChange(Math.max(0, Math.floor(Number(e.target.value) || 0)))
           }
-          className="w-20 rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 text-sm tabular-nums"
+          block={false}
+          className="w-20 tabular-nums"
         />
         <span className="text-xs text-[var(--color-muted)]">{tr("upload_unit_mbs", "MB/s")}</span>
       </div>
@@ -1809,14 +1737,10 @@ function UpdatesPanel() {
       )}
       {/* Auto-check preference (default on). When off, the launch check is
           skipped entirely — the user drives updates from the button below. */}
-      <label className="flex items-start gap-2.5 text-xs">
-        <input
-          type="checkbox"
-          checked={autoCheckEnabled}
-          onChange={(e) => setAutoCheckEnabled(e.target.checked)}
-          className="mt-0.5 h-3.5 w-3.5 accent-[var(--color-accent)]"
-        />
-        <span>
+      <Checkbox
+        checked={autoCheckEnabled}
+        onChange={(checked) => setAutoCheckEnabled(checked)}
+        label={
           <span className="font-medium text-[var(--color-text)]">
             {tr(
               "update_autocheck_label",
@@ -1824,15 +1748,14 @@ function UpdatesPanel() {
               "Check for updates automatically",
             )}
           </span>
-          <span className="block text-[var(--color-muted)]">
-            {tr(
-              "update_autocheck_hint",
-              undefined,
-              "Looks for a new release on launch (at most once a day) and notifies you if one is available.",
-            )}
-          </span>
-        </span>
-      </label>
+        }
+        hint={tr(
+          "update_autocheck_hint",
+          undefined,
+          "Looks for a new release on launch (at most once a day) and notifies you if one is available.",
+        )}
+        className="text-xs"
+      />
       <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"

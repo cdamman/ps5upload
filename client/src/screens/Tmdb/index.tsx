@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { Database, Search, AlertTriangle, CheckCircle2, RefreshCw } from "lucide-react";
-import { PageHeader, Button, ErrorCard, ConnectionGate, Card, Spinner } from "../../components";
+import { PageHeader, Button, ErrorCard, ConnectionGate, Card, Spinner, Checkbox } from "../../components";
 import { useTr } from "../../state/lang";
 import { useConnectionStore } from "../../state/connection";
 import { transferAddr } from "../../lib/addr";
@@ -88,15 +88,12 @@ export default function TmdbScreen() {
                 if (e.key === "Enter") void handleFetch();
               }}
             />
-            <label className="flex items-center gap-2 text-sm whitespace-nowrap">
-              <input
-                type="checkbox"
-                checked={refresh}
-                onChange={(e) => setRefresh(e.target.checked)}
-                className="checkbox"
-              />
-              {tr("tmdb_refresh", undefined, "Force refresh")}
-            </label>
+            <Checkbox
+              checked={refresh}
+              onChange={(checked) => setRefresh(checked)}
+              label={tr("tmdb_refresh", undefined, "Force refresh")}
+              className="whitespace-nowrap text-sm"
+            />
             <Button variant="primary" size="md" onClick={() => void handleFetch()} disabled={loading || !titleId.trim()}>
               {loading ? <Spinner size={16} tone="inherit" /> : <Search size={16} />}
               {tr("tmdb_fetch", undefined, "Fetch")}

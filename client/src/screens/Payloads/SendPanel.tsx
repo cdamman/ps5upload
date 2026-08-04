@@ -14,7 +14,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 
-import { Button, Spinner } from "../../components";
+import { Button, Spinner, Input } from "../../components";
 
 import { useConnectionStore, PS5_LOADER_PORT } from "../../state/connection";
 import { sendPayload } from "../../api/ps5";
@@ -394,42 +394,28 @@ export default function SendPanel() {
               `* { min-width:0 }` base rule lets a 1fr cell shrink past
               min-content), which wrapped "PS5 IP ADDRESS" one char per line. */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(10rem,1fr)_minmax(5rem,8rem)]">
-            <div>
-              <label className="block text-xs uppercase tracking-wide text-[var(--color-muted)]">
-                {tr("sendpayload_ps5_ip_address", undefined, "PS5 IP address")}
-              </label>
-              <input
-                value={host}
-                onChange={(e) => {
-                  setHost(e.target.value);
-                  clearSendBannerOnEdit();
-                }}
-                placeholder="192.168.1.50"
-                inputMode="decimal"
-                className="mt-2 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]"
-              />
-            </div>
-            <div>
-              <label className="block text-xs uppercase tracking-wide text-[var(--color-muted)]">
-                {tr("sendpayload_port", undefined, "Port")}
-              </label>
-              <input
-                value={portText}
-                onChange={(e) => {
-                  setPortText(e.target.value);
-                  setPortManuallyEdited(true);
-                  clearSendBannerOnEdit();
-                }}
-                placeholder={String(PS5_LOADER_PORT)}
-                inputMode="numeric"
-                className={
-                  "mt-2 w-full rounded-md border bg-[var(--color-surface)] px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)] " +
-                  (portValid
-                    ? "border-[var(--color-border)]"
-                    : "border-[var(--color-bad)]")
-                }
-              />
-            </div>
+            <Input
+              label={tr("sendpayload_ps5_ip_address", undefined, "PS5 IP address")}
+              value={host}
+              onChange={(e) => {
+                setHost(e.target.value);
+                clearSendBannerOnEdit();
+              }}
+              placeholder="192.168.1.50"
+              inputMode="decimal"
+            />
+            <Input
+              label={tr("sendpayload_port", undefined, "Port")}
+              value={portText}
+              onChange={(e) => {
+                setPortText(e.target.value);
+                setPortManuallyEdited(true);
+                clearSendBannerOnEdit();
+              }}
+              placeholder={String(PS5_LOADER_PORT)}
+              inputMode="numeric"
+              error={portValid ? undefined : " "}
+            />
           </div>
           <div className="mt-1 text-xs text-[var(--color-muted)]">
             {tr("sendpayload_sent_to", undefined, "Sent to")}{" "}
