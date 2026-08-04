@@ -139,8 +139,23 @@ owns no nav data; `Sidebar.tsx` renders the desktop variant only.
 
 ## 6. Audit harness
 
-`node scripts/mobile-audit.mjs` drives Playwright over every route at
-448×997 and reports:
+**As-built note.** The original plan had `scripts/mobile-audit.mjs`
+importing Playwright directly. Playwright turned out not to be installed
+anywhere in the repo, and the root `package.json` deliberately carries
+zero devDependencies — adding a browser driver would mean a ~500 MB
+download on every dev machine and CI runner. The harness was therefore
+split: `scripts/mobile-audit-probe.mjs` holds the probe, allowlist
+filtering and report formatting with **no driver dependency**, injectable
+into whatever automation is available, and runs standalone if Playwright
+is ever installed.
+
+One correctness change came out of running it: the probe unions a
+checkbox/radio with its `<label for>` before measuring. Those controls
+are drawn at ~20 px on purpose, and what the user taps is the control
+*plus* its label — measuring the bare input reports a false failure on a
+correctly-built row.
+
+`scripts/mobile-audit-probe.mjs` walks every route at 448×997 and reports:
 
 1. Interactive elements (`a`, `button`, `[role=button]`, `input`,
    `select`, `textarea`) that are **visible** (non-zero box, not
@@ -192,3 +207,16 @@ enforces this.
 The audit→fix→re-measure cycle runs until the harness reports zero, not
 for a fixed number of passes. If findings stop decreasing across
 consecutive rounds, stop and report rather than churn.
+
+**Outcome:** converged in five rounds — routes with findings went
+18 → 10 → 7 → 5 → 3 → 0 across 41 routes / 236 interactive elements.
+Nothing was allowlisted; every finding was a real defect. Most of the app
+was fixed by six shared-primitive edits (Button, IconButton, Toggle,
+SegmentedControl, Checkbox, and one `index.css` media query for
+`.input`/`.select`); the remainder were hand-rolled controls that
+bypassed the primitives.
+
+**Methodology trap worth recording:** after a CSS change, the sweep must
+start from a full page load. Tailwind regenerates utilities on scan, and
+an in-page (`pushState`) sweep against a hot-reloaded page measured stale
+styles — it reported a fix as ineffective when it had actually worked.
