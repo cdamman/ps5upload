@@ -383,8 +383,8 @@ export function TabBottomNav() {
             onClick={() => setMoreOpen(false)}
             className="anim-scrim absolute inset-0 bg-[var(--overlay-scrim)]"
           />
-          <div className="anim-sheet elev-3 absolute inset-x-0 bottom-0 max-h-[80dvh] overflow-y-auto rounded-t-xl bg-[var(--color-surface-2)] pb-[env(safe-area-inset-bottom)]">
-            <div className="sticky top-0 flex items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-surface-2)] px-4 py-3">
+          <div className="anim-sheet elev-3 absolute inset-x-0 bottom-0 flex max-h-[80dvh] flex-col overflow-hidden rounded-t-xl bg-[var(--color-surface-2)] pb-[env(safe-area-inset-bottom)]">
+            <div className="flex shrink-0 items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-surface-2)] px-4 py-3">
               <span className="font-semibold">
                 {tr("v5_tab_more", "More")}
               </span>
@@ -397,7 +397,9 @@ export function TabBottomNav() {
                 <X size={18} />
               </button>
             </div>
-            <Sidebar onNavigate={() => setMoreOpen(false)} />
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <Sidebar onNavigate={() => setMoreOpen(false)} />
+            </div>
           </div>
         </div>
       )}
