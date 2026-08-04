@@ -78,8 +78,15 @@ export function Input({
           aria-describedby={describedBy}
           className={[
             "input",
-            leftIcon ? "pl-9" : "",
-            rightSlot ? "pr-2" : "",
+            // `!` matters: `.input` is defined as UNLAYERED css in
+            // index.css and sets the `padding` shorthand, which beats
+            // Tailwind's layered padding utilities. Without the
+            // important modifier the icon renders on top of the text —
+            // measured at 11.25px of left padding against an icon
+            // occupying 29-47px. Applies to every leftIcon/rightSlot
+            // call site, not just one screen.
+            leftIcon ? "pl-9!" : "",
+            rightSlot ? "pr-12!" : "",
             error ? "border-[var(--color-bad)]" : "",
             className,
           ]
