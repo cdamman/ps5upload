@@ -23,8 +23,11 @@ import type { LucideIcon } from "lucide-react";
  *   Phase 5.1 migration.
  *
  * Mobile (<md): a 56px bottom nav with the same 5 tabs. The mobile
- *   top-bar hamburger is replaced by this nav; the "More" tab opens the
- *   legacy sidebar as a bottom sheet.
+ *   top-bar hamburger is replaced by this nav; the "More" tab navigates
+ *   to the /more screen. It used to open the desktop Sidebar in a bottom
+ *   sheet — a 270px-wide column in a 448px sheet, 36px rows, and two
+ *   nested scrollers. A real route fixes all three and makes the Android
+ *   back button work without special-casing.
  *
  * Routing note: each tab links to the *current* v4 route that best
  *   represents that v5 tab. As Phase 5.1 builds each new tab shell,
@@ -181,14 +184,14 @@ export function TabRail() {
   return (
     <>
       <nav
-        aria-label={tr("v5_tab_primary_nav", "Primary")}
+        aria-label={tr("v5_tab_primary_nav", undefined, "Primary")}
         className="hidden md:flex md:h-full md:w-14 flex-col items-center justify-center gap-1 border-r border-[var(--color-border)] bg-[var(--color-surface-2)] pt-[env(safe-area-inset-top)]"
       >
         {TABS.map((tab, i) => {
           const Icon = tab.icon;
           const active = activeTab === tab.id;
-          const label = tr(`v5_tab_${tab.id}`, tab.id);
-          const desc = tr(`v5_tab_${tab.id}_desc`, "");
+          const label = tr(`v5_tab_${tab.id}`, undefined, tab.id);
+          const desc = tr(`v5_tab_${tab.id}_desc`, undefined, "");
           return (
             <NavLink
               key={tab.id}
@@ -237,10 +240,10 @@ export function TabRail() {
         <button
           ref={moreBtnRef}
           type="button"
-          aria-label={tr("v5_tab_more", "More")}
+          aria-label={tr("v5_tab_more", undefined, "More")}
           aria-expanded={moreOpen}
           aria-haspopup="dialog"
-          title={tr("v5_tab_more_desc", "All screens")}
+          title={tr("v5_tab_more_desc", undefined, "All screens")}
           onClick={() => setMoreOpen(true)}
           className={[
             "mb-2 flex h-11 w-11 items-center justify-center rounded-lg transition-colors",
@@ -261,12 +264,12 @@ export function TabRail() {
           tabIndex={-1}
           role="dialog"
           aria-modal="false"
-          aria-label={tr("v5_tab_more", "More")}
+          aria-label={tr("v5_tab_more", undefined, "More")}
           className="fixed inset-0 z-50 hidden md:block outline-none"
         >
           <button
             type="button"
-            aria-label={tr("nav_close_aria", "Close")}
+            aria-label={tr("nav_close_aria", undefined, "Close")}
             onClick={() => setMoreOpen(false)}
             className="anim-scrim absolute inset-0 bg-[var(--overlay-scrim)]"
           />
@@ -274,7 +277,7 @@ export function TabRail() {
             <div className="relative flex flex-col bg-[var(--color-surface-2)]">
               <button
                 type="button"
-                aria-label={tr("nav_close_aria", "Close")}
+                aria-label={tr("nav_close_aria", undefined, "Close")}
                 onClick={() => setMoreOpen(false)}
                 className="absolute right-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-md text-[var(--color-muted)] hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)]"
               >
@@ -298,40 +301,17 @@ export function TabRail() {
 export function TabBottomNav() {
   const tr = useTr();
   const activeTab = useActiveTab();
-  const [moreOpen, setMoreOpen] = useState(false);
-  const moreRef = useRef<HTMLDivElement>(null);
-  const moreBtnRef = useRef<HTMLButtonElement>(null);
-
-  // Close on Escape; restore focus to the More button. Lock body scroll.
-  useEffect(() => {
-    if (!moreOpen) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        setMoreOpen(false);
-        moreBtnRef.current?.focus();
-      }
-    };
-    document.addEventListener("keydown", onKey);
-    moreRef.current?.focus();
-    return () => {
-      document.body.style.overflow = prev;
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [moreOpen]);
 
   return (
     <>
       <nav
-        aria-label={tr("v5_tab_primary_nav", "Primary")}
+        aria-label={tr("v5_tab_primary_nav", undefined, "Primary")}
         className="h-bottom-nav md:hidden fixed inset-x-0 bottom-0 z-40 flex items-stretch justify-around border-t border-[var(--color-border)] bg-[var(--color-surface-2)] pb-[env(safe-area-inset-bottom)]"
       >
         {TABS.map((tab) => {
           const Icon = tab.icon;
           const active = activeTab === tab.id;
-          const label = tr(`v5_tab_${tab.id}`, tab.id);
+          const label = tr(`v5_tab_${tab.id}`, undefined, tab.id);
           return (
             <NavLink
               key={tab.id}
@@ -353,56 +333,27 @@ export function TabBottomNav() {
             </NavLink>
           );
         })}
-        {/* More button — opens v4 sidebar as a bottom sheet. */}
-        <button
-          ref={moreBtnRef}
-          type="button"
-          aria-label={tr("v5_tab_more", "More")}
-          aria-expanded={moreOpen}
-          onClick={() => setMoreOpen(true)}
-          className="flex flex-1 flex-col items-center justify-center gap-0.5 text-xs font-medium text-[var(--color-muted)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)]"
+        {/* More — a real route, not a sheet. That makes the Android
+            hardware back button and the backStack treat it like any
+            other screen (mobile-design §3.4), and it lets the screen
+            use <main>'s scroller instead of nesting its own. */}
+        <NavLink
+          to="/more"
+          aria-label={tr("v5_tab_more", undefined, "More")}
+          className={({ isActive }) =>
+            [
+              "flex flex-1 flex-col items-center justify-center gap-0.5 text-xs font-medium",
+              "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)]",
+              isActive
+                ? "text-[var(--color-accent)]"
+                : "text-[var(--color-muted)]",
+            ].join(" ")
+          }
         >
           <MoreHorizontal size={22} aria-hidden />
-          <span>{tr("v5_tab_more", "More")}</span>
-        </button>
+          <span>{tr("v5_tab_more", undefined, "More")}</span>
+        </NavLink>
       </nav>
-
-      {/* Mobile "More" sheet — bottom-sheet with full v4 Sidebar. */}
-      {moreOpen && (
-        <div
-          ref={moreRef}
-          tabIndex={-1}
-          role="dialog"
-          aria-modal="false"
-          aria-label={tr("v5_tab_more", "More")}
-          className="fixed inset-0 z-50 md:hidden outline-none"
-        >
-          <button
-            type="button"
-            aria-label={tr("nav_close_aria", "Close")}
-            onClick={() => setMoreOpen(false)}
-            className="anim-scrim absolute inset-0 bg-[var(--overlay-scrim)]"
-          />
-          <div className="anim-sheet elev-3 absolute inset-x-0 bottom-0 flex max-h-[80dvh] flex-col overflow-hidden rounded-t-xl bg-[var(--color-surface-2)] pb-[env(safe-area-inset-bottom)]">
-            <div className="flex shrink-0 items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-surface-2)] px-4 py-3">
-              <span className="font-semibold">
-                {tr("v5_tab_more", "More")}
-              </span>
-              <button
-                type="button"
-                aria-label={tr("nav_close_aria", "Close")}
-                onClick={() => setMoreOpen(false)}
-                className="flex h-8 w-8 items-center justify-center rounded-md text-[var(--color-muted)] hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)]"
-              >
-                <X size={18} />
-              </button>
-            </div>
-            <div className="min-h-0 flex-1 overflow-y-auto">
-              <Sidebar onNavigate={() => setMoreOpen(false)} />
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 }

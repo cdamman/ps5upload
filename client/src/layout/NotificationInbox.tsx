@@ -107,7 +107,11 @@ export default function NotificationInbox() {
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-label={tr("notifications_open", undefined, "Open notifications")}
-        className="relative rounded-md p-1.5 text-[var(--color-muted)] transition-colors hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text)]"
+        // 28px is fine for a mouse but under the 44px touch floor
+        // (mobile-design §4.1). Grow the hit area below md — the same
+        // breakpoint the rest of the app uses to mean "mobile" — so the
+        // dense desktop sidebar footer is left alone.
+        className="relative flex items-center justify-center rounded-md p-1.5 text-[var(--color-muted)] transition-colors hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text)] max-md:h-11 max-md:w-11"
       >
         <Bell size={14} />
         {unread > 0 && (

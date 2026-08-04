@@ -393,7 +393,7 @@ function EngineUrlSection() {
                 setDraft(DEFAULT_ENGINE_URL);
                 setEngineUrl(DEFAULT_ENGINE_URL);
               }}
-              className="text-xs text-[var(--color-muted)] hover:text-[var(--color-text)]"
+              className="text-xs text-[var(--color-muted)] hover:text-[var(--color-text)] max-md:inline-flex max-md:min-h-11 max-md:items-center max-md:px-2"
             >
               {tr("engine_url_reset", undefined, "Reset")}
             </button>
@@ -440,7 +440,7 @@ function SavePathSection() {
                 setDraft(DEFAULT_SAVE_PATH);
                 setSavePath(DEFAULT_SAVE_PATH);
               }}
-              className="text-xs text-[var(--color-muted)] hover:text-[var(--color-text)]"
+              className="text-xs text-[var(--color-muted)] hover:text-[var(--color-text)] max-md:inline-flex max-md:min-h-11 max-md:items-center max-md:px-2"
             >
               {tr("save_path_reset", undefined, "Reset")}
             </button>
@@ -1070,7 +1070,7 @@ function SchedulesPanel() {
           type="button"
           onClick={add}
           disabled={!labelDraft.trim() || !/^\d\d:\d\d$/.test(hhmmDraft)}
-          className="rounded-md bg-[var(--color-accent)] px-2 py-1 text-xs text-[var(--color-accent-contrast)] transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] disabled:opacity-50"
+          className="rounded-md bg-[var(--color-accent)] px-2 py-1 text-xs text-[var(--color-accent-contrast)] transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] disabled:opacity-50 max-md:min-h-11 max-md:px-4"
         >
           {tr("schedules_add", undefined, "Add daily")}
         </button>
@@ -1115,7 +1115,7 @@ function NotifPrunePanel() {
             key={o.days}
             type="button"
             onClick={() => pickDays(o.days)}
-            className={`rounded-md border px-2 py-1 text-xs ${
+            className={`rounded-md border px-2 py-1 text-xs max-md:min-h-11 max-md:px-4 ${
               days === o.days
                 ? "border-[var(--color-accent)] bg-[var(--color-accent-soft)] text-[var(--color-accent)]"
                 : "border-[var(--color-border)] hover:bg-[var(--color-surface-3)]"
@@ -1305,7 +1305,7 @@ function BackupRestorePanel() {
           type="button"
           onClick={exportBundle}
           disabled={busy}
-          className="inline-flex items-center gap-1 rounded-md bg-[var(--color-accent)] px-3 py-1.5 text-xs text-[var(--color-accent-contrast)] transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] disabled:opacity-50"
+          className="inline-flex items-center gap-1 rounded-md bg-[var(--color-accent)] px-3 py-1.5 text-xs text-[var(--color-accent-contrast)] transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] disabled:opacity-50 max-md:min-h-11 max-md:px-4"
         >
           {busy ? (
             <Spinner size={12} tone="inherit" />
@@ -1318,7 +1318,7 @@ function BackupRestorePanel() {
           type="button"
           onClick={importBundle}
           disabled={busy}
-          className="inline-flex items-center gap-1 rounded-md border border-[var(--color-border)] px-3 py-1.5 text-xs hover:bg-[var(--color-surface)] disabled:opacity-50"
+          className="inline-flex items-center gap-1 rounded-md border border-[var(--color-border)] px-3 py-1.5 text-xs hover:bg-[var(--color-surface)] disabled:opacity-50 max-md:min-h-11 max-md:px-4"
         >
           {tr("settings_backup_import", undefined, "Import bundle…")}
         </button>
@@ -1463,7 +1463,7 @@ function TextSizePicker() {
               type="button"
               onClick={() => setScale(step)}
               aria-pressed={active}
-              className={`min-w-[3rem] rounded-md border px-2 py-1.5 text-center text-[13px] ${
+              className={`min-w-[3rem] rounded-md border px-2 py-1.5 text-center text-[13px] max-md:min-h-11 ${
                 active
                   ? "border-[var(--color-accent)] bg-[var(--color-surface)] font-semibold"
                   : "border-[var(--color-border)] hover:bg-[var(--color-surface)]"
@@ -1583,7 +1583,7 @@ function ResetPanel() {
         type="button"
         onClick={doReset}
         disabled={busy}
-        className="inline-flex items-center gap-1.5 rounded-md border border-[var(--color-bad)] px-3 py-1.5 text-xs text-[var(--color-bad)] hover:bg-[var(--color-bad)] hover:text-[var(--color-accent-contrast)] disabled:opacity-50"
+        className="inline-flex items-center gap-1.5 rounded-md border border-[var(--color-bad)] px-3 py-1.5 text-xs text-[var(--color-bad)] hover:bg-[var(--color-bad)] hover:text-[var(--color-accent-contrast)] disabled:opacity-50 max-md:min-h-11 max-md:px-4"
       >
         {busy ? (
           <Spinner size={12} tone="inherit" />
@@ -1635,7 +1635,7 @@ function BugReportLink() {
       </div>
       <Link
         to="/bug-report"
-        className="mt-3 inline-flex items-center gap-1.5 rounded-md bg-[var(--color-accent)] px-3 py-1.5 text-xs text-[var(--color-accent-contrast)]"
+        className="mt-3 inline-flex items-center gap-1.5 rounded-md bg-[var(--color-accent)] px-3 py-1.5 text-xs text-[var(--color-accent-contrast)] max-md:min-h-11 max-md:px-4"
       >
         <Bug size={11} />
         {tr("settings_bug_report_open", undefined, "Open Bug Report")}
@@ -1761,7 +1761,7 @@ function UpdatesPanel() {
           type="button"
           onClick={handleCheck}
           disabled={busy || phase.kind === "downloading"}
-          className="inline-flex items-center gap-1.5 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-xs hover:bg-[var(--color-surface-3)] disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-xs hover:bg-[var(--color-surface-3)] disabled:opacity-50 max-md:min-h-11 max-md:px-4"
         >
           <RefreshCw size={12} className={busy ? "animate-spin" : ""} />
           {tr("check_updates", undefined, "Check for updates")}

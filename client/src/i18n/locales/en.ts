@@ -2523,6 +2523,15 @@ shortcuts_activate: "Open / activate",
   v5_tab_tasks: "Tasks",
   v5_tab_tasks_desc: "Active and recent background tasks",
   v5_tab_more: "More",
+  // ─ v5 More screen (mobile "everything else" hub) ─
+  more_title: "More",
+  more_description: "Every screen, plus your consoles and app settings.",
+  more_search_placeholder: "Search screens",
+  more_search_clear: "Clear search",
+  more_no_results: "No screens match",
+  more_no_results_desc:
+    "Try a different word — screen names also match their English titles.",
+  more_theme: "Theme",
   v5_tab_more_desc: "All screens",
   // ── v5 Home screen ────────────────────────────────────────────
   v5_home_title: "Home",

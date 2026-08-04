@@ -27,6 +27,7 @@ import ChangelogScreen from "./screens/Changelog";
 import SettingsScreen from "./screens/Settings";
 import HomeScreen from "./screens/Home";
 
+const MoreScreen = lazy(() => import("./screens/More"));
 const UploadScreen = lazy(() => import("./screens/Upload"));
 const InstallPackageScreen = lazy(() => import("./screens/InstallPackage"));
 const LibraryScreen = lazy(() => import("./screens/Library"));
@@ -110,6 +111,17 @@ export default function App() {
         <Route path="/home" element={<HomeScreen />} />
         <Route path="/whats-new" element={<ChangelogScreen />} />
         <Route path="/connection" element={<ConnectionScreen />} />
+        {/* v5: mobile "everything else" hub. A real route (not a sheet)
+             so the Android hardware back button and the backStack treat
+             it like any other screen. */}
+        <Route
+          path="/more"
+          element={
+            <Suspense fallback={<ScreenLoader />}>
+              <MoreScreen />
+            </Suspense>
+          }
+        />
         <Route
           path="/upload"
           element={

@@ -65,7 +65,10 @@ export default function RosterPicker() {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-2 px-4 py-2 text-left text-xs hover:bg-[var(--color-surface-3)]"
+        // min-h-11 (44px) meets the touch-target floor (mobile-design
+        // §4.1). It's only +3px over the natural height, so desktop is
+        // visually unchanged — no need to make it conditional.
+        className="flex min-h-11 w-full items-center gap-2 px-4 py-2 text-left text-xs hover:bg-[var(--color-surface-3)]"
       >
         <Cable size={12} className="shrink-0 text-[var(--color-muted)]" />
         <div className="min-w-0 flex-1 leading-tight">

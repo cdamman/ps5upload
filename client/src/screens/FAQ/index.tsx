@@ -110,7 +110,7 @@ export default function FAQScreen() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={tr("faq_search_placeholder", undefined, "Search the FAQ…")}
-            className="flex-1 bg-transparent text-sm outline-none placeholder:text-[var(--color-muted)]"
+            className="max-md:min-h-11 flex-1 bg-transparent text-sm outline-none placeholder:text-[var(--color-muted)]"
           />
           {query && (
             <button

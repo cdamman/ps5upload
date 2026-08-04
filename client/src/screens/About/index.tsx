@@ -164,7 +164,7 @@ export default function AboutScreen() {
               <button
                 type="button"
                 onClick={() => openExternal(URLS.author)}
-                className="mt-0.5 text-base font-medium hover:text-[var(--color-accent)]"
+                className="mt-0.5 text-base font-medium hover:text-[var(--color-accent)] max-md:inline-flex max-md:min-h-11 max-md:items-center"
               >
                 PhantomPtr
               </button>
@@ -291,7 +291,7 @@ function FooterLink({
     <button
       type="button"
       onClick={onClick}
-      className="hover:text-[var(--color-text)] hover:underline"
+      className="hover:text-[var(--color-text)] hover:underline max-md:inline-flex max-md:min-h-11 max-md:items-center"
     >
       {label}
     </button>

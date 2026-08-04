@@ -63,6 +63,16 @@ export function Button({
     "transition-colors " +
     "disabled:cursor-not-allowed disabled:opacity-50";
 
+  // `max-md:min-h-11` enforces the 44px touch floor (mobile-design §4.1)
+  // below the md breakpoint — the same breakpoint the rest of the app
+  // uses to mean "mobile". Without it `md` buttons measured 43px and
+  // `sm` buttons 33px on a 448px-wide phone: an audit of every route
+  // found this single primitive accounted for most sub-44px targets in
+  // the whole app. Desktop density is untouched.
+  // min-w matters too: icon-only buttons measured 43px WIDE (and 50 tall),
+  // so a height-only floor would have left them failing on the other axis.
+  const touchFloor = "max-md:min-h-11 max-md:min-w-11";
+
   const sizing =
     size === "lg"
       ? "px-5 py-2.5 text-sm"
@@ -87,7 +97,7 @@ export function Button({
     <button
       type={type}
       disabled={disabled || loading}
-      className={`${base} ${sizing} ${variants[variant]} ${className}`}
+      className={`${base} ${touchFloor} ${sizing} ${variants[variant]} ${className}`}
       {...rest}
     >
       {loading ? (

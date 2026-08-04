@@ -89,7 +89,10 @@ export function SegmentedControl({
             }}
             onKeyDown={handleKeyDown}
             className={[
-              "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+              // max-md:min-h-11 — segments measured 27px on a phone, well
+              // under the 44px touch floor (mobile-design §4.1). Desktop
+              // density is unchanged.
+              "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors max-md:min-h-11 max-md:px-4",
               checked
                 ? "bg-[var(--color-accent)] text-[var(--color-accent-contrast)]"
                 : "text-[var(--color-muted)] hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text)]",

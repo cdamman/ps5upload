@@ -15,8 +15,11 @@ export interface ToggleProps {
  * are distinct from checkboxes (they represent binary state changes,
  * not selections in a form field).
  *
- *   - 52×28px visual track + thumb
- *   - 44px hit area (WCAG 2.5.5)
+ *   - 52×28px visual track + thumb (the inner span)
+ *   - 44px hit area on touch (WCAG 2.5.5) — the outer button grows to
+ *     44px below the md breakpoint. The track and the hit area are
+ *     deliberately different elements; merging them silently caps the
+ *     target at 28px.
  *   - Space and Enter toggle (native button behavior)
  *   - Fires haptic("selection") on change for touch users
  */
@@ -49,21 +52,34 @@ export function Toggle({
         aria-describedby={describedBy}
         disabled={disabled}
         onClick={handleClick}
+        // The BUTTON is the hit area; the inner span is the visible
+        // track. They were the same element before, which capped the hit
+        // area at the track's 28px height — under the 44px floor this
+        // component's own docs claim. Splitting them lets the target grow
+        // on touch while the switch keeps its size.
         className={[
-          "relative inline-flex h-7 w-13 shrink-0 items-center rounded-full",
-          "transition-colors duration-150",
+          "relative inline-flex shrink-0 items-center justify-center",
           "disabled:cursor-not-allowed disabled:opacity-50",
-          checked ? "bg-[var(--color-accent)]" : "bg-[var(--color-surface-3)]",
+          "max-md:h-11",
         ].join(" ")}
-        style={{ width: "3.25rem" }}
       >
         <span
           aria-hidden="true"
           className={[
-            "inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform duration-150",
-            checked ? "translate-x-6" : "translate-x-1",
+            "relative flex h-7 items-center rounded-full",
+            "transition-colors duration-150",
+            checked ? "bg-[var(--color-accent)]" : "bg-[var(--color-surface-3)]",
           ].join(" ")}
-        />
+          style={{ width: "3.25rem" }}
+        >
+          <span
+            aria-hidden="true"
+            className={[
+              "inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform duration-150",
+              checked ? "translate-x-6" : "translate-x-1",
+            ].join(" ")}
+          />
+        </span>
       </button>
       <div>
         <span id={labelId} className="text-sm text-[var(--color-text)]">

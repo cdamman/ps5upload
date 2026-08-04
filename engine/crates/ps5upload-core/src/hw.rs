@@ -468,26 +468,39 @@ pub fn app_launch_browser(addr: &str) -> Result<()> {
 /// optional because not all drives support LOG SENSE and not all are
 /// mounted. `access_denied` is surfaced when the device node exists but
 /// the payload can't open it (rare, only seen on very locked-down FW).
+// The `alias` attributes accept the camelCase spellings that
+// payload/src/drive_sensors.c emitted before v5.1.0. Every field except
+// `device` and `ident` was named differently there, so serde silently
+// defaulted them: real hardware reported a 2 TB SSD as 0 bytes with no
+// temperature and no filesystem usage, and nothing failed loudly. The
+// payload now emits snake_case like every other frame; these aliases keep
+// a console still running an older payload working instead of showing
+// zeros. Serialization is unaffected — the client keeps receiving
+// snake_case.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct DriveSensor {
     pub device: String,
-    #[serde(default)]
+    #[serde(default, alias = "sizeBytes")]
     pub size_bytes: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ident: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", alias = "tempC")]
     pub temp_c: Option<i32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", alias = "tempErr")]
     pub temp_err: Option<i32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", alias = "fsTotalBytes")]
     pub fs_total_bytes: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", alias = "fsUsedBytes")]
     pub fs_used_bytes: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", alias = "fsFreeBytes")]
     pub fs_free_bytes: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", alias = "mountPoint")]
     pub mount_point: Option<String>,
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[serde(
+        default,
+        skip_serializing_if = "std::ops::Not::not",
+        alias = "accessDenied"
+    )]
     pub access_denied: bool,
 }
 
@@ -497,11 +510,12 @@ pub struct DriveSensor {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct FixedStorageEntry {
     pub label: String,
-    #[serde(default)]
+    // See DriveSensor above for why these aliases exist.
+    #[serde(default, alias = "fsTotalBytes")]
     pub fs_total_bytes: u64,
-    #[serde(default)]
+    #[serde(default, alias = "fsUsedBytes")]
     pub fs_used_bytes: u64,
-    #[serde(default)]
+    #[serde(default, alias = "fsFreeBytes")]
     pub fs_free_bytes: u64,
 }
 

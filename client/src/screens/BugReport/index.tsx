@@ -699,7 +699,7 @@ function IncludeRow({
 }) {
   return (
     <label
-      className={`flex items-center justify-between gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 ${
+      className={`flex items-center justify-between gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 max-md:min-h-11 ${
         disabled ? "opacity-50" : "cursor-pointer"
       }`}
     >

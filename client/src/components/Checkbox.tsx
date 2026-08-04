@@ -39,22 +39,32 @@ export function Checkbox({
 
   return (
     <div className={className}>
-      <div className="flex items-start gap-2">
+      {/* The row — not the 20px box — is the touch target. A checkbox
+          drawn at 44px looks wrong, so instead the row gets the 44px
+          minimum height and the <label htmlFor> makes the whole width of
+          it toggle the box (mobile-design §4.1). */}
+      <div className="flex items-start gap-2 max-md:min-h-11 max-md:items-center">
         <input
           ref={(el) => {
             if (el) el.indeterminate = indeterminate;
           }}
           id={cbId}
           type="checkbox"
-          className="checkbox mt-0.5 h-5 w-5"
+          className="checkbox mt-0.5 h-5 w-5 max-md:mt-0"
           checked={checked}
           disabled={disabled}
           aria-invalid={error ? "true" : undefined}
           aria-describedby={describedBy}
           onChange={(e) => onChange(e.currentTarget.checked)}
         />
-        <div>
-          <label htmlFor={cbId} className="text-sm text-[var(--color-text)]">
+        <div className="max-md:flex max-md:min-h-11 max-md:flex-col max-md:justify-center">
+          {/* The label carries the min-height, not the row. Only the
+              label toggles the box (htmlFor), so padding the row would
+              add dead space that looks tappable but isn't. */}
+          <label
+            htmlFor={cbId}
+            className="text-sm text-[var(--color-text)] max-md:flex max-md:min-h-11 max-md:items-center"
+          >
             {label}
           </label>
           {hint && (
