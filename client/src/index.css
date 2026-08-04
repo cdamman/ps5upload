@@ -764,6 +764,24 @@ input[type="radio"] {
   padding: 0.25rem 0.5rem;
   font-size: 0.75rem;
 }
+
+/* Touch-target floor for form controls (docs/v5-mobile-design.md §4.1).
+ *
+ * Applied here rather than as a Tailwind utility on each component: these
+ * base classes are UNLAYERED css and set the `padding` shorthand, so a
+ * layered `min-h-*` utility loses the cascade to them (the same trap that
+ * made Input's leftIcon render on top of its text). A plain rule in the
+ * same layer wins reliably.
+ *
+ * 767px is the md breakpoint — the boundary the rest of the app already
+ * uses to mean "mobile". Desktop density is untouched. */
+@media (max-width: 767px) {
+  .input,
+  .input-sm,
+  .select {
+    min-height: 2.75rem;
+  }
+}
 .select {
   width: 100%;
   border-radius: 0.375rem;

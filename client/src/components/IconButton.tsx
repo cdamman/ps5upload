@@ -39,7 +39,11 @@ export function IconButton({
     );
   }
 
-  const sizing = size === "md" ? "h-11 w-11" : "h-9 w-9";
+  // `md` is already 44px. `sm` is 36px, which is fine for a mouse but
+  // under the touch floor (mobile-design §4.1) — grow it below md, the
+  // breakpoint the rest of the app uses to mean "mobile".
+  const sizing =
+    size === "md" ? "h-11 w-11" : "h-9 w-9 max-md:h-11 max-md:w-11";
 
   const variants: Record<NonNullable<IconButtonProps["variant"]>, string> = {
     ghost:

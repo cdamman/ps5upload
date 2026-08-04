@@ -243,7 +243,7 @@ export default function AppLogsPanel() {
         <select
           value={logLevel}
           onChange={(e) => setLogLevel(e.target.value as LogLevel)}
-          className="rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 text-xs"
+          className="rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 text-xs max-md:min-h-11"
         >
           {LOG_LEVELS.map((l) => (
             <option key={l} value={l}>
@@ -337,7 +337,7 @@ function FilterPill({
       type="button"
       onClick={onClick}
       className={
-        "flex items-center gap-1.5 rounded-full border px-2.5 py-1 transition-colors " +
+        "flex items-center gap-1.5 rounded-full border px-2.5 py-1 transition-colors max-md:min-h-11 max-md:px-4 " +
         (active
           ? "border-[var(--color-accent)] bg-[var(--color-accent-soft)] text-[var(--color-accent)]"
           : "border-[var(--color-border)] hover:bg-[var(--color-surface-3)]")
@@ -358,7 +358,7 @@ function LogRow({ entry }: { entry: LogEntry }) {
       <button
         type="button"
         onClick={() => hasDetail && setExpanded((v) => !v)}
-        className={`group flex w-full items-start gap-3 text-left ${
+        className={`group flex w-full items-start gap-3 text-left max-md:min-h-11 max-md:items-center ${
           hasDetail ? "cursor-pointer" : "cursor-default"
         }`}
       >

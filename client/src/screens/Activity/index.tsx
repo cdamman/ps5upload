@@ -89,7 +89,7 @@ export default function ActivityScreen() {
                 type="button"
                 onClick={() => setView("list")}
                 aria-pressed={view === "list"}
-                className={`rounded-l-md px-2 py-1 font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] ${
+                className={`rounded-l-md px-2 py-1 max-md:min-h-11 max-md:px-4 font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] ${
                   view === "list"
                     ? "bg-[var(--color-accent)] text-[var(--color-accent-contrast)]"
                     : "text-[var(--color-muted)] hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text)]"
@@ -113,7 +113,7 @@ export default function ActivityScreen() {
                 type="button"
                 onClick={() => setView("telemetry")}
                 aria-pressed={view === "telemetry"}
-                className={`rounded-r-md px-2 py-1 font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] ${
+                className={`rounded-r-md px-2 py-1 max-md:min-h-11 max-md:px-4 font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] ${
                   view === "telemetry"
                     ? "bg-[var(--color-accent)] text-[var(--color-accent-contrast)]"
                     : "text-[var(--color-muted)] hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text)]"
