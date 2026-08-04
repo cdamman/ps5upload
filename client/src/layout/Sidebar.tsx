@@ -2,51 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { NavLink, useLocation } from "react-router";
 import { getAppVersion } from "../lib/appVersion";
 import { isTauriEnv } from "../lib/tauriEnv";
-import {
-  Cable,
-  Upload,
-  PackageOpen,
-  Gamepad2,
-  LibraryBig,
-  Search,
-  HardDrive,
-  FolderTree,
-  Cpu,
-  CircleUserRound,
-  Gauge,
-  Boxes,
-  Globe,
-  Save,
-  Image as ImageIcon,
-  Video as VideoIcon,
-  Settings as SettingsIcon,
-  Info,
-  Sun,
-  Moon,
-  MoonStar,
-  Flower2,
-  Sparkles,
-  HelpCircle,
-  ScrollText,
-  Activity as ActivityIcon,
-  BarChart3,
-  TerminalSquare,
-  PieChart,
-  LayoutDashboard,
-  ShieldCheck,
-  Bug,
-  Archive,
-  MonitorPlay,
-  Fan,
-  Bell,
-  Clock,
-  Layers,
-  Database,
-  ShieldAlert,
-  Server,
-  Network,
-  ChevronDown,
-} from "lucide-react";
+import { Sun, Moon, MoonStar, Flower2, ChevronDown } from "lucide-react";
 import clsx from "clsx";
 import { useThemeStore } from "../state/theme";
 import { useTr } from "../state/lang";
@@ -54,6 +10,7 @@ import { useLogsStore } from "../state/logs";
 import { useUpdateStore } from "../state/update";
 import RosterPicker from "./RosterPicker";
 import NotificationInbox from "./NotificationInbox";
+import { NAV_ITEMS, groupNavItems } from "./navItems";
 import type { Theme } from "../state/theme";
 
 /** Friendly label for the active theme. Pulled out so the toggle row
@@ -81,218 +38,6 @@ function themeIcon(theme: Theme) {
   if (theme === "rose") return <Flower2 size={14} />;
   return <Moon size={14} />;
 }
-
-interface NavItem {
-  to: string;
-  key: string;
-  fallback: string;
-  icon: typeof Cable;
-  /** Optional section label — groups nav items visually. Stored as a
-   *  {key, fallback} pair so the section label translates alongside
-   *  the nav items. */
-  section?: { key: string; fallback: string };
-  /** True for screens with no browser-functional path at all (e.g. Upload
-   *  requires a host OS file/folder picker with zero web equivalent) — the
-   *  nav entry is hidden entirely in a browser session rather than linking
-   *  to a screen that can't do anything there. */
-  hideInBrowser?: boolean;
-}
-
-// v4.0.0 sidebar regroup. Consolidated from 6 sections with a duplicate
-// "System" header into clean sections: Setup → Files → Browse → System →
-// Diagnostics → Help. The old sidebar had two separate "System" blocks
-// which was confusing — all system-management items now live under a
-// single System heading.
-const items: NavItem[] = [
-  // ─ Setup: orient, connect, get started ─
-  {
-    to: "/whats-new",
-    key: "whats_new",
-    fallback: "What's new",
-    icon: Sparkles,
-    section: { key: "nav_section_setup", fallback: "Setup" },
-  },
-  { to: "/connection", key: "connect", fallback: "Connection", icon: Cable },
-  {
-    to: "/payloads",
-    key: "payloads",
-    fallback: "Payloads",
-    icon: Boxes,
-    hideInBrowser: true,
-  },
-  {
-    to: "/dashboard",
-    key: "dashboard",
-    fallback: "Dashboard",
-    icon: LayoutDashboard,
-  },
-
-  // ─ Files: upload, install, manage saves & captures ─
-  {
-    to: "/upload",
-    key: "upload",
-    fallback: "Upload",
-    icon: Upload,
-    section: { key: "nav_section_files", fallback: "Files" },
-  },
-  {
-    to: "/install-package",
-    key: "install_package",
-    fallback: "Install Package",
-    icon: PackageOpen,
-  },
-  { to: "/saves", key: "saves", fallback: "Save data", icon: Save },
-  {
-    to: "/screenshots",
-    key: "screenshots",
-    fallback: "Screenshots",
-    icon: ImageIcon,
-  },
-  { to: "/videos", key: "videos", fallback: "Video clips", icon: VideoIcon },
-
-  // ─ Browse PS5: navigate what's on the console ─
-  {
-    to: "/games",
-    key: "library",
-    fallback: "Library",
-    icon: LibraryBig,
-    section: { key: "nav_section_browse", fallback: "Browse PS5" },
-  },
-  {
-    to: "/installed",
-    key: "installed_apps",
-    fallback: "Installed Apps",
-    icon: Gamepad2,
-  },
-  {
-    to: "/files",
-    key: "file_system",
-    fallback: "File System",
-    icon: FolderTree,
-  },
-  { to: "/search", key: "search", fallback: "Search", icon: Search },
-  { to: "/volumes", key: "volumes", fallback: "Volumes", icon: HardDrive },
-  {
-    to: "/disk-usage",
-    key: "disk_usage",
-    fallback: "Disk usage",
-    icon: PieChart,
-  },
-
-  // ─ System: observe + manage the PS5 itself ─
-  {
-    to: "/console",
-    key: "hardware",
-    fallback: "Hardware",
-    icon: Cpu,
-    section: { key: "nav_section_system", fallback: "System" },
-  },
-  {
-    to: "/processes",
-    key: "processes",
-    fallback: "Processes",
-    icon: Gauge,
-  },
-  {
-    to: "/profile",
-    key: "profile",
-    fallback: "Profile",
-    icon: CircleUserRound,
-  },
-  { to: "/fan-curve", key: "fan_curve", fallback: "Fan Curve", icon: Fan },
-  {
-    to: "/remote-play",
-    key: "remote_play",
-    fallback: "Remote Play",
-    icon: MonitorPlay,
-  },
-  {
-    to: "/notifications",
-    key: "notifications_screen",
-    fallback: "Notifications",
-    icon: Bell,
-  },
-  {
-    to: "/cheats",
-    key: "cheats",
-    fallback: "Cheats",
-    icon: Gamepad2,
-  },
-  {
-    to: "/game-activity",
-    key: "game_activity",
-    fallback: "Game Activity",
-    icon: Clock,
-  },
-  {
-    to: "/sdk-changer",
-    key: "sdk_changer",
-    fallback: "SDK Changer",
-    icon: Layers,
-  },
-  {
-    to: "/tmdb",
-    key: "tmdb",
-    fallback: "TMDB",
-    icon: Database,
-  },
-  {
-    to: "/fw-spoof",
-    key: "fw_spoof",
-    fallback: "FW Spoof",
-    icon: ShieldAlert,
-  },
-  {
-    to: "/ftp-server",
-    key: "ftp_server",
-    fallback: "FTP Server",
-    icon: Server,
-  },
-  {
-    to: "/smb-browser",
-    key: "smb_browser",
-    fallback: "SMB Browser",
-    icon: Network,
-  },
-  { to: "/backup", key: "backup", fallback: "Backup", icon: Archive },
-  { to: "/nanodns", key: "nanodns", fallback: "nanoDNS", icon: Globe },
-  { to: "/shell", key: "shell", fallback: "Shell", icon: TerminalSquare },
-
-  // ─ Diagnostics: history, logs, debugging ─
-  {
-    to: "/tasks",
-    key: "transfer_log",
-    fallback: "Transfer Log",
-    icon: ActivityIcon,
-    section: { key: "nav_section_diagnostics", fallback: "Diagnostics" },
-  },
-  { to: "/stats", key: "stats", fallback: "Stats", icon: BarChart3 },
-  { to: "/logs", key: "logs", fallback: "Logs", icon: ScrollText },
-  {
-    to: "/audit-log",
-    key: "audit_log",
-    fallback: "Audit log",
-    icon: ShieldCheck,
-  },
-  { to: "/bug-report", key: "bug_report", fallback: "Bug report", icon: Bug },
-
-  // ─ Footer-style utility entries (still rendered inline for now;
-  //   a future change could split them visually with a divider) ─
-  {
-    to: "/faq",
-    key: "faq",
-    fallback: "FAQ",
-    icon: HelpCircle,
-    section: { key: "nav_section_help", fallback: "Help" },
-  },
-  {
-    to: "/settings",
-    key: "settings",
-    fallback: "Settings",
-    icon: SettingsIcon,
-  },
-  { to: "/about", key: "about", fallback: "About", icon: Info },
-];
 
 export default function Sidebar({
   onNavigate,
@@ -343,22 +88,13 @@ export default function Sidebar({
     });
   }, []);
 
-  const groups = useMemo(() => {
-    const visible = items.filter(
-      (item) => !item.hideInBrowser || isTauriEnv(),
-    );
-    const acc: { section: NonNullable<NavItem["section"]>; items: NavItem[] }[] =
-      [];
-    for (const item of visible) {
-      if (item.section) {
-        acc.push({ section: item.section, items: [item] });
-      } else {
-        const last = acc[acc.length - 1];
-        if (last) last.items.push(item);
-      }
-    }
-    return acc;
-  }, []);
+  const groups = useMemo(
+    () =>
+      groupNavItems(
+        NAV_ITEMS.filter((item) => !item.hideInBrowser || isTauriEnv()),
+      ),
+    [],
+  );
 
   return (
     <aside className="flex h-full w-60 shrink-0 flex-col border-r border-[var(--color-border)] bg-[var(--color-surface-2)] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)]">
