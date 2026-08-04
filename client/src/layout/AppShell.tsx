@@ -18,6 +18,7 @@ import { useUpdateStore } from "../state/update";
 import { engineApi } from "../api/engine";
 import { payloadCheck, portCheck } from "../api/ps5";
 import { installActivityWiring } from "../state/activityWiring";
+import { installTaskWiring } from "../state/taskWiring";
 import {
   ensureRosterMigrated,
   useRosterStore,
@@ -866,6 +867,9 @@ export default function AppShell() {
   // call on every render because installActivityWiring is idempotent.
   useEffect(() => {
     installActivityWiring();
+    // Subscribe-once: wires the same per-feature stores into the
+    // unified Task store (v5 §10). Idempotent — safe to call repeatedly.
+    installTaskWiring();
     // Migrate single-host users into the multi-PS5 roster on first
     // start. Idempotent — no-op when the roster is already populated.
     ensureRosterMigrated();

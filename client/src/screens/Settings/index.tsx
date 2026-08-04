@@ -20,6 +20,10 @@ import {
   Trash2,
   ExternalLink,
   ALargeSmall,
+  Eye,
+  Type,
+  Vibrate,
+  Waves,
 } from "lucide-react";
 import { Link } from "react-router";
 import { useThemeStore, type Theme } from "../../state/theme";
@@ -30,6 +34,15 @@ import {
 } from "../../state/uiScale";
 
 import { PageHeader, Spinner } from "../../components";
+import { Toggle } from "../../components/Toggle";
+import { SegmentedControl } from "../../components/SegmentedControl";
+import { Select } from "../../components/Select";
+import {
+  useAccessibilityStore,
+  type MotionMode,
+  type DensityMode,
+  type ColorBlindPalette,
+} from "../../state/accessibility";
 import { isTauriEnv } from "../../lib/tauriEnv";
 import { safeGetItem, safeRemoveItem, safeSetItem } from "../../lib/safeStorage";
 import { useConfirm } from "../../components/ConfirmDialog";
@@ -98,6 +111,246 @@ function Section({
       </h2>
       {children}
     </section>
+  );
+}
+
+/** Accessibility settings panel (v5 §23).
+ *
+ *  Wires the existing `useAccessibilityStore` to UI primitives:
+ *    - Motion (SegmentedControl: Auto / Full / Reduced / None)
+ *    - High contrast (Toggle)
+ *    - Color blind palette (Select)
+ *    - Dyslexia-friendly font (Toggle)
+ *    - Density (SegmentedControl: Comfortable / Compact / Spacious)
+ *    - Haptic feedback (Toggle, mobile only)
+ *    - Screen reader hints (Toggle)
+ *
+ *  The store already persists + applies `data-*` attributes to <html>
+ *  on mount, so this panel just calls the setters. Text-size is already
+ *  covered by the existing TextSizePicker in the General group. */
+function AccessibilitySection() {
+  const tr = useTr();
+  const mobile = isMobile();
+
+  const motion = useAccessibilityStore((s) => s.motion);
+  const setMotion = useAccessibilityStore((s) => s.setMotion);
+  const density = useAccessibilityStore((s) => s.density);
+  const setDensity = useAccessibilityStore((s) => s.setDensity);
+  const contrast = useAccessibilityStore((s) => s.contrast);
+  const setContrast = useAccessibilityStore((s) => s.setContrast);
+  const dyslexia = useAccessibilityStore((s) => s.dyslexia);
+  const setDyslexia = useAccessibilityStore((s) => s.setDyslexia);
+  const hapticsEnabled = useAccessibilityStore((s) => s.hapticsEnabled);
+  const setHapticsEnabled = useAccessibilityStore((s) => s.setHapticsEnabled);
+  const screenReaderHints = useAccessibilityStore(
+    (s) => s.screenReaderHints,
+  );
+  const setScreenReaderHints = useAccessibilityStore(
+    (s) => s.setScreenReaderHints,
+  );
+  const colorBlindPalette = useAccessibilityStore(
+    (s) => s.colorBlindPalette,
+  );
+  const setColorBlindPalette = useAccessibilityStore(
+    (s) => s.setColorBlindPalette,
+  );
+
+  return (
+    <Section
+      title={tr("settings_section_a11y", undefined, "Accessibility")}
+      full
+    >
+      <div className="grid gap-5">
+        {/* Motion mode — Auto follows OS prefers-reduced-motion. */}
+        <div className="grid gap-1.5">
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <Waves size={14} className="text-[var(--color-muted)]" />
+            {tr("a11y_motion", undefined, "Motion")}
+          </div>
+          <SegmentedControl
+            ariaLabel={tr(
+              "a11y_motion_label",
+              undefined,
+              "Animation motion mode",
+            )}
+            segments={[
+              { value: "auto", label: tr("a11y_motion_auto", undefined, "Auto") },
+              { value: "full", label: tr("a11y_motion_full", undefined, "Full") },
+              {
+                value: "reduced",
+                label: tr("a11y_motion_reduced", undefined, "Reduced"),
+              },
+              { value: "none", label: tr("a11y_motion_none", undefined, "None") },
+            ]}
+            value={motion}
+            onChange={(v) => setMotion(v as MotionMode)}
+          />
+          <p className="text-xs text-[var(--color-muted)]">
+            {tr(
+              "a11y_motion_hint",
+              undefined,
+              "Auto follows your OS setting. Reduced plays transitions at 0.4× speed; None disables them entirely.",
+            )}
+          </p>
+        </div>
+
+        <div className="border-t border-[var(--color-border)]" />
+
+        {/* Density — Comfortable / Compact / Spacious. */}
+        <div className="grid gap-1.5">
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <ALargeSmall size={14} className="text-[var(--color-muted)]" />
+            {tr("a11y_density", undefined, "Density")}
+          </div>
+          <SegmentedControl
+            ariaLabel={tr(
+              "a11y_density_label",
+              undefined,
+              "Layout density mode",
+            )}
+            segments={[
+              {
+                value: "comfortable",
+                label: tr("a11y_density_comfortable", undefined, "Comfortable"),
+              },
+              {
+                value: "compact",
+                label: tr("a11y_density_compact", undefined, "Compact"),
+              },
+              {
+                value: "spacious",
+                label: tr("a11y_density_spacious", undefined, "Spacious"),
+              },
+            ]}
+            value={density}
+            onChange={(v) => setDensity(v as DensityMode)}
+          />
+          <p className="text-xs text-[var(--color-muted)]">
+            {tr(
+              "a11y_density_hint",
+              undefined,
+              "Controls spacing and padding across the app. Spacious adds extra room for touch input; Compact fits more on screen.",
+            )}
+          </p>
+        </div>
+
+        <div className="border-t border-[var(--color-border)]" />
+
+        {/* High contrast toggle. */}
+        <Toggle
+          checked={contrast === "high"}
+          onChange={(on) => setContrast(on ? "high" : "normal")}
+          label={tr("a11y_high_contrast", undefined, "High contrast")}
+          hint={tr(
+            "a11y_high_contrast_hint",
+            undefined,
+            "Strengthens semantic color contrast for text, borders, and focus rings.",
+          )}
+        />
+
+        {/* Color blind palette. */}
+        <div className="grid gap-1.5">
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <Eye size={14} className="text-[var(--color-muted)]" />
+            {tr("a11y_color_blind", undefined, "Color blind palette")}
+          </div>
+          <Select
+            aria-label={tr(
+              "a11y_color_blind_label",
+              undefined,
+              "Color blind palette adjustment",
+            )}
+            options={[
+              {
+                value: "default",
+                label: tr("a11y_cb_default", undefined, "Default"),
+              },
+              {
+                value: "deuteranopia",
+                label: tr("a11y_cb_deuteranopia", undefined, "Deuteranopia (red-green)"),
+              },
+              {
+                value: "protanopia",
+                label: tr("a11y_cb_protanopia", undefined, "Protanopia (red-green)"),
+              },
+              {
+                value: "tritanopia",
+                label: tr("a11y_cb_tritanopia", undefined, "Tritanopia (blue-yellow)"),
+              },
+            ]}
+            value={colorBlindPalette}
+            block={false}
+            onChange={(e) =>
+              setColorBlindPalette(e.target.value as ColorBlindPalette)
+            }
+          />
+          <p className="text-xs text-[var(--color-muted)]">
+            {tr(
+              "a11y_color_blind_hint",
+              undefined,
+              "Adjusts status colors (success/warn/error) to be distinguishable for the selected color vision type.",
+            )}
+          </p>
+        </div>
+
+        <div className="border-t border-[var(--color-border)]" />
+
+        {/* Dyslexia-friendly font. */}
+        <Toggle
+          checked={dyslexia}
+          onChange={setDyslexia}
+          label={
+            <span className="inline-flex items-center gap-1.5">
+              <Type size={14} className="text-[var(--color-muted)]" />
+              {tr("a11y_dyslexia", undefined, "Dyslexia-friendly font")}
+            </span>
+          }
+          hint={tr(
+            "a11y_dyslexia_hint",
+            undefined,
+            "Swaps to a dyslexia-friendly font stack with wider letter spacing.",
+          )}
+        />
+
+        {/* Screen reader hints. */}
+        <Toggle
+          checked={screenReaderHints}
+          onChange={setScreenReaderHints}
+          label={tr(
+            "a11y_sr_hints",
+            undefined,
+            "Screen reader hints",
+          )}
+          hint={tr(
+            "a11y_sr_hints_hint",
+            undefined,
+            "Adds verbose aria-labels that announce extra context (e.g. “Refresh connection” instead of just “Button”).",
+          )}
+        />
+
+        {/* Haptics — mobile only. */}
+        {mobile && (
+          <>
+            <div className="border-t border-[var(--color-border)]" />
+            <Toggle
+              checked={hapticsEnabled}
+              onChange={setHapticsEnabled}
+              label={
+                <span className="inline-flex items-center gap-1.5">
+                  <Vibrate size={14} className="text-[var(--color-muted)]" />
+                  {tr("a11y_haptics", undefined, "Haptic feedback")}
+                </span>
+              }
+              hint={tr(
+                "a11y_haptics_hint",
+                undefined,
+                "Subtle vibration feedback on taps, toggles, and long-press actions.",
+              )}
+            />
+          </>
+        )}
+      </div>
+    </Section>
   );
 }
 
@@ -374,6 +627,12 @@ export default function SettingsScreen() {
         <EngineUrlSection />
 
         <SavePathSection />
+
+        <GroupHeading>
+          {tr("settings_group_a11y", undefined, "Accessibility")}
+        </GroupHeading>
+
+        <AccessibilitySection />
 
         <GroupHeading>
           {tr("settings_group_uploads", undefined, "Uploads")}
