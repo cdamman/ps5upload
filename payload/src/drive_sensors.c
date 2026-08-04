@@ -143,7 +143,7 @@ append_drive_json(char *buf, size_t cap, size_t pos, int first,
 
     int n;
     n = snprintf(buf + pos, cap - pos,
-        "{\"device\":\"%s\",\"sizeBytes\":%lld",
+        "{\"device\":\"%s\",\"size_bytes\":%lld",
         devpath, (long long)media_size);
     if ((size_t)n >= cap - pos) { pos = cap - 1; goto close_obj; }
     pos += (size_t)n;
@@ -155,18 +155,18 @@ append_drive_json(char *buf, size_t cap, size_t pos, int first,
     }
 
     if (temp >= 0) {
-        n = snprintf(buf + pos, cap - pos, ",\"tempC\":%d", temp);
+        n = snprintf(buf + pos, cap - pos, ",\"temp_c\":%d", temp);
         if ((size_t)n >= cap - pos) { pos = cap - 1; goto close_obj; }
         pos += (size_t)n;
     } else if (temp_err != 0) {
-        n = snprintf(buf + pos, cap - pos, ",\"tempErr\":%d", temp_err);
+        n = snprintf(buf + pos, cap - pos, ",\"temp_err\":%d", temp_err);
         if ((size_t)n >= cap - pos) { pos = cap - 1; goto close_obj; }
         pos += (size_t)n;
     }
 
     if (has_fs) {
         n = snprintf(buf + pos, cap - pos,
-            ",\"fsTotalBytes\":%llu,\"fsUsedBytes\":%llu,\"fsFreeBytes\":%llu",
+            ",\"fs_total_bytes\":%llu,\"fs_used_bytes\":%llu,\"fs_free_bytes\":%llu",
             (unsigned long long)fs_total,
             (unsigned long long)fs_used,
             (unsigned long long)fs_free);
@@ -175,7 +175,7 @@ append_drive_json(char *buf, size_t cap, size_t pos, int first,
 
         if (mount_point && mount_point[0]) {
             n = snprintf(buf + pos, cap - pos,
-                ",\"mountPoint\":\"%s\"", mount_point);
+                ",\"mount_point\":\"%s\"", mount_point);
             if ((size_t)n >= cap - pos) { pos = cap - 1; goto close_obj; }
             pos += (size_t)n;
         }
@@ -195,7 +195,7 @@ append_fixed_json(char *buf, size_t cap, size_t pos, int first,
     if (pos + 200 > cap) return pos;
     if (!first && pos + 1 < cap) buf[pos++] = ',';
     int n = snprintf(buf + pos, cap - pos,
-        "{\"label\":\"%s\",\"fsTotalBytes\":%llu,\"fsUsedBytes\":%llu,\"fsFreeBytes\":%llu}",
+        "{\"label\":\"%s\",\"fs_total_bytes\":%llu,\"fs_used_bytes\":%llu,\"fs_free_bytes\":%llu}",
         label,
         (unsigned long long)total,
         (unsigned long long)used,
@@ -228,7 +228,7 @@ drive_sensors_get_json(char *out, size_t out_cap, size_t *out_written,
                 /* Device node exists but access denied — report it. */
                 if (drive_count > 0 && pos < out_cap) out[pos++] = ',';
                 int dn = snprintf(out + pos, out_cap - pos,
-                    "{\"device\":\"%s\",\"accessDenied\":true}", devpath);
+                    "{\"device\":\"%s\",\"access_denied\":true}", devpath);
                 if ((size_t)dn >= out_cap - pos) { pos = out_cap - 1; break; }
                 pos += (size_t)dn;
                 drive_count++;
