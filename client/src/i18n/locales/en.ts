@@ -2716,7 +2716,29 @@ shortcuts_activate: "Open / activate",
   game_hub_total: "Total",
   game_hub_last_session: "Last session",
   game_hub_no_playtime: "No play time data recorded for this game.",
-   game_hub_coming_soon: "Coming soon",
+  game_hub_error_title: "Error",
+  game_hub_launching: "Starting…",
+  game_hub_launch_failed: "Launch failed",
+  game_hub_launch_unconfirmed: "Launch not confirmed",
+  game_hub_launch_unconfirmed_body:
+    "The PS5 accepted the launch but the title hasn't appeared yet. Check the console — it may still be starting.",
+  game_hub_needs_connection: "Connect to a PS5 to load this.",
+  game_hub_no_cheats:
+    "No cheats installed for this title. Add some from the Cheats screen.",
+  game_hub_cheat_toggle_failed: "Couldn’t change that cheat",
+  game_hub_no_saves: "No save data found for this title.",
+  game_hub_save_user: "User",
+  game_hub_manage_saves: "Back up / restore in Saves",
+  game_hub_media_not_per_game:
+    "The PS5 doesn't tag screenshots or clips with the game they came from — captures are filed by date, not by title. Browse everything on the console instead:",
+  game_hub_open_screenshots: "Screenshots",
+  game_hub_open_videos: "Video clips",
+  game_hub_no_addons:
+    "No DLC packages staged for this title. Upload one from Install Package.",
+  game_hub_no_updates:
+    "No update packages staged for this title. Upload one from Install Package.",
+  game_hub_installed: "Installed",
+  game_hub_open_install: "Open Install Package",
   // ─ v5 telemetry ─
   telemetry_title: "Telemetry",
   telemetry_cpu: "CPU",

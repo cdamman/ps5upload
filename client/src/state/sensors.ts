@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 
 import { hostOf, transferAddr } from "../lib/addr";
 import { fetchHwTemps, fetchHwPower, type HwTemps, type HwPower } from "../api/ps5";
@@ -97,6 +97,13 @@ export const useSensorsStore = create<SensorsState>((set) => ({
 
 // ── Selectors ──────────────────────────────────────────────────────
 
+// Stable empty array returned by selectors when there's no data yet.
+// Returning a literal `[]` here would create a NEW array reference on
+// every store read, which Zustand's useSyncExternalStore detects as a
+// changed snapshot → infinite re-render ("Maximum update depth
+// exceeded"). This constant keeps the reference stable.
+const EMPTY_SAMPLES: SensorSample[] = [];
+
 /** Read the latest sample for a host, reactively. */
 export function useLatestSample(
   host: string | null | undefined,
@@ -108,14 +115,15 @@ export function useLatestSample(
   });
 }
 
-/** Read the sample history for a host (oldest → newest), reactively. */
+/** Read the sample history for a host (oldest → newest), reactively.
+ *  Returns a stable EMPTY_SAMPLES when no data exists. */
 export function useSampleHistory(
   host: string | null | undefined,
 ): SensorSample[] {
   return useSensorsStore((s) => {
-    if (!host) return [];
+    if (!host) return EMPTY_SAMPLES;
     const key = hostOf(host) || host;
-    return s.byHost[key]?.samples ?? [];
+    return s.byHost[key]?.samples ?? EMPTY_SAMPLES;
   });
 }
 
@@ -219,6 +227,11 @@ export function _refcountForTest(host: string): number {
  * React hook that subscribes to a host's sensor stream for the
  * component's lifetime and returns the latest sample + history.
  *
+ * The returned object is memoized on `sample`/`history` identity, so
+ * it only changes when the underlying store data changes — not on
+ * every parent re-render. Both `sample` and `history` are stable
+ * references (null / EMPTY_SAMPLES) when there's no data.
+ *
  * ```ts
  * const { sample, history } = useSensors(host);
  * ```
@@ -240,5 +253,9 @@ export function useSensors(host: string | null | undefined): {
     return () => unsubscribeSensor(effectiveHost);
   }, [effectiveHost]);
 
-  return { sample, history };
+  // Memoize so the returned object identity is stable across re-renders
+  // that don't change the underlying data. Without this, every parent
+  // re-render would produce a new `{ sample, history }` object and
+  // trigger downstream effects / memo recalculations.
+  return useMemo(() => ({ sample, history }), [sample, history]);
 }

@@ -10,7 +10,7 @@
  * own data. Most tabs start as placeholder shells that the user can
  * navigate to; each gets fleshed out in subsequent phases.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate, Link, useSearchParams } from "react-router";
 import {
   ArrowLeft,
@@ -24,9 +24,20 @@ import {
   Clock,
   Shield,
   Play,
+  Film,
 } from "lucide-react";
 
-import { PageHeader, Button, Tabs, Badge, EmptyState, Card } from "../../components";
+import {
+  PageHeader,
+  Button,
+  Tabs,
+  Badge,
+  EmptyState,
+  Card,
+  Callout,
+  Spinner,
+  Toggle,
+} from "../../components";
 import { GameIcon } from "../../components/GameIcon";
 import { useTr } from "../../state/lang";
 import { useLibraryStore, libraryForHost } from "../../state/library";
@@ -36,9 +47,30 @@ import {
   playSecondsFor,
   lastSeenPlayingFor,
 } from "../../state/playTime";
-import { appsInstalled, type InstalledTitle } from "../../api/ps5";
-import { transferAddr } from "../../lib/addr";
+import { usePkgLibrary, type PkgEntry } from "../../state/pkgLibrary";
+import { pushNotification } from "../../state/notifications";
+import {
+  appsInstalled,
+  appLaunch,
+  cheatsGet,
+  cheatsToggle,
+  savesList,
+  type InstalledTitle,
+  type CheatMod,
+  type SaveEntry,
+} from "../../api/ps5";
+import { transferAddr, mgmtAddr } from "../../lib/addr";
+import { fetchRunningGames } from "../../lib/runningGames";
+import { useStaleHostGuard } from "../../lib/staleHostGuard";
 import { formatBytes, formatDuration } from "../../lib/format";
+
+/** How long to keep Play disabled while waiting for the title to appear in
+ *  the process list, and how often to re-check. Mirrors the Installed Apps
+ *  screen — a cold first launch (just-installed, disc image) legitimately
+ *  takes this long, and re-firing a launch at a half-started title is
+ *  exactly how it gets killed. */
+const LAUNCH_CONFIRM_TIMEOUT_MS = 90_000;
+const LAUNCH_CONFIRM_POLL_MS = 2_000;
 
 const TAB_IDS = [
   "overview",
@@ -127,6 +159,68 @@ export default function GameHubScreen() {
       })),
     [tr],
   );
+
+  // ── Launch ────────────────────────────────────────────────────────
+  const guard = useStaleHostGuard();
+  const [launching, setLaunching] = useState(false);
+
+  /**
+   * Start this title on the console, then wait for it to actually come up.
+   *
+   * `appLaunch` returning only means Sony accepted the request — not that
+   * the game is running. We hold the disabled/"Starting…" state for the
+   * whole come-up window and watch (read-only) for the title to appear in
+   * the process list, so the user can't fire a second launch into a title
+   * that's still starting. We never act on a starting game.
+   */
+  const handleLaunch = useCallback(async () => {
+    if (!title_id || launching) return;
+    const probe = guard.capture();
+    if (!probe.host?.trim()) return;
+
+    setLaunching(true);
+    try {
+      await appLaunch(transferAddr(probe.host), title_id);
+      if (probe.isStale()) return;
+
+      const addr = mgmtAddr(probe.host);
+      const deadline = Date.now() + LAUNCH_CONFIRM_TIMEOUT_MS;
+      while (Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, LAUNCH_CONFIRM_POLL_MS));
+        if (probe.isStale()) return;
+        try {
+          const running = await fetchRunningGames(addr);
+          if (probe.isStale()) return;
+          if (running.has(title_id)) return; // up — done waiting
+        } catch {
+          // Transient RPC failure while the title comes up: keep waiting.
+          // The deadline is what ends this loop, not a single bad poll.
+        }
+      }
+      // Timed out waiting. The launch itself may still have worked — say so
+      // rather than claiming a failure we can't prove.
+      pushNotification(
+        "info",
+        tr("game_hub_launch_unconfirmed", undefined, "Launch not confirmed"),
+        {
+          body: tr(
+            "game_hub_launch_unconfirmed_body",
+            undefined,
+            "The PS5 accepted the launch but the title hasn't appeared yet. Check the console — it may still be starting.",
+          ),
+        },
+      );
+    } catch (e) {
+      if (probe.isStale()) return;
+      pushNotification(
+        "error",
+        tr("game_hub_launch_failed", undefined, "Launch failed"),
+        { body: e instanceof Error ? e.message : String(e) },
+      );
+    } finally {
+      setLaunching(false);
+    }
+  }, [title_id, launching, guard, tr]);
 
   if (!title_id) {
     return (
@@ -228,12 +322,13 @@ export default function GameHubScreen() {
             <Button
               variant="primary"
               size="sm"
-              leftIcon={<Play size={14} />}
-              onClick={() => {
-                /* TODO: wire to ps5_app_launch */
-              }}
+              leftIcon={launching ? <Spinner size={14} /> : <Play size={14} />}
+              disabled={launching || payloadStatus !== "up"}
+              onClick={handleLaunch}
             >
-              {tr("game_hub_launch", undefined, "Launch")}
+              {launching
+                ? tr("game_hub_launching", undefined, "Starting…")
+                : tr("game_hub_launch", undefined, "Launch")}
             </Button>
           </div>
         </div>
@@ -250,7 +345,13 @@ export default function GameHubScreen() {
       />
 
       {/* Tab content */}
-      <GameTabContent game={game} playSeconds={playSeconds} lastSeenMs={lastSeenMs} tab={activeTab} />
+      <GameTabContent
+        game={game}
+        host={host}
+        playSeconds={playSeconds}
+        lastSeenMs={lastSeenMs}
+        tab={activeTab}
+      />
     </div>
   );
 }
@@ -259,59 +360,29 @@ export default function GameHubScreen() {
 function GameTabContent({
   tab,
   game,
+  host,
   playSeconds,
   lastSeenMs,
 }: {
   tab: TabId;
   game: GameInfo;
+  host: string | null;
   playSeconds: number | undefined;
   lastSeenMs: number | undefined;
 }) {
-  const tr = useTr();
-
   switch (tab) {
     case "overview":
       return <OverviewTab game={game} playSeconds={playSeconds} lastSeenMs={lastSeenMs} />;
     case "cheats":
-      return (
-        <PlaceholderTab
-          icon={Shield}
-          title={tr("game_hub_cheats", undefined, "Cheats")}
-          desc="Cheat file management: list of available cheats per trainer, toggle per-cheat, auto-apply profile."
-        />
-      );
+      return <CheatsTab titleId={game.titleId} host={host} />;
     case "saves":
-      return (
-        <PlaceholderTab
-          icon={Save}
-          title={tr("game_hub_saves", undefined, "Saves")}
-          desc="Save slots with version history, backup, restore, compare."
-        />
-      );
+      return <SavesTab titleId={game.titleId} host={host} />;
     case "media":
-      return (
-        <PlaceholderTab
-          icon={ImageIcon}
-          title={tr("game_hub_media", undefined, "Media")}
-          desc="Screenshots and videos for this game."
-        />
-      );
+      return <MediaTab />;
     case "addons":
-      return (
-        <PlaceholderTab
-          icon={Package}
-          title={tr("game_hub_addons", undefined, "Add-ons")}
-          desc="DLC list — installed and available."
-        />
-      );
+      return <PackagesTab titleId={game.titleId} host={host} kind="addons" />;
     case "updates":
-      return (
-        <PlaceholderTab
-          icon={Download}
-          title={tr("game_hub_updates", undefined, "Updates")}
-          desc="Available patches, current version, patch history."
-        />
-      );
+      return <PackagesTab titleId={game.titleId} host={host} kind="updates" />;
     case "storage":
       return <StorageTab game={game} />;
     case "playtime":
@@ -319,6 +390,391 @@ function GameTabContent({
     default:
       return null;
   }
+}
+
+/**
+ * Shared fetch-on-mount shell for the tabs that pull from the console.
+ *
+ * Every remote tab needs the same three-state render (loading / error /
+ * data) plus the same "not connected" short-circuit, so it lives here
+ * once instead of five times. `deps` re-runs the fetch the same way
+ * `useEffect` deps do.
+ */
+function useTabFetch<T>(
+  host: string | null,
+  fetcher: (addr: string) => Promise<T>,
+  deps: unknown[],
+): { data: T | null; loading: boolean; error: string | null } {
+  const payloadStatus = useConnectionStore((s) => s.payloadStatus);
+  const [data, setData] = useState<T | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!host?.trim() || payloadStatus !== "up") {
+      setData(null);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    fetcher(transferAddr(host.trim()))
+      .then((res) => {
+        if (!cancelled) setData(res);
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // `fetcher` is intentionally excluded — callers pass an inline closure,
+    // so including it would refetch on every render. `deps` is the contract.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [host, payloadStatus, ...deps]);
+
+  return { data, loading, error };
+}
+
+/** Standard card wrapper for a fetched tab: title, spinner, error, body. */
+function TabCard({
+  icon: Icon,
+  title,
+  loading,
+  error,
+  children,
+}: {
+  icon: typeof Info;
+  title: string;
+  loading?: boolean;
+  error?: string | null;
+  children: React.ReactNode;
+}) {
+  const tr = useTr();
+  return (
+    <Card>
+      <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
+        <Icon size={16} className="text-[var(--color-muted)]" />
+        {title}
+        {loading && <Spinner size={14} />}
+      </h2>
+      {error ? (
+        <Callout tone="error" title={tr("game_hub_error_title", undefined, "Error")}>
+          {error}
+        </Callout>
+      ) : loading ? (
+        <p className="text-sm text-[var(--color-muted)]">
+          {tr("loading", undefined, "Loading…")}
+        </p>
+      ) : (
+        children
+      )}
+    </Card>
+  );
+}
+
+/** Shown by remote tabs when there's no live console to query. */
+function NotConnectedNote() {
+  const tr = useTr();
+  return (
+    <p className="text-sm text-[var(--color-muted)]">
+      {tr(
+        "game_hub_needs_connection",
+        undefined,
+        "Connect to a PS5 to load this.",
+      )}
+    </p>
+  );
+}
+
+/** Cheats tab — the cheat mods this title has, each individually toggleable. */
+function CheatsTab({ titleId, host }: { titleId: string; host: string | null }) {
+  const tr = useTr();
+  const payloadStatus = useConnectionStore((s) => s.payloadStatus);
+  const connected = !!host?.trim() && payloadStatus === "up";
+  const { data, loading, error } = useTabFetch(
+    host,
+    (addr) => cheatsGet(titleId, addr),
+    [titleId],
+  );
+
+  // Local echo of each toggle so the switch responds immediately; the
+  // console is the source of truth on the next load.
+  const [overrides, setOverrides] = useState<Record<number, boolean>>({});
+  useEffect(() => setOverrides({}), [titleId, data]);
+  const [busyIndex, setBusyIndex] = useState<number | null>(null);
+  const [toggleError, setToggleError] = useState<string | null>(null);
+
+  const onToggle = async (mod: CheatMod, next: boolean) => {
+    if (!host?.trim()) return;
+    setBusyIndex(mod.index);
+    setToggleError(null);
+    setOverrides((o) => ({ ...o, [mod.index]: next }));
+    try {
+      const res = await cheatsToggle(
+        titleId,
+        mod.index,
+        next,
+        transferAddr(host.trim()),
+      );
+      if (!res.ok) throw new Error(res.err || "Toggle rejected by the console");
+    } catch (e) {
+      // Roll the switch back — the console didn't accept it.
+      setOverrides((o) => ({ ...o, [mod.index]: !next }));
+      setToggleError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusyIndex(null);
+    }
+  };
+
+  const mods = data?.mods ?? [];
+  return (
+    <TabCard
+      icon={Shield}
+      title={tr("game_hub_cheats", undefined, "Cheats")}
+      loading={loading}
+      error={error ?? data?.error ?? null}
+    >
+      {!connected ? (
+        <NotConnectedNote />
+      ) : mods.length === 0 ? (
+        <p className="text-sm text-[var(--color-muted)]">
+          {tr(
+            "game_hub_no_cheats",
+            undefined,
+            "No cheats installed for this title. Add some from the Cheats screen.",
+          )}
+        </p>
+      ) : (
+        <>
+          {toggleError && (
+            <Callout
+              tone="error"
+              title={tr("game_hub_cheat_toggle_failed", undefined, "Couldn’t change that cheat")}
+              className="mb-3"
+              onDismiss={() => setToggleError(null)}
+            >
+              {toggleError}
+            </Callout>
+          )}
+          <ul className="divide-y divide-[var(--color-border)]">
+            {mods.map((mod) => (
+              <li key={mod.index} className="py-2">
+                <Toggle
+                  checked={overrides[mod.index] ?? mod.on}
+                  disabled={busyIndex === mod.index}
+                  onChange={(next) => onToggle(mod, next)}
+                  label={mod.name}
+                  hint={mod.desc || undefined}
+                />
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </TabCard>
+  );
+}
+
+/** Saves tab — this title's save folders across every user account. */
+function SavesTab({ titleId, host }: { titleId: string; host: string | null }) {
+  const tr = useTr();
+  const navigate = useNavigate();
+  const payloadStatus = useConnectionStore((s) => s.payloadStatus);
+  const connected = !!host?.trim() && payloadStatus === "up";
+  // user_id=0 lists every user's saves; we filter to this title client-side.
+  const { data, loading, error } = useTabFetch(host, (addr) => savesList(addr, 0), []);
+
+  const saves = useMemo(
+    () => (data?.saves ?? []).filter((s: SaveEntry) => s.title_id === titleId),
+    [data, titleId],
+  );
+
+  return (
+    <TabCard
+      icon={Save}
+      title={tr("game_hub_saves", undefined, "Saves")}
+      loading={loading}
+      error={error}
+    >
+      {!connected ? (
+        <NotConnectedNote />
+      ) : saves.length === 0 ? (
+        <p className="text-sm text-[var(--color-muted)]">
+          {tr("game_hub_no_saves", undefined, "No save data found for this title.")}
+        </p>
+      ) : (
+        <>
+          <ul className="divide-y divide-[var(--color-border)]">
+            {saves.map((s) => (
+              <li key={s.path} className="flex items-center justify-between gap-4 py-2">
+                <div className="min-w-0">
+                  <div
+                    className="truncate font-mono text-xs"
+                    title={s.path}
+                  >
+                    {s.path}
+                  </div>
+                  <div className="mt-0.5 flex items-center gap-2 text-xs text-[var(--color-muted)]">
+                    <Badge tone="neutral" variant="soft">
+                      {s.kind === "ps4" ? "PS4" : "PS5"}
+                    </Badge>
+                    <span>
+                      {tr("game_hub_save_user", undefined, "User")} {s.user_id}
+                    </span>
+                    {s.size > 0 && <span>· {formatBytes(s.size)}</span>}
+                    {s.mtime > 0 && (
+                      <span>· {new Date(s.mtime * 1000).toLocaleString()}</span>
+                    )}
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+          <div className="mt-4">
+            <Button variant="ghost" size="sm" onClick={() => navigate("/saves")}>
+              {tr("game_hub_manage_saves", undefined, "Back up / restore in Saves")}
+            </Button>
+          </div>
+        </>
+      )}
+    </TabCard>
+  );
+}
+
+/**
+ * Media tab.
+ *
+ * The PS5 stores screenshots and clips under
+ * `/user/av_contents/{photo,video}/<userId>/<userId>/<batch>/<file>` — the
+ * path carries a capture batch, NOT a title id, and the payload's listing
+ * has nothing else to key on. So there is no honest way to show "this
+ * game's media" here. Rather than filter on a heuristic that silently
+ * misattributes captures, we say so and link to the full browsers.
+ */
+function MediaTab() {
+  const tr = useTr();
+  const navigate = useNavigate();
+  return (
+    <TabCard icon={ImageIcon} title={tr("game_hub_media", undefined, "Media")}>
+      <p className="text-sm text-[var(--color-muted)]">
+        {tr(
+          "game_hub_media_not_per_game",
+          undefined,
+          "The PS5 doesn't tag screenshots or clips with the game they came from — captures are filed by date, not by title. Browse everything on the console instead:",
+        )}
+      </p>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Button
+          variant="secondary"
+          size="sm"
+          leftIcon={<ImageIcon size={14} />}
+          onClick={() => navigate("/screenshots")}
+        >
+          {tr("game_hub_open_screenshots", undefined, "Screenshots")}
+        </Button>
+        <Button
+          variant="secondary"
+          size="sm"
+          leftIcon={<Film size={14} />}
+          onClick={() => navigate("/videos")}
+        >
+          {tr("game_hub_open_videos", undefined, "Video clips")}
+        </Button>
+      </div>
+    </TabCard>
+  );
+}
+
+/**
+ * Add-ons / Updates tab — staged packages for this title, split by PARAM.SFO
+ * CATEGORY. `ac` is DLC, `gp` is an update/patch. Both come from the same
+ * per-host package library store, so one component serves both tabs.
+ */
+function PackagesTab({
+  titleId,
+  host,
+  kind,
+}: {
+  titleId: string;
+  host: string | null;
+  kind: "addons" | "updates";
+}) {
+  const tr = useTr();
+  const navigate = useNavigate();
+  const payloadStatus = useConnectionStore((s) => s.payloadStatus);
+  const connected = !!host?.trim() && payloadStatus === "up";
+  const wantCategory = kind === "addons" ? "ac" : "gp";
+  const entries = usePkgLibrary(host ?? "", (s) => s.entries);
+
+  const matching = useMemo(
+    () =>
+      (entries ?? []).filter(
+        (e: PkgEntry) => e.titleId === titleId && e.category === wantCategory,
+      ),
+    [entries, titleId, wantCategory],
+  );
+
+  const isAddons = kind === "addons";
+  return (
+    <TabCard
+      icon={isAddons ? Package : Download}
+      title={
+        isAddons
+          ? tr("game_hub_addons", undefined, "Add-ons")
+          : tr("game_hub_updates", undefined, "Updates")
+      }
+    >
+      {!connected ? (
+        <NotConnectedNote />
+      ) : matching.length === 0 ? (
+        <p className="text-sm text-[var(--color-muted)]">
+          {isAddons
+            ? tr(
+                "game_hub_no_addons",
+                undefined,
+                "No DLC packages staged for this title. Upload one from Install Package.",
+              )
+            : tr(
+                "game_hub_no_updates",
+                undefined,
+                "No update packages staged for this title. Upload one from Install Package.",
+              )}
+        </p>
+      ) : (
+        <ul className="divide-y divide-[var(--color-border)]">
+          {matching.map((e) => (
+            <li key={e.path} className="flex items-center justify-between gap-4 py-2">
+              <div className="min-w-0">
+                <div className="truncate text-sm font-medium">
+                  {e.originalName || e.title || e.name}
+                </div>
+                <div className="mt-0.5 flex items-center gap-2 text-xs text-[var(--color-muted)]">
+                  {e.appVer && <span className="font-mono">v{e.appVer}</span>}
+                  {e.size > 0 && <span>· {formatBytes(e.size)}</span>}
+                </div>
+              </div>
+              {e.installedHere && (
+                <Badge tone="good" variant="soft">
+                  {tr("game_hub_installed", undefined, "Installed")}
+                </Badge>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="mt-4">
+        <Button variant="ghost" size="sm" onClick={() => navigate("/install-package")}>
+          {tr("game_hub_open_install", undefined, "Open Install Package")}
+        </Button>
+      </div>
+    </TabCard>
+  );
 }
 
 interface GameInfo {
@@ -447,33 +903,6 @@ function PlayTimeTab({
           {tr("game_hub_no_playtime", undefined, "No play time data recorded for this game.")}
         </p>
       )}
-    </Card>
-  );
-}
-
-/** Placeholder tab — for tabs not yet fully implemented. */
-function PlaceholderTab({
-  icon: Icon,
-  title,
-  desc,
-}: {
-  icon: typeof Info;
-  title: string;
-  desc: string;
-}) {
-  const tr = useTr();
-  return (
-    <Card>
-      <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold">
-        <Icon size={16} className="text-[var(--color-muted)]" />
-        {title}
-      </h2>
-      <p className="text-sm text-[var(--color-muted)]">{desc}</p>
-      <div className="mt-4 rounded-md border border-dashed border-[var(--color-border)] p-6 text-center">
-        <span className="text-xs text-[var(--color-muted)]">
-          {tr("game_hub_coming_soon", undefined, "Coming soon")}
-        </span>
-      </div>
     </Card>
   );
 }
