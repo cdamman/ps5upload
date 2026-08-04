@@ -4,6 +4,55 @@ What's new in ps5upload, written for humans.
 
 ---
 
+## 5.1.0
+
+**Mobile got a proper rethink, and a long-standing hardware bug is
+fixed.**
+
+### Drive sensors actually report your storage
+
+The Hardware screen showed 0 B for every drive — internal SSD, M.2
+expansion and USB alike. The console was sending the numbers all along;
+the app was reading them under the wrong names and quietly throwing them
+away. It now shows real capacity, usage and temperature.
+
+If you have a console still running an older payload, it keeps working —
+no need to re-send anything by hand.
+
+### The "More" tab on Android is a real screen now
+
+It used to be the desktop sidebar squeezed into a pop-up sheet: a narrow
+column stranded in the middle of the screen, tiny tap targets, and two
+scrollbars fighting each other.
+
+It's now a full screen with a **search box** — type a few letters to jump
+to any of the 38 screens. Search also matches the English name, so it
+works whatever language you use the app in. Your console switcher stays
+pinned at the top, and the Android back button behaves normally.
+
+### Everything is easier to tap
+
+Buttons, switches, checkboxes, tabs and dropdowns across every screen
+were below the recommended minimum touch size — most of them by just a
+few pixels, which is exactly enough to make them annoying. All 41 screens
+were measured at phone size and fixed. Desktop is unchanged.
+
+### The Game Hub is finished
+
+Launch actually launches, and the Play button stays disabled until the
+game is really up, so a second tap can't kill a title that's still
+starting. The Cheats, Saves, Add-ons and Updates tabs are live. Media
+explains why per-game filtering isn't possible (the PS5 files captures by
+date, not by game) and links you to the full browsers.
+
+### Translations
+
+The 152 most-used strings — navigation, Game Hub, More, Processes, FTP,
+Backup, accessibility settings — are now translated in all 18 languages
+instead of falling back to English.
+
+---
+
 ## 5.0.0
 
 **The v5 redesign is here.** This release delivers the complete v5
