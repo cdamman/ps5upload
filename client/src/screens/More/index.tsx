@@ -210,7 +210,10 @@ function MoreRow({
         to={item.to}
         className={({ isActive }) =>
           [
-            "flex min-h-14 w-full items-center gap-3 rounded-lg px-3 text-[15px] transition-colors",
+            // 56px on touch (the §4.1 floor with room for the chevron);
+            // tighter above md where the pointer is a mouse and the
+            // extra height just costs rows-per-screen.
+            "flex min-h-14 w-full items-center gap-3 rounded-lg px-3 text-[15px] transition-colors md:min-h-10 md:text-sm",
             "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)]",
             isActive
               ? "bg-[var(--color-accent)] font-medium text-[var(--color-accent-contrast)]"

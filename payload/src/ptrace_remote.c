@@ -44,6 +44,59 @@
  * else. */
 #define PS5_PTRACE_ALLOWED_AUTHID 0x4800000000010003ll
 
+/* How long we are willing to wait for a traced process to report a stop.
+ *
+ * THIS BOUND IS A CONSOLE-SAFETY MECHANISM, NOT A PERFORMANCE TUNABLE.
+ * Every waitpid() here runs while SceShellUI is PT_ATTACH'd and stopped.
+ * A plain blocking waitpid() that never returns leaves ShellUI stopped
+ * forever — the whole console UI freezes and the only way out is holding
+ * the power button. shellui_rpc_emergency_detach() does not help: it
+ * runs from a fatal signal handler, and a hang raises no signal.
+ *
+ * That is not hypothetical. A user on FW 12.40 reported exactly this
+ * ("froze my console, had to shut it down"), and FW 12.x is precisely
+ * where our symbol resolution is known to be incomplete (see the
+ * "add FW-12.x renamed export here" TODOs in register.c) — i.e. where
+ * a remote call is most likely to never produce the stop we're waiting
+ * for.
+ *
+ * 10 s is far beyond any healthy stop (they land in microseconds) while
+ * still bounding the worst case to an annoyance rather than a reboot. */
+#define PT_WAIT_TIMEOUT_MS   10000
+#define PT_WAIT_POLL_US      1000
+
+/*
+ * Bounded replacement for `waitpid(pid, status, 0)`.
+ *
+ * Returns 0 when the stop was reported, -1 on error or timeout (with
+ * errno set to ETIMEDOUT on timeout so callers can tell the two apart).
+ * Polls with WNOHANG rather than blocking so we can give up.
+ */
+static int pt_waitpid_bounded(pid_t pid, int *status) {
+    int elapsed_us = 0;
+    const int limit_us = PT_WAIT_TIMEOUT_MS * 1000;
+
+    for (;;) {
+        int st = 0;
+        pid_t r = waitpid(pid, &st, WNOHANG);
+        if (r == pid) {
+            if (status) *status = st;
+            return 0;
+        }
+        if (r == -1) {
+            if (errno == EINTR) continue; /* our own signal handler */
+            return -1;
+        }
+        /* r == 0: not stopped yet. */
+        if (elapsed_us >= limit_us) {
+            errno = ETIMEDOUT;
+            return -1;
+        }
+        usleep(PT_WAIT_POLL_US);
+        elapsed_us += PT_WAIT_POLL_US;
+    }
+}
+
 static int sys_ptrace(int request, pid_t pid, caddr_t addr, int data) {
     pid_t mypid = getpid();
     uint64_t saved_authid;
@@ -125,14 +178,15 @@ int pt_attach(pid_t pid) {
     }
     /* Block until the child reports the SIGSTOP. Without this the
      * subsequent PT_GETREGS races the kernel and returns ESRCH. */
-    if (waitpid(pid, 0, 0) == -1) {
+    if (pt_waitpid_bounded(pid, 0) == -1) {
         /* PT_ATTACH already succeeded: we are still the tracer and the
          * target is stopped. Returning without detaching leaks a frozen
          * SceShellUI and leaves the next pt_attach EBUSY under our own
-         * tracer. waitpid realistically only fails here on EINTR (one
-         * of our signal handlers firing mid-wait), so a clean detach
-         * restores the target to running and frees the slot. Best-effort
-         * — if detach also fails there is nothing left to try. */
+         * tracer, so detach unconditionally. This now also covers the
+         * timeout case — a target that never reports its stop used to
+         * park us in a blocking waitpid() forever with ShellUI held
+         * stopped, which is a frozen console. Best-effort: if detach
+         * also fails there is nothing left to try. */
         (void)pt_detach(pid, 0);
         return -1;
     }
@@ -147,7 +201,10 @@ int pt_step(pid_t pid) {
     if (sys_ptrace(PT_STEP, pid, (caddr_t)1, 0) != 0) {
         return -1;
     }
-    if (waitpid(pid, 0, 0) < 0) {
+    /* Bounded: a single-step that never reports back would otherwise
+     * hold ShellUI stopped indefinitely. The caller unwinds and the
+     * RPC layer's detach runs. */
+    if (pt_waitpid_bounded(pid, 0) < 0) {
         return -1;
     }
     return 0;
@@ -275,7 +332,14 @@ long pt_call(pid_t pid, intptr_t addr, ...) {
      * that races our waitpid), the call itself ran. */
     g_pt_call_dispatched = 1;
     int wstatus = 0;
-    if (waitpid(pid, &wstatus, 0) < 0) {
+    /* Bounded. This is the riskiest of the three waits: the remote
+     * function is already running inside ShellUI, so if it blocks or
+     * never traps back (a mis-resolved address on an untested firmware
+     * is the obvious way), a blocking waitpid() would hold ShellUI
+     * stopped forever — i.e. freeze the console. On timeout we restore
+     * the saved registers and unwind so the RPC layer's detach runs and
+     * ShellUI resumes, even though the call's outcome is unknown. */
+    if (pt_waitpid_bounded(pid, &wstatus) < 0) {
         (void)pt_setregs(pid, &bak_reg);
         return -1;
     }

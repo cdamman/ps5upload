@@ -1,4 +1,3 @@
-import { useEffect, useRef, useState } from "react";
 import { NavLink, useLocation } from "react-router";
 import {
   LayoutDashboard,
@@ -7,10 +6,8 @@ import {
   Cpu,
   Activity,
   MoreHorizontal,
-  X,
 } from "lucide-react";
 import { useTr } from "../state/lang";
-import Sidebar from "./Sidebar";
 import type { LucideIcon } from "lucide-react";
 
 /**
@@ -18,16 +15,13 @@ import type { LucideIcon } from "lucide-react";
  *
  * Desktop (md+): a 56px icon rail on the far left with 5 primary tabs.
  *   Each tab deep-links into a v4 screen that belongs to that v5 tab's
- *   domain. A "More" button at the bottom opens the full v4 sidebar as
- *   a drawer so every legacy route is still reachable during the
- *   Phase 5.1 migration.
+ *   domain. A "More" button at the bottom navigates to /more.
  *
  * Mobile (<md): a 56px bottom nav with the same 5 tabs. The mobile
  *   top-bar hamburger is replaced by this nav; the "More" tab navigates
- *   to the /more screen. It used to open the desktop Sidebar in a bottom
- *   sheet — a 270px-wide column in a 448px sheet, 36px rows, and two
- *   nested scrollers. A real route fixes all three and makes the Android
- *   back button work without special-casing.
+ *   to /more. Both tiers used to render the desktop Sidebar in an
+ *   overlay — a 270px column in a 448px sheet on phones, and a drawer
+ *   with no search on tablet/desktop. One route replaces both.
  *
  * Routing note: each tab links to the *current* v4 route that best
  *   represents that v5 tab. As Phase 5.1 builds each new tab shell,
@@ -150,37 +144,12 @@ function useActiveTab(): string | null {
 /**
  * Desktop rail. 56px wide, icon + tooltip, vertically centered. Renders
  * only at md+ (the bottom nav takes over below md). The "More" button
- * at the bottom opens the full v4 Sidebar as a drawer so every legacy
- * route stays reachable during the Phase 5.1 migration.
+ * at the bottom navigates to /more — the same screen the phone nav
+ * uses, so the search box is available on every tier.
  */
 export function TabRail() {
   const tr = useTr();
   const activeTab = useActiveTab();
-  const [moreOpen, setMoreOpen] = useState(false);
-  const moreRef = useRef<HTMLDivElement>(null);
-  const moreBtnRef = useRef<HTMLButtonElement>(null);
-
-  // Close on Escape; restore focus to the More button. Lock body scroll
-  // while the drawer is open so the background doesn't move.
-  useEffect(() => {
-    if (!moreOpen) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        setMoreOpen(false);
-        moreBtnRef.current?.focus();
-      }
-    };
-    document.addEventListener("keydown", onKey);
-    moreRef.current?.focus();
-    return () => {
-      document.body.style.overflow = prev;
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [moreOpen]);
-
   return (
     <>
       <nav
@@ -237,57 +206,29 @@ export function TabRail() {
         {/* Spacer pushes More to the bottom. */}
         <div className="flex-1" />
 
-        <button
-          ref={moreBtnRef}
-          type="button"
+        {/* More goes to the /more screen on every tier, not just phones.
+            It used to open the desktop Sidebar in a drawer here, which
+            meant tablets and desktops never got the search box the 5.1.0
+            notes promised — a tablet is a touch device and was landing
+            on the cramped drawer. One route, one code path. */}
+        <NavLink
+          to="/more"
           aria-label={tr("v5_tab_more", undefined, "More")}
-          aria-expanded={moreOpen}
-          aria-haspopup="dialog"
           title={tr("v5_tab_more_desc", undefined, "All screens")}
-          onClick={() => setMoreOpen(true)}
-          className={[
-            "mb-2 flex h-11 w-11 items-center justify-center rounded-lg transition-colors",
-            "text-[var(--color-muted)] hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text)]",
-            "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)]",
-          ]
-            .filter(Boolean)
-            .join(" ")}
+          className={({ isActive }) =>
+            [
+              "mb-2 flex h-11 w-11 items-center justify-center rounded-lg transition-colors",
+              "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)]",
+              isActive
+                ? "bg-[var(--color-surface-3)] text-[var(--color-text)]"
+                : "text-[var(--color-muted)] hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text)]",
+            ].join(" ")
+          }
         >
           <MoreHorizontal size={22} aria-hidden />
-        </button>
+        </NavLink>
       </nav>
 
-      {/* "More" drawer — full v4 Sidebar in a side dialog. */}
-      {moreOpen && (
-        <div
-          ref={moreRef}
-          tabIndex={-1}
-          role="dialog"
-          aria-modal="false"
-          aria-label={tr("v5_tab_more", undefined, "More")}
-          className="fixed inset-0 z-50 hidden md:block outline-none"
-        >
-          <button
-            type="button"
-            aria-label={tr("nav_close_aria", undefined, "Close")}
-            onClick={() => setMoreOpen(false)}
-            className="anim-scrim absolute inset-0 bg-[var(--overlay-scrim)]"
-          />
-          <div className="anim-drawer elev-3 absolute inset-y-0 left-14 flex max-w-[85%]">
-            <div className="relative flex flex-col bg-[var(--color-surface-2)]">
-              <button
-                type="button"
-                aria-label={tr("nav_close_aria", undefined, "Close")}
-                onClick={() => setMoreOpen(false)}
-                className="absolute right-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-md text-[var(--color-muted)] hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)]"
-              >
-                <X size={18} />
-              </button>
-              <Sidebar onNavigate={() => setMoreOpen(false)} />
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 }
