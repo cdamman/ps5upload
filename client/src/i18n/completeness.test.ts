@@ -76,6 +76,74 @@ describe("i18n locale integrity", () => {
   );
 });
 
+describe("i18n placeholder integrity", () => {
+  const placeholders = (s: string) =>
+    (s.match(/\{[A-Za-z_][A-Za-z0-9_]*\}/g) ?? []).sort();
+
+  /**
+   * `t()` interpolates `{name}` by plain string replacement — it has no
+   * plural support (see i18n.ts). So an en value like `"{n} rule{n}"`,
+   * written by mechanically converting the call site's
+   * `` `${n} rule${n === 1 ? "" : "s"}` `` fallback, renders as the
+   * literal "5 rule5" for every English user.
+   *
+   * Prefer count-neutral phrasing ("Rules: {n}") over a `_one`/`_many`
+   * key split: we ship Polish, Russian and Arabic, whose plural
+   * categories a binary split cannot express correctly anyway.
+   */
+  const fakePlural = (v: string) => {
+    // Signal is the CONJUNCTION of two things: the same placeholder used
+    // more than once, and one of those uses glued to the end of a word.
+    // Either alone is legitimate — `v{version}` is a version prefix,
+    // `0x{hex}` a radix prefix, and a placeholder may repeat across a
+    // sentence for good reason.
+    for (const name of new Set(placeholders(v))) {
+      const bare = name.slice(1, -1);
+      const uses = v.split(name).length - 1;
+      if (uses > 1 && new RegExp(`[A-Za-z]\\{${bare}\\}`).test(v)) return true;
+    }
+    return false;
+  };
+
+  it("en.ts has no placeholder used as a fake plural suffix", () => {
+    const bad = Object.entries(en)
+      .filter(([, v]) => fakePlural(v as string))
+      .map(([k, v]) => `${k}: ${v as string}`);
+    expect(
+      bad,
+      "A placeholder directly following a letter is almost always a botched " +
+        "plural — it renders literally (e.g. '5 rule5'). Use count-neutral " +
+        `phrasing instead:\n${bad.join("\n")}`,
+    ).toEqual([]);
+  });
+
+  /**
+   * A translation that drops or renames a placeholder either loses the
+   * value entirely or prints the braces verbatim on screen. Neither is
+   * catchable by the key-presence coverage gate.
+   */
+  it.each(NON_EN.map(([code]) => code))(
+    "locale %s uses the same placeholders as en for every shared key",
+    (code) => {
+      const dict = NON_EN.find(([c]) => c === code)![1] as Record<
+        string,
+        string
+      >;
+      const drift: string[] = [];
+      for (const [k, ev] of Object.entries(en)) {
+        const tv = dict[k];
+        if (typeof tv !== "string") continue;
+        const a = placeholders(ev as string).join(",");
+        const b = placeholders(tv).join(",");
+        if (a !== b) drift.push(`${k}: en=[${a}] ${code}=[${b}]`);
+      }
+      expect(drift, `Placeholder drift in ${code}:\n${drift.join("\n")}`).toEqual(
+        [],
+      );
+    },
+  );
+});
+
 describe("i18n English-catalog completeness", () => {
   // The invariant: if EVERY translator has a key, the English source must have
   // it too — otherwise English users get the raw key / inline fallback while

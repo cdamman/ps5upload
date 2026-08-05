@@ -155,11 +155,34 @@ function loadAllowlist() {
  *  produces; both are accepted on read so older allowlist files
  *  written by the bootstrap step keep working. */
 function readEntry(entry) {
-  if (Array.isArray(entry)) return { missing: entry, stale: [] };
+  if (Array.isArray(entry)) return { missing: entry, stale: [], untranslated: [] };
   return {
     missing: entry?.missing ?? [],
     stale: entry?.stale ?? [],
+    untranslated: entry?.untranslated ?? [],
   };
+}
+
+/**
+ * Is this en value PROSE — i.e. would a translator be expected to change
+ * it?
+ *
+ * Key presence alone is a bad proxy for "translated": a locale file can
+ * carry every key in en.ts and still be byte-identical English for
+ * hundreds of them. That is exactly what happened here — 18 locales
+ * reported 100% coverage while ~220 keys each were untouched English,
+ * because the gate below only ever compared key SETS.
+ *
+ * The heuristic: two or more ASCII words of 3+ letters means prose.
+ * That exempts the large tail of values it is correct to leave alone —
+ * units ("MB/s", "GHz"), acronyms ("CPU", "SoC", "M.2 SSD"), bare
+ * interpolations ("{n}"), and protocol literals ("pxplay:"). Anything
+ * the heuristic gets wrong (proper nouns like "PlayStation Store")
+ * goes in the `untranslated` allowlist bucket, same as every other
+ * exception this gate tracks.
+ */
+function isProse(value) {
+  return (value.match(/[A-Za-z]{3,}/g) ?? []).length >= 2;
 }
 
 function computeMissingPerLang(translations, allowlist) {
@@ -173,13 +196,23 @@ function computeMissingPerLang(translations, allowlist) {
     const entry = readEntry(allowlist[lang]);
     const allowedMissing = new Set(entry.missing);
     const allowedStale = new Set(entry.stale);
+    const allowedUntranslated = new Set(entry.untranslated);
     const missing = [...enKeys]
       .filter((k) => !langKeys.has(k) && !allowedMissing.has(k))
       .sort();
     const stale = [...langKeys]
       .filter((k) => !enKeys.has(k) && !allowedStale.has(k))
       .sort();
-    result[lang] = { missing, stale };
+    const untranslated = [...enKeys]
+      .filter(
+        (k) =>
+          langKeys.has(k) &&
+          dict[k] === en[k] &&
+          isProse(en[k]) &&
+          !allowedUntranslated.has(k),
+      )
+      .sort();
+    result[lang] = { missing, stale, untranslated };
   }
   return result;
 }
@@ -192,8 +225,16 @@ function computeAllForLang(translations) {
     const langKeys = new Set(Object.keys(dict));
     const missing = [...enKeys].filter((k) => !langKeys.has(k)).sort();
     const stale = [...langKeys].filter((k) => !enKeys.has(k)).sort();
-    if (missing.length > 0 || stale.length > 0) {
-      result[lang] = { missing, stale };
+    const untranslated = [...enKeys]
+      .filter(
+        (k) =>
+          langKeys.has(k) &&
+          dict[k] === translations.en[k] &&
+          isProse(translations.en[k]),
+      )
+      .sort();
+    if (missing.length > 0 || stale.length > 0 || untranslated.length > 0) {
+      result[lang] = { missing, stale, untranslated };
     }
   }
   return result;
@@ -286,9 +327,11 @@ const lines = [];
 for (const [lang, info] of Object.entries(perLang)) {
   const missCount = info.missing.length;
   const staleCount = info.stale.length;
+  const untransCount = info.untranslated.length;
   const entry = readEntry(allowlist[lang]);
-  const allowCount = entry.missing.length + entry.stale.length;
-  if (missCount === 0 && staleCount === 0) {
+  const allowCount =
+    entry.missing.length + entry.stale.length + entry.untranslated.length;
+  if (missCount === 0 && staleCount === 0 && untransCount === 0) {
     if (report) {
       lines.push(
         `  ${lang.padEnd(8)} ok           (${allowCount} allowlisted)`,
@@ -298,7 +341,8 @@ for (const [lang, info] of Object.entries(perLang)) {
   }
   failed = true;
   lines.push(
-    `  ${lang.padEnd(8)} missing=${missCount} stale=${staleCount} allowlisted=${allowCount}`,
+    `  ${lang.padEnd(8)} missing=${missCount} stale=${staleCount} ` +
+      `untranslated=${untransCount} allowlisted=${allowCount}`,
   );
   for (const k of info.missing.slice(0, 20)) {
     lines.push(`      missing: ${k}`);
@@ -311,6 +355,12 @@ for (const [lang, info] of Object.entries(perLang)) {
   }
   if (info.stale.length > 20) {
     lines.push(`      … and ${info.stale.length - 20} more`);
+  }
+  for (const k of info.untranslated.slice(0, 20)) {
+    lines.push(`      untranslated (still English): ${k}`);
+  }
+  if (info.untranslated.length > 20) {
+    lines.push(`      … and ${info.untranslated.length - 20} more`);
   }
 }
 
