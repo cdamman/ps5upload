@@ -2430,7 +2430,7 @@ backup_title: "Kopia zapasowa i przywracanie",
   bug_report_browser_unsupported:
     "Utworzenie pliku zip ze zgłoszeniem błędu wymaga aplikacji desktopowej — zapisuje ona plik w systemie plików komputera.",
   connection_step2_browser_unsupported:
-    "Przeglądarka nie może odczytać lokalnego pliku helpera w celu jego wysłania. Załaduj najpierw helpera z aplikacji desktopowej lub autロードera USB, a ta strona wykryje go automatycznie.",
+    "Przeglądarka nie może odczytać lokalnego pliku helpera w celu jego wysłania. Załaduj najpierw helpera z aplikacji desktopowej lub autoloadera USB, a ta strona wykryje go automatycznie.",
   notifications_unread: "Nieprzeczytane: {count}",
   "profile.username.cancel": "Anuluj",
   "profile.username.createBtn": "Utwórz",
