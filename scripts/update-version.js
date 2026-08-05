@@ -17,6 +17,8 @@
  *   - client/src-tauri/tauri.conf.json   (field: version)
  *   - client/src-tauri/Cargo.toml        (line: `version = "..."` under [package])
  *   - payload/include/config.h           (macro: PS5UPLOAD2_VERSION)
+ *   - engine/Cargo.lock,
+ *     client/src-tauri/Cargo.lock      (version of each local workspace crate)
  *   - engine/Cargo.toml                  (line: `version = "..."` under
  *                                         [workspace.package]; all engine
  *                                         crates inherit it via
@@ -114,6 +116,43 @@ function patchRegex(relPath, regex, replacer, extractor) {
   return { path: relPath, current, desired: targetVersion, ok };
 }
 
+/**
+ * Patch the workspace crates' own versions inside a Cargo.lock.
+ *
+ * Cargo.lock records a version for every crate INCLUDING the local ones,
+ * so bumping Cargo.toml alone leaves the lock stale. Nothing fails
+ * loudly — cargo just silently rewrites the lock on the next build — so
+ * the symptom is that a freshly released, freshly cloned tree is dirty
+ * the moment anyone compiles it. That is what happened for v5.1.1.
+ *
+ * Local crates are exactly the `[[package]]` blocks with no `source`
+ * key: registry and git dependencies always carry one, path members
+ * never do. That rule needs no list of crate names to keep in sync.
+ */
+function patchCargoLock(relPath) {
+  const full = path.join(repoRoot, relPath);
+  if (!fs.existsSync(full)) return null;
+  const raw = fs.readFileSync(full, "utf8");
+  const blocks = raw.split(/(?=\[\[package\]\])/);
+  let stale = 0;
+  const patched = blocks.map((block) => {
+    if (!block.startsWith("[[package]]")) return block;
+    if (/^source = /m.test(block)) return block; // registry or git crate
+    const m = block.match(/^version = "([^"]+)"/m);
+    if (!m || m[1] === targetVersion) return block;
+    stale++;
+    return block.replace(/^version = "[^"]+"/m, `version = "${targetVersion}"`);
+  });
+  const ok = stale === 0;
+  if (!ok && !checkMode) fs.writeFileSync(full, patched.join(""));
+  return {
+    path: relPath,
+    current: ok ? targetVersion : `${stale} local crate(s) stale`,
+    desired: targetVersion,
+    ok,
+  };
+}
+
 // ─── Run all patchers ─────────────────────────────────────────────────────
 
 const results = [
@@ -145,6 +184,8 @@ const results = [
     `version = "${targetVersion}"`,
     (m) => m[1],
   ),
+  patchCargoLock("engine/Cargo.lock"),
+  patchCargoLock("client/src-tauri/Cargo.lock"),
 ].filter(Boolean);
 
 // ─── Report ───────────────────────────────────────────────────────────────
