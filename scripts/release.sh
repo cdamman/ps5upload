@@ -78,6 +78,11 @@ fi
 if ! git diff --quiet || ! git diff --cached --quiet; then
   # Stage only the files update-version.js touches, not `git add -A`
   # which could sweep in editor swap files, .DS_Store, etc.
+  #
+  # This list must stay in step with the patchers in update-version.js.
+  # It drifted once: the Cargo.lock files were added there but not here,
+  # so v5.1.2 synced them and then left them unstaged — the release
+  # commit was incomplete and the tree came back dirty.
   git add \
     VERSION \
     client/package.json \
@@ -85,7 +90,9 @@ if ! git diff --quiet || ! git diff --cached --quiet; then
     client/src-tauri/tauri.conf.json \
     client/src-tauri/Cargo.toml \
     payload/include/config.h \
-    engine/Cargo.toml
+    engine/Cargo.toml \
+    engine/Cargo.lock \
+    client/src-tauri/Cargo.lock
   git commit -m "Release ${tag}"
 fi
 
