@@ -4,6 +4,47 @@ What's new in ps5upload, written for humans.
 
 ---
 
+## 5.1.1
+
+**A console-freeze fix, and every language is now genuinely complete.**
+
+### The app can no longer hang your console
+
+When ps5upload reads certain console state, it briefly attaches to a
+system process and waits for it to answer. That wait had no time limit.
+If the console didn't answer — which can happen on some firmware — the
+payload sat there holding that process open, and the console locked up
+until you cut the power.
+
+Every one of those waits now gives up after ten seconds and releases the
+process cleanly. This is the fix for the freeze reported on 5.0; if you
+were holding off on updating, this is the release to take.
+
+### The search box is on tablets too
+
+5.1.0 said the "More" screen had a search box. On phones it did. On
+tablets and desktop the old sidebar was still being shown, so it didn't.
+Both now use the same screen, so search works everywhere.
+
+### Empty readings say why they're empty
+
+The power telemetry panel showed four blanks whether your firmware
+doesn't expose those sensors, or the reading genuinely failed. It now
+tells you which, so you're not left guessing whether something is broken.
+
+### All 18 languages are actually finished
+
+Every language reported "100% translated" — but the check only asked
+whether a phrase was *present*, not whether it had been *translated*.
+Roughly 300 phrases per language were sitting there as untouched
+English. All of them are now translated, and the check was rebuilt so
+this can't quietly happen again.
+
+Also fixed: five English phrases that displayed literal nonsense like
+"5 rule5" and "Save 3 edit3" instead of counting properly.
+
+---
+
 ## 5.1.0
 
 **Mobile got a proper rethink, and a long-standing hardware bug is
