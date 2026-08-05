@@ -176,7 +176,17 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
-          components: clippy
+          components: rustfmt, clippy
+
+      # Formatting is platform-independent, so gate it on one runner
+      # rather than paying for it three times. This job previously
+      # installed clippy ONLY, so client/src-tauri was never format-
+      # gated at all while the engine workspace was — six files had
+      # quietly drifted by 5.1.1.
+      - name: cargo fmt
+        if: matrix.os == 'ubuntu-24.04'
+        working-directory: client/src-tauri
+        run: cargo fmt --all -- --check
 
       - name: Install Tauri Linux deps
         if: runner.os == 'Linux'

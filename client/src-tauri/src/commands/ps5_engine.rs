@@ -952,12 +952,15 @@ pub async fn cheats_get(req: CheatsGetReq) -> Result<JsonValue, String> {
 pub async fn cheats_toggle(req: CheatsToggleReq) -> Result<JsonValue, String> {
     let base = engine::url();
     let url = format!("{base}/api/ps5/cheats/toggle");
-    post_json(&url, &serde_json::json!({
-        "addr": req.addr,
-        "title_id": req.title_id,
-        "index": req.index,
-        "on": req.on,
-    }))
+    post_json(
+        &url,
+        &serde_json::json!({
+            "addr": req.addr,
+            "title_id": req.title_id,
+            "index": req.index,
+            "on": req.on,
+        }),
+    )
     .await
 }
 
@@ -1003,10 +1006,13 @@ pub async fn cheats_status(req: CheatsAddrReq) -> Result<JsonValue, String> {
 pub async fn cheats_engine_set(req: CheatsEngineSetReq) -> Result<JsonValue, String> {
     let base = engine::url();
     let url = format!("{base}/api/ps5/cheats/engine-set");
-    post_json(&url, &serde_json::json!({
-        "addr": req.addr,
-        "enabled": req.enabled,
-    }))
+    post_json(
+        &url,
+        &serde_json::json!({
+            "addr": req.addr,
+            "enabled": req.enabled,
+        }),
+    )
     .await
 }
 
@@ -1047,12 +1053,15 @@ pub async fn cheats_repos_search(req: CheatsRepoSearchReq) -> Result<JsonValue, 
 pub async fn cheats_repos_download(req: CheatsRepoDownloadReq) -> Result<JsonValue, String> {
     let base = engine::url();
     let url = format!("{base}/api/ps5/cheats/repos/download");
-    post_json(&url, &serde_json::json!({
-        "addr": req.addr,
-        "repo_id": req.repo_id,
-        "filename": req.filename,
-        "title_id": req.title_id,
-    }))
+    post_json(
+        &url,
+        &serde_json::json!({
+            "addr": req.addr,
+            "repo_id": req.repo_id,
+            "filename": req.filename,
+            "title_id": req.title_id,
+        }),
+    )
     .await
 }
 
@@ -1120,11 +1129,14 @@ pub async fn sdk_scan(req: CheatsAddrReq) -> Result<JsonValue, String> {
 pub async fn sdk_patch(req: SdkPatchReq) -> Result<JsonValue, String> {
     let base = engine::url();
     let url = format!("{base}/api/ps5/sdk/patch");
-    post_json(&url, &serde_json::json!({
-        "addr": req.addr,
-        "title_id": req.title_id,
-        "target_sdk": req.target_sdk,
-    }))
+    post_json(
+        &url,
+        &serde_json::json!({
+            "addr": req.addr,
+            "title_id": req.title_id,
+            "target_sdk": req.target_sdk,
+        }),
+    )
     .await
 }
 
@@ -1139,10 +1151,13 @@ pub struct SdkRestoreReq {
 pub async fn sdk_restore(req: SdkRestoreReq) -> Result<JsonValue, String> {
     let base = engine::url();
     let url = format!("{base}/api/ps5/sdk/restore");
-    post_json(&url, &serde_json::json!({
-        "addr": req.addr,
-        "title_id": req.title_id,
-    }))
+    post_json(
+        &url,
+        &serde_json::json!({
+            "addr": req.addr,
+            "title_id": req.title_id,
+        }),
+    )
     .await
 }
 
@@ -1211,14 +1226,17 @@ pub struct FtpStartReq {
 pub async fn ftp_start(req: FtpStartReq) -> Result<JsonValue, String> {
     let base = engine::url();
     let url = format!("{base}/api/ps5/ftp/start");
-    post_json(&url, &serde_json::json!({
-        "addr": req.addr,
-        "port": req.port,
-        "root": req.root,
-        "readonly": req.readonly,
-        "user": req.user,
-        "pass": req.pass,
-    }))
+    post_json(
+        &url,
+        &serde_json::json!({
+            "addr": req.addr,
+            "port": req.port,
+            "root": req.root,
+            "readonly": req.readonly,
+            "user": req.user,
+            "pass": req.pass,
+        }),
+    )
     .await
 }
 
