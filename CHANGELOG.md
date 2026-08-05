@@ -4,6 +4,24 @@ What's new in ps5upload, written for humans.
 
 ---
 
+## 5.1.2
+
+**Build and release plumbing. Nothing changes in the app itself — if
+you're on 5.1.1 there's no need to update.**
+
+Two checks turned out to cover less than they appeared to:
+
+- The version-sync step updated every version-bearing file except the
+  two `Cargo.lock` files, which also record a version for each of our
+  own crates. Nothing failed loudly, so the symptom was that a freshly
+  released tree went dirty the moment anyone built it. 5.1.1 shipped
+  that way; this release carries the correction.
+- Continuous integration checked formatting on the engine but never on
+  the desktop app, so a handful of files there had drifted. Reformatted,
+  and the check now covers both.
+
+---
+
 ## 5.1.1
 
 **A console-freeze fix, and every language is now genuinely complete.**
