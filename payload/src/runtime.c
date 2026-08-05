@@ -10018,6 +10018,43 @@ static int handle_power_telemetry(runtime_state_t *state, int client_fd,
                          "power_up_cause=err\n");
         if (w > 0) n += (size_t)w > sizeof(body) - n ? (int)(sizeof(body) - n) : w;
     }
+    /* Say WHY the values are missing, instead of returning four bare
+     * nulls the UI can only render as "—".
+     *
+     * On retail FW 9.60 none of the four sceKernelIccGet* symbols
+     * resolve via dlsym — verified on hardware. That's distinct from a
+     * symbol that resolves but whose call fails, and the client should
+     * be able to tell the difference: "your firmware doesn't expose
+     * this" is a different message from "we asked and it errored".
+     *
+     * NOTE for a future attempt: /dev/icc_power and /dev/icc_device_power
+     * DO exist as device nodes (confirmed by listing /dev on hardware),
+     * so an ioctl path like the one fan control uses on /dev/icc_fan is
+     * plausible. We don't take it because the required ioctl numbers
+     * aren't documented anywhere we can verify, and guessing ioctls
+     * against a live ICC device risks hanging the console for what is a
+     * cosmetic readout. */
+    {
+        int resolved = (p_sceKernelIccGetPowerOperatingTime != NULL)
+                     + (p_sceKernelIccGetPowerNumberOfBootShutdown != NULL)
+                     + (p_sceKernelIccGetThermalAlert != NULL)
+                     + (p_sceKernelIccGetPowerUpCause != NULL);
+        /* Count successful CALLS, not resolved symbols. FW 5.10 resolves
+         * all four yet two of them still return non-zero — reporting
+         * "ok" off the symbol count alone claimed everything worked
+         * while half the fields came back null. Resolved means "the
+         * function exists"; only rc == 0 means "we got a value". */
+        int ok = (rc_op == 0) + (rc_boot == 0) + (rc_therm == 0) + (rc_pwc == 0);
+        const char *detail;
+        if (resolved == 0)      detail = "unsupported_firmware";
+        else if (ok == 0)       detail = "calls_failed";
+        else if (ok < 4)        detail = "partial";
+        else                    detail = "ok";
+        int w = snprintf(body + n, sizeof(body) > (size_t)n ? sizeof(body) - n : 0,
+                         "symbols_resolved=%d\nvalues_ok=%d\nstatus=%s\n",
+                         resolved, ok, detail);
+        if (w > 0) n += (size_t)w > sizeof(body) - n ? (int)(sizeof(body) - n) : w;
+    }
     pthread_mutex_lock(&state->state_mtx);
     state->command_count += 1;
     pthread_mutex_unlock(&state->state_mtx);

@@ -158,6 +158,26 @@ pub struct PowerTelemetry {
     /// Reason for the most recent power-up (button, RTC, network).
     /// Sony doesn't document the exact codes; surfaced raw.
     pub power_up_cause: Option<u8>,
+    /// Why the fields above may be empty:
+    ///   `ok`                     all four values read
+    ///   `partial`                some read, some failed (FW 5.10)
+    ///   `calls_failed`           symbols exist but every call errored
+    ///   `unsupported_firmware`   no `sceKernelIccGet*` symbol resolves
+    ///                            (retail 9.60, verified on hardware)
+    ///
+    /// Without this the client can only render four bare nulls as "—",
+    /// which reads like a bug rather than a firmware limitation. Older
+    /// payloads don't send it; `None` then means "unknown".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+    /// How many of the four ICC symbols exist on this firmware (0-4).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub symbols_resolved: Option<u8>,
+    /// How many actually returned a value (0-4). Deliberately separate
+    /// from `symbols_resolved`: FW 5.10 resolves all four but only two
+    /// succeed, so the symbol count alone would overstate support.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub values_ok: Option<u8>,
 }
 
 /// Fetch the PS5's lifetime power telemetry. Cheap — three ICC calls
@@ -191,11 +211,49 @@ fn parse_power_telemetry(body: &[u8]) -> PowerTelemetry {
             map.insert(k.trim(), v.trim());
         }
     }
+    let operating_seconds = parse_u32_or_err(map.get("operating_seconds").copied());
+    let boot_cycles = parse_u32_or_err(map.get("boot_cycles").copied());
+    let thermal_alert_flags = parse_u16_or_err(map.get("thermal_alert_flags").copied());
+    let power_up_cause = parse_u8_or_err(map.get("power_up_cause").copied());
+
+    // `symbols_resolved` is the payload's to report — only it can see
+    // which dlsym calls succeeded. Sent by payloads >= 5.1.1; None from
+    // older ones, and "we don't know" must not be conflated with "we
+    // know it's unsupported".
+    let symbols_resolved: Option<u8> = map.get("symbols_resolved").and_then(|s| s.parse().ok());
+
+    // `values_ok` is derived HERE, not taken from the payload, so it can
+    // never disagree with the fields the client actually receives. The
+    // payload counts rc == 0; a value can still be dropped afterwards if
+    // it doesn't parse, which on FW 5.10 made the payload claim 3 while
+    // only 2 fields arrived.
+    let values_ok = operating_seconds.is_some() as u8
+        + boot_cycles.is_some() as u8
+        + thermal_alert_flags.is_some() as u8
+        + power_up_cause.is_some() as u8;
+
+    // Status is likewise derived, for the same reason.
+    let status = symbols_resolved.map(|resolved| {
+        if resolved == 0 {
+            "unsupported_firmware"
+        } else if values_ok == 0 {
+            "calls_failed"
+        } else if values_ok < 4 {
+            "partial"
+        } else {
+            "ok"
+        }
+        .to_string()
+    });
+
     PowerTelemetry {
-        operating_seconds: parse_u32_or_err(map.get("operating_seconds").copied()),
-        boot_cycles: parse_u32_or_err(map.get("boot_cycles").copied()),
-        thermal_alert_flags: parse_u16_or_err(map.get("thermal_alert_flags").copied()),
-        power_up_cause: parse_u8_or_err(map.get("power_up_cause").copied()),
+        operating_seconds,
+        boot_cycles,
+        thermal_alert_flags,
+        power_up_cause,
+        status,
+        symbols_resolved,
+        values_ok: symbols_resolved.map(|_| values_ok),
     }
 }
 
