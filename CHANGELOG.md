@@ -4,6 +4,16 @@ What's new in ps5upload, written for humans.
 
 ---
 
+## 5.1.3
+
+Same contents as 5.1.2, re-cut. The 5.1.2 tag itself was left in a
+half-synced state by the very bug 5.1.2 was fixing — the lockfiles were
+corrected but not included in the release commit — so its own build
+check failed after the fact. 5.1.3 is the clean one. Downloads from
+5.1.2 work fine; there's nothing wrong with the app in either.
+
+---
+
 ## 5.1.2
 
 **Build and release plumbing. Nothing changes in the app itself — if
