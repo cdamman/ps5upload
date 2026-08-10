@@ -706,6 +706,16 @@ test-payload: payload
 		$(PAYLOAD_DIR)/tests/ftp_format_selftest.c
 	@/tmp/ps5upload-ftp-format-selftest
 	@echo "✓ FTP PASV/EPSV/LIST replies match the shapes clients parse"
+	@echo "Running param.json SDK-rewrite self-test (host build)..."
+	@cc -O2 -Wall -Wextra -Werror -o /tmp/ps5upload-sdk-param-selftest \
+		$(PAYLOAD_DIR)/tests/sdk_param_selftest.c
+	@/tmp/ps5upload-sdk-param-selftest
+	@echo "✓ SDK version rewrite reports what it actually changed"
+	@echo "Running ELF param-segment self-test (host build)..."
+	@cc -O2 -Wall -Wextra -Werror -o /tmp/ps5upload-elf-param-selftest \
+		$(PAYLOAD_DIR)/tests/elf_param_selftest.c
+	@/tmp/ps5upload-elf-param-selftest
+	@echo "✓ SDK patcher targets param segments, not stray magic bytes"
 
 test-client: setup-client
 	@echo "Testing client build..."

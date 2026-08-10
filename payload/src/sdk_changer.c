@@ -1,5 +1,8 @@
 #include "sdk_changer.h"
 
+#include "sdk_param.h"
+#include "elf_param.h"
+
 #include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
@@ -16,10 +19,6 @@
 #define APPMETA_BASE "/user/appmeta"
 #define BACKUP_SUFFIX ".bak"
 
-#define SCE_PROCESS_PARAM_MAGIC 0x4942524FU
-#define SCE_MODULE_PARAM_MAGIC  0x3C13F4BFU
-#define SCE_PARAM_PS5_SDK_OFFSET 0x0CU
-#define SCE_PARAM_PS4_SDK_OFFSET 0x08U
 
 static void json_escape(const char *in, char *out, size_t cap) {
     size_t o = 0;
@@ -74,95 +73,82 @@ static void extract_json_str(const char *json, const char *field,
     }
 }
 
+/* Patch every SDK-version field this ELF actually declares.
+ *
+ * Returns the number of fields written, PATCH_SIGNED for an encrypted
+ * SELF (which must not be touched at all), or -1 if the file could not
+ * be opened. Locating the fields through the program header table rather
+ * than scanning for magic values means a coincidental match in game data
+ * is no longer patched — see payload/include/elf_param.h. */
+#define PATCH_SIGNED (-2)
+
 static int patch_binary_sdk(const char *path, uint32_t target_sdk) {
     int fd = open(path, O_RDWR);
     if (fd < 0) return -1;
     struct stat st;
     if (fstat(fd, &st) < 0) { close(fd); return -1; }
     size_t len = (size_t)st.st_size;
-    if (len < 16) { close(fd); return -1; }
+    if (len < 0x40) { close(fd); return -1; }
 
     void *map = mmap(NULL, len, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
     if (map == MAP_FAILED) { close(fd); return -1; }
 
-    int patched = 0;
     uint8_t *data = (uint8_t *)map;
-    for (size_t i = 0; i + 16 <= len; i += 4) {
-        uint32_t val = *(uint32_t *)(data + i);
-        if (val == SCE_PROCESS_PARAM_MAGIC) {
-            *(uint32_t *)(data + i + SCE_PARAM_PS5_SDK_OFFSET) = target_sdk;
-            patched++;
-        }
-        if (val == SCE_MODULE_PARAM_MAGIC) {
-            *(uint32_t *)(data + i + SCE_PARAM_PS4_SDK_OFFSET) = target_sdk;
-            patched++;
-        }
-    }
+    elf_param_site_t sites[16];
+    elf_param_status_t status = ELF_PARAM_OK;
+    int found = elf_find_param_sites(data, len, sites,
+                                     (int)(sizeof(sites) / sizeof(sites[0])),
+                                     &status);
 
-    msync(map, len, MS_SYNC);
+    int patched = 0;
+    for (int i = 0; i < found; i++) {
+        *(uint32_t *)(data + sites[i].offset) = target_sdk;
+        patched++;
+    }
+    if (patched > 0) msync(map, len, MS_SYNC);
+
     munmap(map, len);
     close(fd);
+
+    if (found < 0) return status == ELF_PARAM_SIGNED_SELF ? PATCH_SIGNED : 0;
     return patched;
 }
 
+/* Returns the number of version fields rewritten, or -1 if the file
+ * could not be read. Zero is a real answer — the document did not carry
+ * either field — and the caller must report it rather than assume a
+ * patch happened. */
 static int patch_param_json_file(const char *path, uint32_t target_sdk) {
     char *buf = NULL;
     size_t len = 0;
     if (read_file_all(path, &buf, &len) != 0) return -1;
 
-    char sdk_str[32];
-    snprintf(sdk_str, sizeof(sdk_str), "0x%08x00000000", target_sdk);
-    char fw_str[32];
-    snprintf(fw_str, sizeof(fw_str), "0x%08x00000000", target_sdk);
-
-    char *p = strstr(buf, "\"sdkVersion\"");
-    int changed = 0;
-    if (p) {
-        p = strchr(p, ':');
-        if (p) {
-            p++;
-            while (*p == ' ' || *p == '\t') p++;
-            if (*p == '"') {
-                p++;
-                size_t vlen = 0;
-                while (p[vlen] && p[vlen] != '"') vlen++;
-                if (vlen == strlen(sdk_str)) {
-                    memcpy(p, sdk_str, vlen);
-                    changed++;
-                }
-            }
-        }
+    size_t out_cap = len + 128;
+    char *out = malloc(out_cap);
+    if (!out) {
+        free(buf);
+        return -1;
     }
 
-    p = strstr(buf, "\"requiredSystemSoftwareVersion\"");
-    if (p) {
-        p = strchr(p, ':');
-        if (p) {
-            p++;
-            while (*p == ' ' || *p == '\t') p++;
-            if (*p == '"') {
-                p++;
-                size_t vlen = 0;
-                while (p[vlen] && p[vlen] != '"') vlen++;
-                if (vlen == strlen(fw_str)) {
-                    memcpy(p, fw_str, vlen);
-                    changed++;
-                }
-            }
-        }
-    }
+    size_t out_len = 0;
+    int changed = sdk_param_rewrite_json(buf, len, target_sdk, out, out_cap,
+                                         &out_len);
+    free(buf);
 
     if (changed > 0) {
+        /* Same directory, so this rename never crosses a mount. */
         char tmp[512];
         snprintf(tmp, sizeof(tmp), "%s.tmp", path);
         FILE *f = fopen(tmp, "w");
         if (f) {
-            fwrite(buf, 1, len, f);
+            fwrite(out, 1, out_len, f);
             fclose(f);
             rename(tmp, path);
+        } else {
+            changed = -1;
         }
     }
-    free(buf);
+    free(out);
     return changed;
 }
 
@@ -185,7 +171,7 @@ static void make_backup(const char *path) {
 }
 
 static void walk_and_patch(const char *dir_path, uint32_t target_sdk,
-                           int *patched_count) {
+                           int *patched_count, int *signed_count) {
     DIR *dir = opendir(dir_path);
     if (!dir) return;
     struct dirent *de;
@@ -199,7 +185,7 @@ static void walk_and_patch(const char *dir_path, uint32_t target_sdk,
         if (stat(full, &st) != 0) continue;
 
         if (S_ISDIR(st.st_mode)) {
-            walk_and_patch(full, target_sdk, patched_count);
+            walk_and_patch(full, target_sdk, patched_count, signed_count);
             continue;
         }
         if (!S_ISREG(st.st_mode)) continue;
@@ -214,6 +200,7 @@ static void walk_and_patch(const char *dir_path, uint32_t target_sdk,
             make_backup(full);
             int n = patch_binary_sdk(full, target_sdk);
             if (n > 0) *patched_count += n;
+            else if (n == PATCH_SIGNED && signed_count) (*signed_count)++;
         }
     }
     closedir(dir);
@@ -359,19 +346,46 @@ int sdk_changer_patch(const char *title_id, const char *target_sdk,
     char param_path[512];
     snprintf(param_path, sizeof(param_path), "%s/sce_sys/param.json", game_path);
     struct stat st;
-    if (stat(param_path, &st) == 0) {
+    int json_changed = 0;
+    int have_param = (stat(param_path, &st) == 0);
+    if (have_param) {
         make_backup(param_path);
-        patch_param_json_file(param_path, target);
+        json_changed = patch_param_json_file(param_path, target);
     }
 
     int patched = 0;
-    walk_and_patch(game_path, target, &patched);
+    int signed_skipped = 0;
+    walk_and_patch(game_path, target, &patched, &signed_skipped);
 
-    if (patched == 0) {
-        if (err) snprintf(err, err_cap,
-                          "patched param.json but no binary SDK magic found");
+    /* Report what actually happened. This used to return success
+     * unconditionally and claim param.json had been patched even when
+     * nothing was written, so a no-op looked identical to a real patch. */
+    if (json_changed <= 0 && patched == 0) {
+        if (err) {
+            if (!have_param)
+                snprintf(err, err_cap,
+                         "no sce_sys/param.json and no SDK magic in %s",
+                         title_id);
+            else if (json_changed < 0)
+                snprintf(err, err_cap, "could not rewrite %s", param_path);
+            else if (signed_skipped > 0)
+                snprintf(err, err_cap,
+                         "%d file(s) are signed SELFs and cannot be patched — "
+                         "this title needs decrypted ELFs first",
+                         signed_skipped);
+            else
+                snprintf(err, err_cap,
+                         "nothing to patch: %s declares no SDK version fields",
+                         title_id);
+        }
+        return -1;
     }
 
+    if (err) {
+        snprintf(err, err_cap,
+                 "param.json fields: %d, ELF sites: %d, signed (skipped): %d",
+                 json_changed > 0 ? json_changed : 0, patched, signed_skipped);
+    }
     return 0;
 }
 
