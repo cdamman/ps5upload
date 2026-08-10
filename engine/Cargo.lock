@@ -1144,6 +1144,7 @@ dependencies = [
  "anyhow",
  "base64 0.23.0",
  "blake3",
+ "crc32fast",
  "ftx2-proto",
  "image",
  "libc",

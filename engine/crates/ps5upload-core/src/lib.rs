@@ -1,6 +1,7 @@
 pub mod activity;
 pub mod app_lifecycle;
 pub mod backup;
+pub mod bps;
 pub mod cheats;
 pub mod cleanup;
 pub mod connection;
