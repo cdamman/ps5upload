@@ -4307,6 +4307,37 @@ export async function ftpStatus(addr?: string): Promise<FtpStatusResponse> {
   return invoke("ftp_status", { req: { addr: addr ?? null } });
 }
 
+
+// ── BPS patching (backport helper) ────────────────────────────────────
+export interface BpsInfo {
+  ok: boolean;
+  source_size: number;
+  target_size: number;
+  metadata: string;
+  source_crc: string;
+  target_crc: string;
+}
+
+/** Read a .bps patch's header without applying it, so the UI can show
+ *  what the patch expects before anything is written. */
+export async function bpsInspect(patchPath: string): Promise<BpsInfo> {
+  return invoke("bps_inspect", { req: { patch_path: patchPath } });
+}
+
+/** Apply a .bps patch to a library on the engine's machine. Rejects a
+ *  source whose checksum does not match the one the patch was built for
+ *  — that is the common mistake, and it otherwise yields a file that
+ *  only fails at game launch. */
+export async function bpsApply(
+  sourcePath: string,
+  patchPath: string,
+  destPath: string,
+): Promise<{ ok: boolean; bytes: number; dest: string }> {
+  return invoke("bps_apply", {
+    req: { source_path: sourcePath, patch_path: patchPath, dest_path: destPath },
+  });
+}
+
 // ── SMB Browser ──────────────────────────────────────────────────────
 export interface SmbShare {
   name: string;

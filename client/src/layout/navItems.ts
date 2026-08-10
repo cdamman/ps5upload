@@ -209,6 +209,12 @@ export const NAV_ITEMS: NavItem[] = [
     icon: Clock,
   },
   {
+    to: "/fakelib",
+    key: "fakelib_title",
+    fallback: "Fakelib",
+    icon: Boxes,
+  },
+  {
     to: "/sdk-changer",
     key: "sdk_changer_title",
     fallback: "SDK Changer",

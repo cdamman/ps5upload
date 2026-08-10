@@ -191,6 +191,8 @@ pub fn run() {
             commands::transfer_file,
             commands::transfer_dir,
             commands::transfer_zip,
+            commands::bps_inspect,
+            commands::bps_apply,
             commands::zip_inspect,
             commands::zip_inspect_stream,
             commands::transfer_7z,

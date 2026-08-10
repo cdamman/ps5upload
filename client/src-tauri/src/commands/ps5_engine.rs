@@ -354,6 +354,43 @@ pub async fn transfer_zip(req: TransferZipReq) -> Result<JsonValue, String> {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct BpsInspectReq {
+    pub patch_path: String,
+}
+
+/// Read a `.bps` patch header without applying it, so the UI can show
+/// what the patch expects before anything is written.
+#[tauri::command]
+pub async fn bps_inspect(req: BpsInspectReq) -> Result<JsonValue, String> {
+    let base = engine::url();
+    let url = format!("{base}/api/bps/inspect");
+    let body = serde_json::json!({ "patch_path": req.patch_path });
+    post_json(&url, &body).await
+}
+
+#[derive(Debug, Deserialize)]
+pub struct BpsApplyReq {
+    pub source_path: String,
+    pub patch_path: String,
+    pub dest_path: String,
+}
+
+/// Apply a `.bps` patch to a library on this machine. Long client: the
+/// libraries run to hundreds of KB and the whole file is read, patched
+/// and written back out.
+#[tauri::command]
+pub async fn bps_apply(req: BpsApplyReq) -> Result<JsonValue, String> {
+    let base = engine::url();
+    let url = format!("{base}/api/bps/apply");
+    let body = serde_json::json!({
+        "source_path": req.source_path,
+        "patch_path": req.patch_path,
+        "dest_path": req.dest_path,
+    });
+    post_json_long(&url, &body).await
+}
+
+#[derive(Debug, Deserialize)]
 pub struct ZipInspectReq {
     pub zip_path: String,
 }

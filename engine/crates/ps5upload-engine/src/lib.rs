@@ -3661,6 +3661,90 @@ async fn transfer_dir_handler(
 /// cold-cache HDD, or had returned successfully after the client timeout
 /// fired. Entry + outcome + duration logs make the next report trivially
 /// diagnosable from engine.log alone.
+#[derive(Deserialize)]
+struct BpsInspectReq {
+    patch_path: String,
+}
+
+#[derive(Deserialize)]
+struct BpsApplyReq {
+    /// The library to patch, on the engine's filesystem.
+    source_path: String,
+    /// The `.bps` file to apply.
+    patch_path: String,
+    /// Where to write the patched result.
+    dest_path: String,
+}
+
+/// POST /api/bps/inspect — read a BPS patch's header without applying it.
+///
+/// Lets the UI show what a patch expects before anything is written,
+/// which matters because these patches target one exact build of one
+/// library.
+async fn bps_inspect_handler(Json(req): Json<BpsInspectReq>) -> impl IntoResponse {
+    let path = req.patch_path;
+    let r = tokio::task::spawn_blocking(move || -> anyhow::Result<_> {
+        let patch = std::fs::read(&path).map_err(|e| anyhow::anyhow!("read {path}: {e}"))?;
+        ps5upload_core::bps::bps_info(&patch)
+    })
+    .await;
+    match r {
+        Ok(Ok(info)) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "ok": true,
+                "source_size": info.source_size,
+                "target_size": info.target_size,
+                "metadata": info.metadata,
+                "source_crc": format!("{:08x}", info.source_crc),
+                "target_crc": format!("{:08x}", info.target_crc),
+            })),
+        )
+            .into_response(),
+        Ok(Err(e)) => json_err(StatusCode::BAD_REQUEST, format!("{e:#}")).into_response(),
+        Err(e) => json_err(StatusCode::INTERNAL_SERVER_ERROR, format!("{e}")).into_response(),
+    }
+}
+
+/// POST /api/bps/apply — patch a library on the engine's filesystem.
+///
+/// Backporting needs system libraries from a newer firmware with their
+/// unavailable imports patched out; upstream ships those edits as BPS
+/// files. Doing it here means a library can be patched on its way to the
+/// console instead of through a browser-based patcher.
+async fn bps_apply_handler(Json(req): Json<BpsApplyReq>) -> impl IntoResponse {
+    let (src, patch_path, dest) = (req.source_path, req.patch_path, req.dest_path);
+    crate::log_info!("bps_apply: src={src} patch={patch_path} dest={dest}");
+    let dest_for_log = dest.clone();
+    let r = tokio::task::spawn_blocking(move || -> anyhow::Result<u64> {
+        let patch =
+            std::fs::read(&patch_path).map_err(|e| anyhow::anyhow!("read {patch_path}: {e}"))?;
+        let source = std::fs::read(&src).map_err(|e| anyhow::anyhow!("read {src}: {e}"))?;
+        let out = ps5upload_core::bps::bps_apply(&patch, &source)?;
+        if let Some(parent) = std::path::Path::new(&dest).parent() {
+            std::fs::create_dir_all(parent).ok();
+        }
+        std::fs::write(&dest, &out).map_err(|e| anyhow::anyhow!("write {dest}: {e}"))?;
+        Ok(out.len() as u64)
+    })
+    .await;
+    match r {
+        Ok(Ok(bytes)) => {
+            crate::log_info!("bps_apply ok: dest={dest_for_log} bytes={bytes}");
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({ "ok": true, "bytes": bytes, "dest": dest_for_log })),
+            )
+                .into_response()
+        }
+        // A checksum mismatch is the expected failure — the patch was
+        // built for a different library or a different firmware — so it
+        // is a bad request, not a server fault.
+        Ok(Err(e)) => json_err(StatusCode::BAD_REQUEST, format!("{e:#}")).into_response(),
+        Err(e) => json_err(StatusCode::INTERNAL_SERVER_ERROR, format!("{e}")).into_response(),
+    }
+}
+
 async fn zip_inspect_handler(Json(req): Json<ZipInspectReq>) -> impl IntoResponse {
     let zip_path = req.zip_path;
     crate::log_info!("zip_inspect: zip={zip_path}");
@@ -7087,6 +7171,8 @@ async fn run(cfg: EngineConfig) -> anyhow::Result<()> {
         .route("/api/transfer/file", post(transfer_file_handler))
         .route("/api/transfer/dir", post(transfer_dir_handler))
         .route("/api/transfer/zip", post(transfer_zip_handler))
+        .route("/api/bps/inspect", post(bps_inspect_handler))
+        .route("/api/bps/apply", post(bps_apply_handler))
         .route("/api/zip/inspect", post(zip_inspect_handler))
         .route("/api/zip/inspect/stream", post(zip_inspect_stream_handler))
         .route("/api/transfer/7z", post(transfer_7z_handler))
