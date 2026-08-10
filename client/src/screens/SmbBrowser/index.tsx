@@ -30,7 +30,10 @@ function formatSize(bytes: number): string {
 export default function SmbBrowserScreen() {
   const tr = useTr();
 
-  const [server, setServer] = useState("smb://192.168.1.100:445");
+  // Empty rather than a sample address: the old default pointed at a
+  // subnet almost nobody is on, so "Connect" looked broken until you
+  // noticed it needed editing. The placeholder shows the shape instead.
+  const [server, setServer] = useState("");
   const [user, setUser] = useState("guest");
   const [password, setPassword] = useState("");
   const [connected, setConnected] = useState(false);
@@ -187,7 +190,7 @@ export default function SmbBrowserScreen() {
                 value={server}
                 onChange={(e) => setServer(e.target.value)}
                 className="font-mono"
-                placeholder="192.168.1.100:445"
+                placeholder="192.168.1.100"
                 inputMode="url"
               />
               <Input

@@ -247,9 +247,11 @@ export async function userCreate(
   name: string,
   addr?: string,
 ): Promise<{ ok: boolean; uid: number; name: string }> {
-  return invoke("user_create", {
-    req: { addr: addr ?? null, name },
-  });
+  const resp = await invoke<{ ok: boolean; uid: number; name: string }>(
+    "user_create",
+    { req: { addr: addr ?? null, name } },
+  );
+  return assertOk(resp, "Create user");
 }
 
 /** Delete a local user account. */
@@ -296,9 +298,10 @@ export async function backupSnapshot(
   path: string,
   addr?: string,
 ): Promise<BackupSnapshotResult> {
-  return invoke("backup_snapshot", {
+  const resp = await invoke<BackupSnapshotResult>("backup_snapshot", {
     req: { addr: addr ?? null, tag, path },
   });
+  return assertOk(resp, "Create backup snapshot");
 }
 
 /** List snapshots, optionally filtered by tag. */
@@ -317,9 +320,10 @@ export async function backupRestore(
   timestamp: number,
   addr?: string,
 ): Promise<BackupRestoreResult> {
-  return invoke("backup_restore", {
+  const resp = await invoke<BackupRestoreResult>("backup_restore", {
     req: { addr: addr ?? null, tag, timestamp },
   });
+  return assertOk(resp, "Restore backup");
 }
 
 /** Delete a snapshot by tag + timestamp. */
@@ -394,6 +398,33 @@ export async function profileApplyAvatar(
  * targeting a custom loader that listens on a different port. Wraps
  * `commands::payload_send` in Rust.
  */
+/**
+ * Reject when the payload refused an action.
+ *
+ * The payload answers a refused command with `ok:false` inside an
+ * otherwise successful response, so `await` alone reports success and the
+ * screen shows nothing. That is how "Start FTP Server" could fail with
+ * `bind_failed` and look like a dead button.
+ *
+ * Use this for *actions* only. Status queries also return `ok:false`, but
+ * there it means "this console doesn't expose the feature" — screens
+ * render that as an empty state, and throwing would turn a graceful
+ * degradation into an error banner.
+ */
+function assertOk<T extends { ok?: boolean; error?: string | null }>(
+  resp: T,
+  what: string,
+  detail?: (r: T) => string | undefined,
+): T {
+  if (resp && resp.ok === false) {
+    const extra = detail?.(resp);
+    const reason = resp.error ?? undefined;
+    const parts = [reason, extra].filter(Boolean).join(" ");
+    throw new Error(parts ? `${what}: ${parts}` : `${what} failed`);
+  }
+  return resp;
+}
+
 export async function sendPayload(
   ip: string,
   elfPath: string,
@@ -3892,9 +3923,10 @@ export async function remoteplayRequest(
   manualAccountId?: string,
   addr?: string,
 ): Promise<{ ok: boolean }> {
-  return invoke("remoteplay_request", {
+  const resp = await invoke<{ ok: boolean }>("remoteplay_request", {
     req: { addr: addr ?? null, manual_account_id: manualAccountId ?? null },
   });
+  return assertOk(resp, "Request remote play");
 }
 
 export async function remoteplayStatus(
@@ -3906,7 +3938,10 @@ export async function remoteplayStatus(
 export async function remoteplayCancel(
   addr?: string,
 ): Promise<{ ok: boolean }> {
-  return invoke("remoteplay_cancel", { addr: addr ?? null });
+  const resp = await invoke<{ ok: boolean }>("remoteplay_cancel", {
+    addr: addr ?? null,
+  });
+  return assertOk(resp, "Cancel remote play");
 }
 
 // ── Fan Curve ─────────────────────────────────────────────────────────
@@ -4028,7 +4063,10 @@ export async function cheatsDelete(
 }
 
 export async function cheatsReload(addr?: string): Promise<{ ok: boolean }> {
-  return invoke("cheats_reload", { req: { addr: addr ?? null } });
+  const resp = await invoke<{ ok: boolean }>("cheats_reload", {
+    req: { addr: addr ?? null },
+  });
+  return assertOk(resp, "Reload cheats");
 }
 
 export async function cheatsStatus(
@@ -4255,9 +4293,14 @@ export async function ftpStart(
   },
   addr?: string,
 ): Promise<FtpStartResponse> {
-  return invoke("ftp_start", {
+  const resp = await invoke<FtpStartResponse>("ftp_start", {
     req: { addr: addr ?? null, ...params },
   });
+  // `bind_failed` usually means another payload already owns the port —
+  // ftpsrv.elf defaults to 2121 — so name the port in the message.
+  return assertOk(resp, "Start FTP server", () =>
+    params.port ? `(port ${params.port})` : undefined,
+  );
 }
 
 export async function ftpStatus(addr?: string): Promise<FtpStatusResponse> {
