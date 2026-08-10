@@ -696,6 +696,11 @@ test-payload: payload
 		$(PAYLOAD_DIR)/tests/ptrace_recovery_selftest.c
 	@/tmp/ps5upload-ptrace-recovery-selftest
 	@echo "✓ ptrace timeout recovery never resumes injected registers"
+	@echo "Running app.db raw-scan self-test (host build)..."
+	@cc -O2 -Wall -Wextra -Werror -o /tmp/ps5upload-appdb-scan-selftest \
+		$(PAYLOAD_DIR)/tests/appdb_scan_selftest.c
+	@/tmp/ps5upload-appdb-scan-selftest
+	@echo "✓ app.db scan recovers titles without sqlite"
 
 test-client: setup-client
 	@echo "Testing client build..."
