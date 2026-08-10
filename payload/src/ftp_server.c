@@ -1,7 +1,10 @@
 #include "ftp_server.h"
 
+#include "ftp_format.h"
+
 #include <stdio.h>
 #include <stdlib.h>
+#include <strings.h>
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
@@ -52,6 +55,20 @@ static int ip_is_safe(const char *ip) {
     }
     return 1;
 }
+
+/* Bulk transfer buffer for RETR/STOR.
+ *
+ * Heap, never stack. This was `char buf[256 * 1024]` inside both
+ * handlers, on session threads created with default attributes while
+ * every other thread in the payload asks for 512 KiB-1 MiB explicitly
+ * (see runtime.c). The first real file transfer overflowed the thread
+ * stack and wedged the payload hard enough to need a console power
+ * cycle — LIST and NLST survived only because their buffers are ~1 KiB. */
+#define FTP_XFER_BUF (256 * 1024)
+
+/* Session threads still get an explicit stack, so a future stack-hungry
+ * handler cannot reintroduce the same failure silently. */
+#define FTP_THREAD_STACK (512u * 1024u)
 
 static void write_all(int fd, const void *data, size_t len) {
     const char *p = (const char *)data;
@@ -285,7 +302,9 @@ static int require_auth(struct ftp_session *s) {
     return 0;
 }
 
-static void handle_list(struct ftp_session *s) {
+/* Shared body of LIST and NLST. `names_only` selects NLST's bare-name
+ * output; everything else about the exchange is identical. */
+static void send_listing(struct ftp_session *s, int names_only) {
     if (!require_auth(s)) return;
     DIR *d = opendir(s->cwd);
     if (!d) {
@@ -303,34 +322,42 @@ static void handle_list(struct ftp_session *s) {
     struct dirent *ent;
     char linebuf[1024];
     while ((ent = readdir(d)) != NULL) {
+        if (names_only) {
+            /* NLST names are meant to be usable with RETR, so the dot
+             * entries have no place in it. */
+            if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0)
+                continue;
+            int n = snprintf(linebuf, sizeof(linebuf), "%s\r\n", ent->d_name);
+            if (n > 0 && (size_t)n < sizeof(linebuf))
+                write_all(s->data_fd, linebuf, (size_t)n);
+            continue;
+        }
+
         char fullpath[512];
         snprintf(fullpath, sizeof(fullpath), "%s/%s", s->cwd, ent->d_name);
         struct stat st;
         if (stat(fullpath, &st) != 0) continue;
         char timestr[64];
         strftime(timestr, sizeof(timestr), "%b %d %H:%M", localtime(&st.st_mtime));
-        char perm[11];
-        perm[0] = S_ISDIR(st.st_mode) ? 'd' : '-';
-        perm[1] = (st.st_mode & 0400) ? 'r' : '-';
-        perm[2] = (st.st_mode & 0200) ? 'w' : '-';
-        perm[3] = (st.st_mode & 0100) ? 'x' : '-';
-        perm[4] = (st.st_mode & 0040) ? 'r' : '-';
-        perm[5] = (st.st_mode & 0020) ? 'w' : '-';
-        perm[6] = (st.st_mode & 0010) ? 'x' : '-';
-        perm[7] = (st.st_mode & 0004) ? 'r' : '-';
-        perm[8] = (st.st_mode & 0002) ? 'w' : '-';
-        perm[9] = (st.st_mode & 0001) ? 'x' : '-';
-        perm[10] = '\0';
-        int n = snprintf(linebuf, sizeof(linebuf),
-            "%s 1 root root %lld %s %s\r\n",
-            perm, (long long)st.st_size, timestr, ent->d_name);
-        if (n > 0) write_all(s->data_fd, linebuf, (size_t)n);
+        int n = ftp_format_list_line(S_ISDIR(st.st_mode) ? 1 : 0,
+                                     (unsigned int)st.st_mode,
+                                     (long long)st.st_size, timestr,
+                                     ent->d_name, linebuf,
+                                     sizeof(linebuf) - 2);
+        if (n < 0) continue;
+        linebuf[n] = '\r';
+        linebuf[n + 1] = '\n';
+        write_all(s->data_fd, linebuf, (size_t)n + 2);
     }
     closedir(d);
     close(s->data_fd);
     s->data_fd = -1;
     send_resp(s->ctrl_fd, 226, "Directory send OK");
 }
+
+static void handle_list(struct ftp_session *s) { send_listing(s, 0); }
+
+static void handle_nlst(struct ftp_session *s) { send_listing(s, 1); }
 
 static void handle_retr(struct ftp_session *s, const char *arg) {
     if (!require_auth(s)) return;
@@ -365,14 +392,23 @@ static void handle_retr(struct ftp_session *s, const char *arg) {
             return;
         }
     }
+    char *buf = (char *)malloc(FTP_XFER_BUF);
+    if (!buf) {
+        close(fd);
+        close(s->data_fd);
+        s->data_fd = -1;
+        s->data_offset = 0;
+        send_resp(s->ctrl_fd, 451, "Out of memory");
+        return;
+    }
     send_resp(s->ctrl_fd, 150, "Opening BINARY mode data connection");
-    char buf[256 * 1024];
     ssize_t n;
     int aborted = 0;
-    while ((n = read(fd, buf, sizeof(buf))) > 0) {
+    while ((n = read(fd, buf, FTP_XFER_BUF)) > 0) {
         if (s->abort_requested || s->data_fd < 0) { aborted = 1; break; }
         write_all(s->data_fd, buf, (size_t)n);
     }
+    free(buf);
     close(fd);
     if (s->data_fd >= 0) { close(s->data_fd); s->data_fd = -1; }
     s->data_offset = 0;
@@ -422,16 +458,25 @@ static void handle_stor(struct ftp_session *s, const char *arg) {
         send_resp(s->ctrl_fd, 550, "Failed to open file for writing");
         return;
     }
+    char *buf = (char *)malloc(FTP_XFER_BUF);
+    if (!buf) {
+        close(fd);
+        close(s->data_fd);
+        s->data_fd = -1;
+        s->data_offset = 0;
+        send_resp(s->ctrl_fd, 451, "Out of memory");
+        return;
+    }
     send_resp(s->ctrl_fd, 150, "Opening BINARY mode data connection");
-    char buf[256 * 1024];
     ssize_t n;
     off_t total = s->data_offset;
     int aborted = 0;
-    while ((n = read(s->data_fd, buf, sizeof(buf))) > 0) {
+    while ((n = read(s->data_fd, buf, FTP_XFER_BUF)) > 0) {
         if (s->abort_requested) { aborted = 1; break; }
         write_all(fd, buf, (size_t)n);
         total += n;
     }
+    free(buf);
     if (!aborted) ftruncate(fd, total);
     close(fd);
     if (s->data_fd >= 0) { close(s->data_fd); s->data_fd = -1; }
@@ -445,6 +490,7 @@ static void handle_feat(struct ftp_session *s) {
     int n = snprintf(buf, sizeof(buf),
         "211-Features:\r\n"
         " UTF8\r\n"
+        " EPSV\r\n"
         " MLSD\r\n"
         " REST STREAM\r\n"
         " SIZE\r\n"
@@ -597,8 +643,10 @@ static void handle_opts(struct ftp_session *s, const char *arg) {
     }
 }
 
-static void handle_pasv(struct ftp_session *s) {
-    if (!require_auth(s)) return;
+/* Bind an ephemeral passive data socket and start listening.
+ * Returns the bound port, or -1. Shared by PASV and EPSV, which differ
+ * only in how that port is reported back to the client. */
+static int open_passive_socket(struct ftp_session *s) {
     if (s->data_listen_fd >= 0) {
         close(s->data_listen_fd);
         s->data_listen_fd = -1;
@@ -610,10 +658,8 @@ static void handle_pasv(struct ftp_session *s) {
     s->data_addr.sin_port = 0;
 
     int sock = socket(AF_INET, SOCK_STREAM, 0);
-    if (sock < 0) {
-        send_resp(s->ctrl_fd, 425, "Cannot open passive socket");
-        return;
-    }
+    if (sock < 0) return -1;
+
     struct sockaddr_in addr;
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
@@ -621,13 +667,22 @@ static void handle_pasv(struct ftp_session *s) {
     addr.sin_port = 0;
     if (bind(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
         close(sock);
-        send_resp(s->ctrl_fd, 425, "Cannot bind passive socket");
-        return;
+        return -1;
     }
     listen(sock, 1);
     socklen_t addrlen = sizeof(addr);
     getsockname(sock, (struct sockaddr *)&addr, &addrlen);
-    int port = ntohs(addr.sin_port);
+    s->data_listen_fd = sock;
+    return ntohs(addr.sin_port);
+}
+
+static void handle_pasv(struct ftp_session *s) {
+    if (!require_auth(s)) return;
+    int port = open_passive_socket(s);
+    if (port < 0) {
+        send_resp(s->ctrl_fd, 425, "Cannot open passive socket");
+        return;
+    }
 
     struct sockaddr_in ctrl_addr;
     socklen_t ctrl_addrlen = sizeof(ctrl_addr);
@@ -635,11 +690,43 @@ static void handle_pasv(struct ftp_session *s) {
 
     unsigned char *ip = (unsigned char *)&ctrl_addr.sin_addr.s_addr;
     char msg[128];
-    snprintf(msg, sizeof(msg),
-             "Entering Passive Mode (%u,%u,%u,%u,%u,%u).",
-             ip[0], ip[1], ip[2], ip[3], (port >> 8) & 0xFF, port & 0xFF);
+    if (ftp_format_pasv(ip, port, msg, sizeof(msg)) < 0) {
+        send_resp(s->ctrl_fd, 425, "Cannot open passive socket");
+        return;
+    }
     send_resp(s->ctrl_fd, 227, msg);
-    s->data_listen_fd = sock;
+}
+
+/* RFC 2428 extended passive mode. Most modern clients try EPSV before
+ * PASV; answering 502 made the well-behaved ones fall back and left the
+ * rest looking like they had hung. */
+static void handle_epsv(struct ftp_session *s, const char *arg) {
+    if (!require_auth(s)) return;
+
+    switch (ftp_parse_epsv_arg(arg)) {
+    case FTP_EPSV_ALL:
+        /* The client is promising to use only EPSV from here on. We have
+         * nothing to tear down, so just accept. */
+        send_resp(s->ctrl_fd, 200, "EPSV ALL OK");
+        return;
+    case FTP_EPSV_BAD_PROTO:
+        send_resp(s->ctrl_fd, 522, "Network protocol not supported, use (1)");
+        return;
+    case FTP_EPSV_IPV4:
+        break;
+    }
+
+    int port = open_passive_socket(s);
+    if (port < 0) {
+        send_resp(s->ctrl_fd, 425, "Cannot open passive socket");
+        return;
+    }
+    char msg[128];
+    if (ftp_format_epsv(port, msg, sizeof(msg)) < 0) {
+        send_resp(s->ctrl_fd, 425, "Cannot open passive socket");
+        return;
+    }
+    send_resp(s->ctrl_fd, 229, msg);
 }
 
 static void handle_size(struct ftp_session *s, const char *arg) {
@@ -831,6 +918,7 @@ static void process_command(struct ftp_session *s, char *line) {
     else if (strcasecmp(cmd, "CDUP") == 0) { if (require_auth(s)) handle_cdup(s); }
     else if (strcasecmp(cmd, "TYPE") == 0) { if (require_auth(s)) handle_type(s, args); }
     else if (strcasecmp(cmd, "LIST") == 0) handle_list(s);
+    else if (strcasecmp(cmd, "NLST") == 0) handle_nlst(s);
     else if (strcasecmp(cmd, "MLSD") == 0) handle_mlsd(s);
     else if (strcasecmp(cmd, "RETR") == 0) handle_retr(s, args);
     else if (strcasecmp(cmd, "STOR") == 0) handle_stor(s, args);
@@ -839,6 +927,7 @@ static void process_command(struct ftp_session *s, char *line) {
     else if (strcasecmp(cmd, "RNTO") == 0) handle_rnto(s, args);
     else if (strcasecmp(cmd, "PORT") == 0) handle_port(s, args);
     else if (strcasecmp(cmd, "PASV") == 0) handle_pasv(s);
+    else if (strcasecmp(cmd, "EPSV") == 0) handle_epsv(s, args);
     else if (strcasecmp(cmd, "SIZE") == 0) handle_size(s, args);
     else if (strcasecmp(cmd, "MDTM") == 0) handle_mdtm(s, args);
     else if (strcasecmp(cmd, "MKD") == 0) handle_mkd(s, args);
@@ -942,12 +1031,16 @@ static void *ftp_listen_thread(void *arg) {
         strncpy(s->pass, g_ftp.pass, sizeof(s->pass) - 1);
 
         pthread_t tid;
-        if (pthread_create(&tid, NULL, ftp_client_thread, s) != 0) {
+        pthread_attr_t attr;
+        pthread_attr_init(&attr);
+        (void)pthread_attr_setstacksize(&attr, FTP_THREAD_STACK);
+        if (pthread_create(&tid, &attr, ftp_client_thread, s) != 0) {
             close(client_fd);
             free(s);
         } else {
             pthread_detach(tid);
         }
+        pthread_attr_destroy(&attr);
     }
     return NULL;
 }

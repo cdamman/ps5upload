@@ -17,7 +17,10 @@ export default function FtpServerScreen() {
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [port, setPort] = useState(2121);
+  // Not 2121: that is ftpsrv.elf's default, and ftpsrv is in our own
+  // payload catalogue — so anyone running both got bind_failed out of the
+  // box. 2122 is adjacent enough to stay memorable.
+  const [port, setPort] = useState(2122);
   const [root, setRoot] = useState("/");
   const [readonly, setReadonly] = useState(true);
   const [user, setUser] = useState("");

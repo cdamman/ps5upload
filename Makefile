@@ -701,6 +701,11 @@ test-payload: payload
 		$(PAYLOAD_DIR)/tests/appdb_scan_selftest.c
 	@/tmp/ps5upload-appdb-scan-selftest
 	@echo "✓ app.db scan recovers titles without sqlite"
+	@echo "Running FTP wire-format self-test (host build)..."
+	@cc -O2 -Wall -Wextra -Werror -o /tmp/ps5upload-ftp-format-selftest \
+		$(PAYLOAD_DIR)/tests/ftp_format_selftest.c
+	@/tmp/ps5upload-ftp-format-selftest
+	@echo "✓ FTP PASV/EPSV/LIST replies match the shapes clients parse"
 
 test-client: setup-client
 	@echo "Testing client build..."
