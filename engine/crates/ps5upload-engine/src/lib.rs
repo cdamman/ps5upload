@@ -3182,6 +3182,288 @@ async fn ps5_readiness(
 }
 
 /// POST /api/transfer/file
+/// POST /api/smb/transfer — stage an SMB file or directory to a host
+/// temp dir (chunked stream, no full-file RAM buffer), then FTX2 it to
+/// the PS5. One job covers both phases; the staging tree is deleted
+/// when the job ends. Destination rule matches Upload: always
+/// `dest_root/<source_basename>`.
+#[derive(Deserialize)]
+struct SmbTransferReq {
+    server: String,
+    #[serde(default)]
+    user: String,
+    #[serde(default)]
+    password: String,
+    share: String,
+    #[serde(default)]
+    path: String,
+    /// Parent directory on the PS5 (e.g. `/data/homebrew`).
+    dest_root: String,
+    addr: Option<String>,
+    #[serde(default)]
+    bandwidth_cap_mbps: Option<f64>,
+}
+
+async fn smb_transfer_handler(
+    State(state): State<AppState>,
+    Json(req): Json<SmbTransferReq>,
+) -> impl IntoResponse {
+    if req.server.trim().is_empty() {
+        return json_err(StatusCode::BAD_REQUEST, "server is required").into_response();
+    }
+    if req.share.trim().is_empty() {
+        return json_err(StatusCode::BAD_REQUEST, "share is required").into_response();
+    }
+    if req.dest_root.trim().is_empty() {
+        return json_err(StatusCode::BAD_REQUEST, "dest_root is required").into_response();
+    }
+    // PS5 dest must stay under the usual writable roots.
+    let dest_root = req.dest_root.trim().to_string();
+    if !dest_root.starts_with('/') {
+        return json_err(
+            StatusCode::BAD_REQUEST,
+            "dest_root must be an absolute PS5 path",
+        )
+        .into_response();
+    }
+
+    let addr = req.addr.unwrap_or_else(|| state.default_ps5_addr.clone());
+    let job_id = Uuid::new_v4();
+    let started_at_ms = now_ms();
+    let stage_dir = std::env::temp_dir()
+        .join("ps5upload-smb-stage")
+        .join(job_id.to_string());
+
+    crate::log_info!(
+        "smb_transfer: job={job_id} server={} share={} path={} dest_root={dest_root} addr={addr}",
+        req.server,
+        req.share,
+        req.path
+    );
+
+    let progress = Arc::new(AtomicU64::new(0));
+    let progress_files = Arc::new(AtomicU64::new(0));
+    let progress_files_finalized = Arc::new(AtomicU64::new(0));
+    let progress_bytes_finalized = Arc::new(AtomicU64::new(0));
+    // total_bytes unknown until staging finishes — seed 0 so the UI shows activity.
+    let ctx = TickerContext {
+        started_at_ms,
+        total_bytes: 0,
+        skipped_files: 0,
+        skipped_bytes: 0,
+    };
+    set_job(
+        &state.jobs,
+        &state.events_tx,
+        job_id,
+        JobState::Running {
+            started_at_ms,
+            bytes_sent: 0,
+            total_bytes: 0,
+            files: vec![],
+            skipped_files: 0,
+            skipped_bytes: 0,
+            files_processing: 0,
+            files_finalized: 0,
+            files_finalizing_total: 0,
+            bytes_finalized: 0,
+        },
+    );
+
+    let jobs = Arc::clone(&state.jobs);
+    let events_tx = state.events_tx.clone();
+    let stop_ticker = spawn_progress_ticker(
+        Arc::clone(&jobs),
+        events_tx.clone(),
+        job_id,
+        ctx,
+        Arc::clone(&progress),
+        Arc::clone(&progress_files),
+        Arc::clone(&progress_files_finalized),
+        Arc::clone(&progress_bytes_finalized),
+    );
+    let cancel = register_transfer_cancel(job_id);
+    let bandwidth_cap = req.bandwidth_cap_mbps;
+    let source = smb::SmbSource {
+        server: req.server,
+        user: req.user,
+        password: req.password,
+        share: req.share,
+        path: req.path,
+    };
+
+    tokio::spawn(async move {
+        let _stop_guard = TickerStopGuard::new(stop_ticker);
+        let mut fail_guard =
+            JobFailOnDropGuard::new(Arc::clone(&jobs), events_tx.clone(), job_id, started_at_ms);
+
+        let staged = match smb::stage_smb_path(
+            &source,
+            &stage_dir,
+            Some(Arc::clone(&progress)),
+            Some(Arc::clone(&cancel)),
+        )
+        .await
+        {
+            Ok(s) => s,
+            Err(e) => {
+                smb::cleanup_stage(&stage_dir);
+                let completed_at_ms = now_ms();
+                set_job(
+                    &jobs,
+                    &events_tx,
+                    job_id,
+                    job_failed_from_err(started_at_ms, completed_at_ms, &e),
+                );
+                fail_guard.mark_succeeded();
+                return;
+            }
+        };
+
+        let dest = smb::resolve_ps5_dest(&dest_root, &staged.basename);
+        let local_path = staged.local_path.clone();
+        let is_dir = staged.is_dir;
+        let total_bytes = staged.total_bytes;
+        let file_count = staged.file_count;
+        let basename = staged.basename.clone();
+
+        // Refresh Running with real totals after stage so the progress bar has a denominator.
+        set_job(
+            &jobs,
+            &events_tx,
+            job_id,
+            JobState::Running {
+                started_at_ms,
+                bytes_sent: progress.load(Ordering::Relaxed),
+                total_bytes,
+                files: vec![PlannedFile {
+                    rel_path: basename.clone(),
+                    size: total_bytes,
+                }],
+                skipped_files: 0,
+                skipped_bytes: 0,
+                files_processing: 0,
+                files_finalized: 0,
+                files_finalizing_total: 0,
+                bytes_finalized: 0,
+            },
+        );
+        // Reset progress for the FTX2 phase so the bar reflects wire bytes.
+        progress.store(0, Ordering::Relaxed);
+
+        let tx_id = match parse_or_random_tx_id(None) {
+            Ok(id) => id,
+            Err(e) => {
+                smb::cleanup_stage(&stage_dir);
+                let completed_at_ms = now_ms();
+                set_job(
+                    &jobs,
+                    &events_tx,
+                    job_id,
+                    job_failed_from_err(started_at_ms, completed_at_ms, &e),
+                );
+                fail_guard.mark_succeeded();
+                return;
+            }
+        };
+
+        let cancel_xfer = Arc::clone(&cancel);
+        let progress_xfer = Arc::clone(&progress);
+        let progress_files_xfer = Arc::clone(&progress_files);
+        let progress_ff = Arc::clone(&progress_files_finalized);
+        let progress_bf = Arc::clone(&progress_bytes_finalized);
+        let addr_xfer = addr.clone();
+        let dest_xfer = dest.clone();
+
+        let result = tokio::task::spawn_blocking(move || {
+            let mut cfg = make_transfer_config(&addr_xfer);
+            apply_per_request_bandwidth(&mut cfg, bandwidth_cap);
+            cfg.cancel = Some(cancel_xfer);
+            cfg.progress_bytes = Some(progress_xfer);
+            cfg.progress_files = Some(progress_files_xfer);
+            cfg.progress_files_finalized = Some(progress_ff);
+            cfg.progress_bytes_finalized = Some(progress_bf);
+            if is_dir {
+                transfer_dir_resumable(
+                    &cfg,
+                    tx_id,
+                    &dest_xfer,
+                    &local_path,
+                    DEFAULT_RESUME_RETRIES,
+                    0,
+                )
+            } else {
+                transfer_file_path_resumable(
+                    &cfg,
+                    tx_id,
+                    &dest_xfer,
+                    &local_path,
+                    DEFAULT_RESUME_RETRIES,
+                    0,
+                )
+            }
+        })
+        .await;
+
+        smb::cleanup_stage(&stage_dir);
+
+        match result {
+            Ok(Ok(r)) => {
+                let completed_at_ms = now_ms();
+                set_job(
+                    &jobs,
+                    &events_tx,
+                    job_id,
+                    JobState::Done {
+                        started_at_ms,
+                        completed_at_ms,
+                        elapsed_ms: completed_at_ms.saturating_sub(started_at_ms),
+                        tx_id_hex: r.tx_id_hex,
+                        shards_sent: r.shards_sent,
+                        bytes_sent: r.bytes_sent,
+                        dest: r.dest,
+                        files_sent: file_count.max(1),
+                        skipped_files: 0,
+                        skipped_bytes: 0,
+                        commit_ack: serde_json::from_str(&r.commit_ack_body).ok(),
+                    },
+                );
+            }
+            Ok(Err(e)) => {
+                let completed_at_ms = now_ms();
+                set_job(
+                    &jobs,
+                    &events_tx,
+                    job_id,
+                    job_failed_from_err(started_at_ms, completed_at_ms, &e),
+                );
+            }
+            Err(e) => {
+                let completed_at_ms = now_ms();
+                set_job(
+                    &jobs,
+                    &events_tx,
+                    job_id,
+                    job_failed_from_err(
+                        started_at_ms,
+                        completed_at_ms,
+                        &anyhow::anyhow!("transfer task join: {e}"),
+                    ),
+                );
+            }
+        }
+        fail_guard.mark_succeeded();
+    });
+
+    (
+        StatusCode::ACCEPTED,
+        Json(JobCreated {
+            job_id: job_id.to_string(),
+        }),
+    )
+        .into_response()
+}
+
 async fn transfer_file_handler(
     State(state): State<AppState>,
     Json(req): Json<TransferFileReq>,
@@ -3661,6 +3943,90 @@ async fn transfer_dir_handler(
 /// cold-cache HDD, or had returned successfully after the client timeout
 /// fired. Entry + outcome + duration logs make the next report trivially
 /// diagnosable from engine.log alone.
+#[derive(Deserialize)]
+struct BpsInspectReq {
+    patch_path: String,
+}
+
+#[derive(Deserialize)]
+struct BpsApplyReq {
+    /// The library to patch, on the engine's filesystem.
+    source_path: String,
+    /// The `.bps` file to apply.
+    patch_path: String,
+    /// Where to write the patched result.
+    dest_path: String,
+}
+
+/// POST /api/bps/inspect — read a BPS patch's header without applying it.
+///
+/// Lets the UI show what a patch expects before anything is written,
+/// which matters because these patches target one exact build of one
+/// library.
+async fn bps_inspect_handler(Json(req): Json<BpsInspectReq>) -> impl IntoResponse {
+    let path = req.patch_path;
+    let r = tokio::task::spawn_blocking(move || -> anyhow::Result<_> {
+        let patch = std::fs::read(&path).map_err(|e| anyhow::anyhow!("read {path}: {e}"))?;
+        ps5upload_core::bps::bps_info(&patch)
+    })
+    .await;
+    match r {
+        Ok(Ok(info)) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "ok": true,
+                "source_size": info.source_size,
+                "target_size": info.target_size,
+                "metadata": info.metadata,
+                "source_crc": format!("{:08x}", info.source_crc),
+                "target_crc": format!("{:08x}", info.target_crc),
+            })),
+        )
+            .into_response(),
+        Ok(Err(e)) => json_err(StatusCode::BAD_REQUEST, format!("{e:#}")).into_response(),
+        Err(e) => json_err(StatusCode::INTERNAL_SERVER_ERROR, format!("{e}")).into_response(),
+    }
+}
+
+/// POST /api/bps/apply — patch a library on the engine's filesystem.
+///
+/// Backporting needs system libraries from a newer firmware with their
+/// unavailable imports patched out; upstream ships those edits as BPS
+/// files. Doing it here means a library can be patched on its way to the
+/// console instead of through a browser-based patcher.
+async fn bps_apply_handler(Json(req): Json<BpsApplyReq>) -> impl IntoResponse {
+    let (src, patch_path, dest) = (req.source_path, req.patch_path, req.dest_path);
+    crate::log_info!("bps_apply: src={src} patch={patch_path} dest={dest}");
+    let dest_for_log = dest.clone();
+    let r = tokio::task::spawn_blocking(move || -> anyhow::Result<u64> {
+        let patch =
+            std::fs::read(&patch_path).map_err(|e| anyhow::anyhow!("read {patch_path}: {e}"))?;
+        let source = std::fs::read(&src).map_err(|e| anyhow::anyhow!("read {src}: {e}"))?;
+        let out = ps5upload_core::bps::bps_apply(&patch, &source)?;
+        if let Some(parent) = std::path::Path::new(&dest).parent() {
+            std::fs::create_dir_all(parent).ok();
+        }
+        std::fs::write(&dest, &out).map_err(|e| anyhow::anyhow!("write {dest}: {e}"))?;
+        Ok(out.len() as u64)
+    })
+    .await;
+    match r {
+        Ok(Ok(bytes)) => {
+            crate::log_info!("bps_apply ok: dest={dest_for_log} bytes={bytes}");
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({ "ok": true, "bytes": bytes, "dest": dest_for_log })),
+            )
+                .into_response()
+        }
+        // A checksum mismatch is the expected failure — the patch was
+        // built for a different library or a different firmware — so it
+        // is a bad request, not a server fault.
+        Ok(Err(e)) => json_err(StatusCode::BAD_REQUEST, format!("{e:#}")).into_response(),
+        Err(e) => json_err(StatusCode::INTERNAL_SERVER_ERROR, format!("{e}")).into_response(),
+    }
+}
+
 async fn zip_inspect_handler(Json(req): Json<ZipInspectReq>) -> impl IntoResponse {
     let zip_path = req.zip_path;
     crate::log_info!("zip_inspect: zip={zip_path}");
@@ -7073,6 +7439,7 @@ async fn run(cfg: EngineConfig) -> anyhow::Result<()> {
         .route("/api/smb/list-shares", post(smb::smb_list_shares))
         .route("/api/smb/list-dir", post(smb::smb_list_dir))
         .route("/api/smb/download", post(smb::smb_download_file))
+        .route("/api/smb/transfer", post(smb_transfer_handler))
         .route("/api/ps5/saves/list", get(ps5_saves_list))
         .route("/api/ps5/screenshots/list", get(ps5_screenshots_list))
         .route("/api/ps5/videos/list", get(ps5_videos_list))
@@ -7087,6 +7454,8 @@ async fn run(cfg: EngineConfig) -> anyhow::Result<()> {
         .route("/api/transfer/file", post(transfer_file_handler))
         .route("/api/transfer/dir", post(transfer_dir_handler))
         .route("/api/transfer/zip", post(transfer_zip_handler))
+        .route("/api/bps/inspect", post(bps_inspect_handler))
+        .route("/api/bps/apply", post(bps_apply_handler))
         .route("/api/zip/inspect", post(zip_inspect_handler))
         .route("/api/zip/inspect/stream", post(zip_inspect_stream_handler))
         .route("/api/transfer/7z", post(transfer_7z_handler))

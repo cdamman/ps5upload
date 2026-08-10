@@ -322,7 +322,9 @@ fn fetch_from_store(
     None
 }
 
-#[cfg(not(target_os = "android"))]
+/// Push a metadata JSON blob into the payload's on-console cache.
+/// Available on every host (including Android) — it only uses FTX2,
+/// not the desktop-only store scrape.
 fn tmdb_store_on_payload(addr: &str, title_id: &str, json: &str) -> Result<()> {
     let req = serde_json::json!({ "title_id": title_id, "json": json });
     let resp = send_recv(
@@ -396,19 +398,55 @@ pub fn tmdb_fetch(
         }
     };
 
-    #[cfg(not(target_os = "android"))]
-    let known_cid = if is_valid_content_id(input) {
-        Some(input)
-    } else {
-        None
-    };
+    // Prefer the console first. The PS Store product pages render
+    // client-side now: the application/ld+json scrape below returns an
+    // empty skeleton, and a full prefix×label sweep can hang for minutes
+    // (24 prefixes × 2 labels × ~15 s timeout) before we ever reach the
+    // path that works. app.db already knows installed title names —
+    // no network, cannot rot. diagnostics::appdb_query is intentionally
+    // not used here; it still uses the older whole-file heuristic and
+    // returns metadata blobs rather than title names.
+    let short = &title_id[..title_id.len().min(9)];
+    if let Ok(list) = crate::activity::activity_db_query(addr, "recently_played") {
+        if let Some(row) = list
+            .rows
+            .iter()
+            .find(|r| r.title_id.starts_with(short) && r.name.is_some())
+        {
+            let result = TmdbFetchResponse {
+                ok: true,
+                title_id: title_id.clone(),
+                np_title_id: Some(row.title_id.clone()),
+                name: row.name.clone(),
+                // Named so the UI can say where this came from rather
+                // than implying store data it does not have.
+                category: Some("console".to_string()),
+                ..Default::default()
+            };
+            let json = serde_json::to_string(&result).unwrap_or_default();
+            let _ = tmdb_store_on_payload(addr, &title_id, &json).ok();
+            return Ok(result);
+        }
+    }
 
+    // Optional last-ditch store scrape for titles not on the console.
+    // Only attempt when the caller supplied a full content ID (so we
+    // try one URL, not 48) or an explicit region (one prefix × 2 labels).
+    // Bare title_ids with no region skip the dead scrape entirely.
     #[cfg(not(target_os = "android"))]
     {
-        if let Some((result, _raw_jsonld)) = fetch_from_store(&title_id, known_cid, region) {
-            let store_json = serde_json::to_string(&result).unwrap_or_default();
-            let _ = tmdb_store_on_payload(addr, &title_id, &store_json).ok();
-            return Ok(result);
+        let known_cid = if is_valid_content_id(input) {
+            Some(input)
+        } else {
+            None
+        };
+        let try_store = known_cid.is_some() || region.is_some();
+        if try_store {
+            if let Some((result, _raw_jsonld)) = fetch_from_store(&title_id, known_cid, region) {
+                let store_json = serde_json::to_string(&result).unwrap_or_default();
+                let _ = tmdb_store_on_payload(addr, &title_id, &store_json).ok();
+                return Ok(result);
+            }
         }
     }
 

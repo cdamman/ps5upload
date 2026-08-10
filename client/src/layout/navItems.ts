@@ -209,6 +209,12 @@ export const NAV_ITEMS: NavItem[] = [
     icon: Clock,
   },
   {
+    to: "/fakelib",
+    key: "fakelib_title",
+    fallback: "Fakelib",
+    icon: Boxes,
+  },
+  {
     to: "/sdk-changer",
     key: "sdk_changer_title",
     fallback: "SDK Changer",
@@ -217,7 +223,9 @@ export const NAV_ITEMS: NavItem[] = [
   {
     to: "/tmdb",
     key: "tmdb_title",
-    fallback: "TMDB",
+    // "TMDB" reads as The Movie Database; it is actually Title MetaData,
+    // and it now sources from the console rather than the PS Store.
+    fallback: "Game Metadata",
     icon: Database,
   },
   {

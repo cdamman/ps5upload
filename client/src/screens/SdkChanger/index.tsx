@@ -6,6 +6,7 @@ import { useConnectionStore } from "../../state/connection";
 import { transferAddr } from "../../lib/addr";
 import { humanizePs5Error } from "../../lib/humanizeError";
 import { sdkScan, sdkPatch, sdkRestore, type SdkTitle } from "../../api/ps5";
+import { PS5_FIRMWARES, fwToSdkHex, sdkHexToFw } from "../../lib/fwVersion";
 
 export default function SdkChangerScreen() {
   const tr = useTr();
@@ -17,7 +18,10 @@ export default function SdkChangerScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [patchTitleId, setPatchTitleId] = useState<string | null>(null);
-  const [targetSdk, setTargetSdk] = useState("0x09060000");
+  // A firmware version, not a raw hex word. The field used to take hex
+  // and defaulted to 0x09060000 — which is not a real firmware, because
+  // versions are BCD (9.60 is 0x09600000). See lib/fwVersion.ts.
+  const [targetFw, setTargetFw] = useState("9.60");
   const [patching, setPatching] = useState(false);
   const [patchResult, setPatchResult] = useState<{ ok: boolean; msg: string } | null>(null);
   const [restoreTitleId, setRestoreTitleId] = useState<string | null>(null);
@@ -45,11 +49,24 @@ export default function SdkChangerScreen() {
     setPatching(true);
     setPatchResult(null);
     try {
-      const resp = await sdkPatch(titleId, targetSdk, addr);
+      const hex = fwToSdkHex(targetFw);
+      if (!hex) {
+        setPatchResult({
+          ok: false,
+          msg: tr("sdk_bad_fw", undefined, `"${targetFw}" is not a firmware version`),
+        });
+        return;
+      }
+      const resp = await sdkPatch(titleId, hex, addr);
       if (resp.ok) {
+        // The payload reports how many sites it actually rewrote, so the
+        // result is verifiable rather than asserted.
+        const detail = (resp as { detail?: string }).detail;
         setPatchResult({
           ok: true,
-          msg: tr("sdk_patch_ok", undefined, `Patched ${titleId} → ${targetSdk}`),
+          msg: detail
+            ? `${titleId} → ${targetFw} (${detail})`
+            : tr("sdk_patch_ok", undefined, `Patched ${titleId} → ${targetFw}`),
         });
       } else {
         setPatchResult({ ok: false, msg: resp.error ?? "Patch failed" });
@@ -108,7 +125,7 @@ export default function SdkChangerScreen() {
           description={tr(
             "sdk_changer_subtitle",
             undefined,
-            "Scan and patch SDK/firmware version in installed titles",
+            "Lower the firmware a game demands, so it will launch on an older console",
           )}
           right={
             <Button variant="ghost" onClick={() => void refresh()} disabled={loading}>
@@ -139,6 +156,35 @@ export default function SdkChangerScreen() {
           </Card>
         )}
 
+        <Card className="mb-4">
+          <div className="text-sm leading-relaxed">
+            <p className="mb-2">
+              {tr(
+                "sdk_explain_what",
+                undefined,
+                "Every game records the minimum firmware it needs. If that is higher than your console's firmware, the system refuses to start it. This screen lowers that recorded value.",
+              )}
+            </p>
+            <p className="mb-2">
+              <strong>
+                {tr("sdk_explain_half", undefined, "This is only half of a backport.")}
+              </strong>{" "}
+              {tr(
+                "sdk_explain_half_text",
+                undefined,
+                "Lowering the version gets the system to agree to launch the game — it will then usually crash on functions your firmware does not have. To finish the job you also need the newer system libraries, which BackPork mounts into the game at launch (see the Payloads screen).",
+              )}
+            </p>
+            <p>
+              {tr(
+                "sdk_explain_decrypted",
+                undefined,
+                "Only decrypted games can be patched. Retail titles installed from disc or Store are encrypted, and those are reported as signed SELFs and skipped rather than damaged.",
+              )}
+            </p>
+          </div>
+        </Card>
+
         <Card className="mb-4 border-[var(--color-warn)]/30 bg-[var(--color-warn)]/5">
           <div className="flex items-start gap-3">
             <AlertTriangle size={20} className="mt-0.5 shrink-0 text-[var(--color-warn)]" />
@@ -147,7 +193,7 @@ export default function SdkChangerScreen() {
               {tr(
                 "sdk_warning_text",
                 undefined,
-                "SDK patching modifies game binaries and param.json files in-place. Original files are backed up with a .bak suffix. Use at your own risk.",
+                "Patching rewrites game binaries and param.json in place. Originals are copied to .bak first, and Restore puts them back. Use at your own risk.",
               )}
             </div>
           </div>
@@ -177,24 +223,37 @@ export default function SdkChangerScreen() {
                     {t.name && <div className="text-sm text-[var(--color-muted)]">{t.name}</div>}
                     <div className="mt-1 flex flex-wrap gap-4 text-xs text-[var(--color-muted)]">
                       <span>
-                        {tr("sdk_sdk", undefined, "SDK")}:{" "}
-                        <code className="font-mono">{t.sdk_version || "—"}</code>
+                        {tr("sdk_sdk", undefined, "Built with SDK")}:{" "}
+                        <code className="font-mono">
+                          {sdkHexToFw(t.sdk_version ?? "") ?? t.sdk_version ?? "—"}
+                        </code>
                       </span>
                       <span>
-                        {tr("sdk_fw", undefined, "FW")}:{" "}
-                        <code className="font-mono">{t.fw_required || "—"}</code>
+                        {tr("sdk_fw", undefined, "Needs firmware")}:{" "}
+                        <code className="font-mono">
+                          {sdkHexToFw(t.fw_required ?? "") ?? t.fw_required ?? "—"}
+                        </code>
                       </span>
                     </div>
                   </div>
                   {patchTitleId === t.title_id ? (
                     <div className="flex flex-wrap items-center gap-2">
-                      <input
-                        type="text"
-                        value={targetSdk}
-                        onChange={(e) => setTargetSdk(e.target.value)}
-                        className="input input-sm w-40 font-mono"
-                        placeholder="0x09060000"
-                      />
+                      <select
+                        value={targetFw}
+                        onChange={(e) => setTargetFw(e.target.value)}
+                        className="input input-sm w-36 font-mono"
+                        aria-label={tr(
+                          "sdk_target_fw",
+                          undefined,
+                          "Target firmware",
+                        )}
+                      >
+                        {PS5_FIRMWARES.map((fw) => (
+                          <option key={fw} value={fw}>
+                            {fw}
+                          </option>
+                        ))}
+                      </select>
                       <Button
                         variant="primary"
                         size="sm"

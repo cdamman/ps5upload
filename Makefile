@@ -696,6 +696,26 @@ test-payload: payload
 		$(PAYLOAD_DIR)/tests/ptrace_recovery_selftest.c
 	@/tmp/ps5upload-ptrace-recovery-selftest
 	@echo "✓ ptrace timeout recovery never resumes injected registers"
+	@echo "Running app.db raw-scan self-test (host build)..."
+	@cc -O2 -Wall -Wextra -Werror -o /tmp/ps5upload-appdb-scan-selftest \
+		$(PAYLOAD_DIR)/tests/appdb_scan_selftest.c
+	@/tmp/ps5upload-appdb-scan-selftest
+	@echo "✓ app.db scan recovers titles without sqlite"
+	@echo "Running FTP wire-format self-test (host build)..."
+	@cc -O2 -Wall -Wextra -Werror -o /tmp/ps5upload-ftp-format-selftest \
+		$(PAYLOAD_DIR)/tests/ftp_format_selftest.c
+	@/tmp/ps5upload-ftp-format-selftest
+	@echo "✓ FTP PASV/EPSV/LIST replies match the shapes clients parse"
+	@echo "Running param.json SDK-rewrite self-test (host build)..."
+	@cc -O2 -Wall -Wextra -Werror -o /tmp/ps5upload-sdk-param-selftest \
+		$(PAYLOAD_DIR)/tests/sdk_param_selftest.c
+	@/tmp/ps5upload-sdk-param-selftest
+	@echo "✓ SDK version rewrite reports what it actually changed"
+	@echo "Running ELF param-segment self-test (host build)..."
+	@cc -O2 -Wall -Wextra -Werror -o /tmp/ps5upload-elf-param-selftest \
+		$(PAYLOAD_DIR)/tests/elf_param_selftest.c
+	@/tmp/ps5upload-elf-param-selftest
+	@echo "✓ SDK patcher targets param segments, not stray magic bytes"
 
 test-client: setup-client
 	@echo "Testing client build..."

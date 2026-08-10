@@ -1,5 +1,7 @@
 #include "activity.h"
 
+#include "appdb_scan.h"
+
 #include <ctype.h>
 #include <dirent.h>
 #include <dlfcn.h>
@@ -385,6 +387,92 @@ typedef const unsigned char *(*adb_text_fn)(sqlite3_stmt *, int);
 #define ADB_READONLY 1
 #define ADB_ROW 100
 
+/* Emit a one-line JSON error body. The caller returns 0 either way — an
+ * empty result with a reason is a valid answer, not a transport failure. */
+static int db_query_err(char *buf, size_t cap, size_t *written,
+                        const char *reason) {
+    int n = snprintf(buf, cap, "{\"rows\":[],\"source\":\"none\",\"error\":\"%s\"}",
+                     reason);
+    if (written) *written = (size_t)(n > 0 ? n : 0);
+    return 0;
+}
+
+/* "Recently played" without sqlite.
+ *
+ * The console ships no libSceSqlite.sprx under any lib path and the
+ * payload links none, so the dlsym probe below never resolves — on every
+ * firmware, not just some. This is therefore the path that actually
+ * serves this query. Shares appdb_scan_entries() with runtime.c's
+ * APPDB_QUERY handler so the parsing has one implementation and one set
+ * of tests (payload/tests/appdb_scan_selftest.c). */
+static int appdb_scan_rows_json(char *buf, size_t cap, size_t *written) {
+    int fd = open("/system_data/priv/mms/app.db", O_RDONLY);
+    if (fd < 0) return db_query_err(buf, cap, written, "cannot open app.db");
+
+    /* app.db runs 400-800 KB in practice; cap the read so a surprise
+     * cannot balloon the payload's heap. */
+    const size_t raw_cap = 1024 * 1024;
+    unsigned char *raw = (unsigned char *)malloc(raw_cap);
+    if (!raw) {
+        close(fd);
+        return db_query_err(buf, cap, written, "out of memory");
+    }
+    size_t total = 0;
+    while (total < raw_cap) {
+        ssize_t r = read(fd, raw + total, raw_cap - total);
+        if (r <= 0) break;
+        total += (size_t)r;
+    }
+    close(fd);
+
+    const int max_rows = 100;
+    appdb_entry_t *entries =
+        (appdb_entry_t *)malloc(sizeof(appdb_entry_t) * (size_t)max_rows);
+    if (!entries) {
+        free(raw);
+        return db_query_err(buf, cap, written, "out of memory");
+    }
+
+    int count = appdb_scan_entries(raw, total, entries, max_rows);
+    free(raw);
+    if (count < 0) {
+        free(entries);
+        return db_query_err(buf, cap, written, "app.db is not a SQLite image");
+    }
+
+    int n = snprintf(buf, cap, "{\"rows\":[");
+    if (n < 0 || (size_t)n >= cap) {
+        free(entries);
+        return -1;
+    }
+    int emitted = 0;
+    for (int i = 0; i < count; i++) {
+        /* Skip Sony's own apps — Media Gallery, Disc Player and friends
+         * are not "recently played". Same NPXS rule the play-time
+         * watcher uses in find_running_title(). */
+        if (strncmp(entries[i].title_id, "NPXS", 4) == 0) continue;
+
+        char esc_tid[32], esc_name[512];
+        json_escape(entries[i].title_id, esc_tid, sizeof(esc_tid));
+        json_escape(entries[i].name, esc_name, sizeof(esc_name));
+        int more = snprintf(buf + n, cap - (size_t)n,
+                            "%s{\"title_id\":\"%s\",\"name\":\"%s\"}",
+                            emitted ? "," : "", esc_tid, esc_name);
+        if (more < 0 || (size_t)(n + more) >= cap) break;
+        n += more;
+        emitted++;
+    }
+    free(entries);
+
+    /* Distinct from the sqlite path's "app_db" so the UI can tell which
+     * one answered without guessing. */
+    int end = snprintf(buf + n, cap - (size_t)n, "],\"source\":\"app_db_scan\"}");
+    if (end < 0 || (size_t)(n + end) >= cap) return -1;
+    n += end;
+    if (written) *written = (size_t)n;
+    return 0;
+}
+
 int activity_db_query_json(const char *query, char *buf, size_t cap,
                            size_t *written) {
     if (!query || !buf || cap == 0) return -1;
@@ -399,10 +487,19 @@ int activity_db_query_json(const char *query, char *buf, size_t cap,
 
     if (!sq_open || !sq_close || !sq_prepare || !sq_step ||
         !sq_fin || !sq_text) {
-        int n = snprintf(buf, cap, "{\"rows\":[],\"source\":\"none\","
-                         "\"error\":\"sqlite unavailable\"}");
-        if (written) *written = (size_t)(n > 0 ? n : 0);
-        return 0;
+        /* Expected, not exceptional: no console we have tested ships
+         * libSceSqlite.sprx, so this is the normal path. recently_played
+         * has a parser that needs no sqlite; play_time does not, because
+         * its rows are serialized blobs inside sl2_log.db that a B-tree
+         * text scan cannot reassemble. Say so instead of blaming the
+         * firmware. */
+        if (strcmp(query, "recently_played") == 0)
+            return appdb_scan_rows_json(buf, cap, written);
+        if (strcmp(query, "play_time") == 0)
+            return db_query_err(buf, cap, written,
+                                "play time needs sqlite, which this console "
+                                "does not provide");
+        return db_query_err(buf, cap, written, "unknown query");
     }
 
     const char *db_path = NULL;

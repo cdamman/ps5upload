@@ -8,6 +8,9 @@ license.workspace = true
 anyhow.workspace = true
 base64 = "0.23"
 blake3.workspace = true
+# BPS patch checksums (bps.rs). Already in the tree via zip's dependency
+# graph, so this pulls in no new code.
+crc32fast = "1"
 ftx2-proto = { path = "../ftx2-proto" }
 libc = "0.2"
 serde.workspace = true

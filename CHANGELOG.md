@@ -4,6 +4,25 @@ What's new in ps5upload, written for humans.
 
 ---
 
+## 5.2.0
+
+**Clearer failures, working FTP, and NAS → PS5 upload.**
+
+- Actions that the console refused now show a real error instead of looking
+  like nothing happened (FTP start, backups, user create/delete, and more).
+- Built-in FTP server no longer freezes the console on the first real
+  transfer; default port is 2122 so it does not clash with ftpsrv.
+- Game Activity and Game Metadata read titles from the console again
+  (no broken store scrape).
+- SMB browser can upload a file or whole folder from your NAS straight to
+  the PS5 in one step (stage on the PC, then FTX2).
+- Backport helpers: Fakelib manager, BPS patches, and SDK Changer fixes so
+  “patched” means something actually changed.
+- SDK Changer uses real firmware numbers (BCD) and reports signed SELFs
+  it cannot touch.
+
+---
+
 ## 5.1.8
 
 **Clear package choices and a safer Stream fallback.**

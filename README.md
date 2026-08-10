@@ -48,6 +48,16 @@
   ops (chmod, delete, move, copy, mkdir) with a real directory
   tree. Bulk delete of a 200k-file folder shows live progress
   with a working Stop button.
+- **NAS / SMB upload** — browse a Windows share or Samba NAS from the
+  app, download to this computer, or **upload a file or folder
+  straight to the PS5** in one step (streamed to a host temp dir, then
+  FTX2 — no 2 GiB memory cap on that path).
+- **FTP server on the PS5** — optional built-in FTP for FileZilla and
+  other clients (default port **2122**, so it coexists with ftpsrv on
+  2121). Not a replacement for FTX2 Upload.
+- **Backport helpers** — Fakelib folder manager, BPS patch apply, and
+  SDK Version Changer for folder dumps that need newer system libs.
+  Runtime mount is still BackPork or ShadowMount+ (don’t run both).
 - **Stay-in-the-loop notifications** — in-app alerts mirror to your
   computer's notification center (macOS / Windows / Linux, plus the
   Android shade) when a transfer finishes or fails in the background,
@@ -324,10 +334,11 @@ v0.42, which ships per-firmware kernel offsets and resolves them at
 payload startup via `kernel_get_fw_version()` — the same binary
 runs on every supported firmware without per-release rebuilds.
 
-| Range | Feature coverage |
-|---|---|
-| **1.00 – 13.60** | Supported — the same binary runs everywhere the SDK covers |
-| Hardware-tested | FW 5.10 and 9.60 (in-house) · FW 12.20 (user-confirmed) — core features (transfer, mount, browse, install) work across the range |
+| Ceiling | Range | Meaning |
+|---|---|---|
+| **Payload binary** | **1.00 – 13.60** | Same ELF runs on every FW the SDK has offsets for |
+| **Practical jailbreak** | **~1.00 – 12.70** | Limited by the public ELF loader / exploit chain, not by our payload |
+| Hardware-tested here | **5.10** and **9.60** | Core transfer, mount, browse, install, FTP, metadata |
 
 > `.pkg` install depends on the console's jailbreak having live kernel
 > patches (kstuff / fpkg-enable). On builds where those aren't active the
@@ -345,9 +356,7 @@ check unrelated to firmware), and FS ops work identically across
 all supported firmwares.
 
 **What actually gates users in practice is the ELF loader** on
-port 9021 — a third-party component, not part of ps5upload. The
-ecosystem's real-world coverage is roughly **4.x through 13.x**;
-below 4.x remains uncommon in current loader setups.
+port 9021 — a third-party component, not part of ps5upload.
 
 ## FAQ
 

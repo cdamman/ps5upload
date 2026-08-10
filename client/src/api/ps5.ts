@@ -229,9 +229,13 @@ export async function profileActivate(
   id?: number | null,
   addr?: string,
 ): Promise<{ ok: boolean; id: string }> {
-  return invoke("profile_activate", {
-    req: { addr: addr ?? null, slot, id: id ?? null },
-  });
+  const resp = await invoke<{ ok: boolean; id: string; error?: string | null }>(
+    "profile_activate",
+    {
+      req: { addr: addr ?? null, slot, id: id ?? null },
+    },
+  );
+  return assertOk(resp, "Activate profile");
 }
 
 /** De-activate (clear id+flags) an offline-account slot. */
@@ -247,9 +251,11 @@ export async function userCreate(
   name: string,
   addr?: string,
 ): Promise<{ ok: boolean; uid: number; name: string }> {
-  return invoke("user_create", {
-    req: { addr: addr ?? null, name },
-  });
+  const resp = await invoke<{ ok: boolean; uid: number; name: string }>(
+    "user_create",
+    { req: { addr: addr ?? null, name } },
+  );
+  return assertOk(resp, "Create user");
 }
 
 /** Delete a local user account. */
@@ -258,9 +264,14 @@ export async function userDelete(
   wipeSaves: boolean,
   addr?: string,
 ): Promise<{ ok: boolean; uid: number }> {
-  return invoke("user_delete", {
+  const resp = await invoke<{
+    ok: boolean;
+    uid: number;
+    error?: string | null;
+  }>("user_delete", {
     req: { addr: addr ?? null, uid, wipe_saves: wipeSaves },
   });
+  return assertOk(resp, "Delete user");
 }
 
 // ─── Backup & restore ───────────────────────────────────────────────────
@@ -296,9 +307,10 @@ export async function backupSnapshot(
   path: string,
   addr?: string,
 ): Promise<BackupSnapshotResult> {
-  return invoke("backup_snapshot", {
+  const resp = await invoke<BackupSnapshotResult>("backup_snapshot", {
     req: { addr: addr ?? null, tag, path },
   });
+  return assertOk(resp, "Create backup snapshot");
 }
 
 /** List snapshots, optionally filtered by tag. */
@@ -317,9 +329,10 @@ export async function backupRestore(
   timestamp: number,
   addr?: string,
 ): Promise<BackupRestoreResult> {
-  return invoke("backup_restore", {
+  const resp = await invoke<BackupRestoreResult>("backup_restore", {
     req: { addr: addr ?? null, tag, timestamp },
   });
+  return assertOk(resp, "Restore backup");
 }
 
 /** Delete a snapshot by tag + timestamp. */
@@ -328,9 +341,15 @@ export async function backupDelete(
   timestamp: number,
   addr?: string,
 ): Promise<{ ok: boolean; tag: string; timestamp: number }> {
-  return invoke("backup_delete", {
+  const resp = await invoke<{
+    ok: boolean;
+    tag: string;
+    timestamp: number;
+    error?: string | null;
+  }>("backup_delete", {
     req: { addr: addr ?? null, tag, timestamp },
   });
+  return assertOk(resp, "Delete backup");
 }
 
 /** Render a 440² crop/fit preview of `imagePath`. Returns a PNG data URL. */
@@ -394,6 +413,33 @@ export async function profileApplyAvatar(
  * targeting a custom loader that listens on a different port. Wraps
  * `commands::payload_send` in Rust.
  */
+/**
+ * Reject when the payload refused an action.
+ *
+ * The payload answers a refused command with `ok:false` inside an
+ * otherwise successful response, so `await` alone reports success and the
+ * screen shows nothing. That is how "Start FTP Server" could fail with
+ * `bind_failed` and look like a dead button.
+ *
+ * Use this for *actions* only. Status queries also return `ok:false`, but
+ * there it means "this console doesn't expose the feature" — screens
+ * render that as an empty state, and throwing would turn a graceful
+ * degradation into an error banner.
+ */
+function assertOk<T extends { ok?: boolean; error?: string | null }>(
+  resp: T,
+  what: string,
+  detail?: (r: T) => string | undefined,
+): T {
+  if (resp && resp.ok === false) {
+    const extra = detail?.(resp);
+    const reason = resp.error ?? undefined;
+    const parts = [reason, extra].filter(Boolean).join(" ");
+    throw new Error(parts ? `${what}: ${parts}` : `${what} failed`);
+  }
+  return resp;
+}
+
 export async function sendPayload(
   ip: string,
   elfPath: string,
@@ -3892,9 +3938,10 @@ export async function remoteplayRequest(
   manualAccountId?: string,
   addr?: string,
 ): Promise<{ ok: boolean }> {
-  return invoke("remoteplay_request", {
+  const resp = await invoke<{ ok: boolean }>("remoteplay_request", {
     req: { addr: addr ?? null, manual_account_id: manualAccountId ?? null },
   });
+  return assertOk(resp, "Request remote play");
 }
 
 export async function remoteplayStatus(
@@ -3906,7 +3953,10 @@ export async function remoteplayStatus(
 export async function remoteplayCancel(
   addr?: string,
 ): Promise<{ ok: boolean }> {
-  return invoke("remoteplay_cancel", { addr: addr ?? null });
+  const resp = await invoke<{ ok: boolean }>("remoteplay_cancel", {
+    addr: addr ?? null,
+  });
+  return assertOk(resp, "Cancel remote play");
 }
 
 // ── Fan Curve ─────────────────────────────────────────────────────────
@@ -4028,7 +4078,10 @@ export async function cheatsDelete(
 }
 
 export async function cheatsReload(addr?: string): Promise<{ ok: boolean }> {
-  return invoke("cheats_reload", { req: { addr: addr ?? null } });
+  const resp = await invoke<{ ok: boolean }>("cheats_reload", {
+    req: { addr: addr ?? null },
+  });
+  return assertOk(resp, "Reload cheats");
 }
 
 export async function cheatsStatus(
@@ -4255,13 +4308,49 @@ export async function ftpStart(
   },
   addr?: string,
 ): Promise<FtpStartResponse> {
-  return invoke("ftp_start", {
+  const resp = await invoke<FtpStartResponse>("ftp_start", {
     req: { addr: addr ?? null, ...params },
   });
+  // `bind_failed` usually means another payload already owns the port —
+  // ftpsrv.elf defaults to 2121 — so name the port in the message.
+  return assertOk(resp, "Start FTP server", () =>
+    params.port ? `(port ${params.port})` : undefined,
+  );
 }
 
 export async function ftpStatus(addr?: string): Promise<FtpStatusResponse> {
   return invoke("ftp_status", { req: { addr: addr ?? null } });
+}
+
+
+// ── BPS patching (backport helper) ────────────────────────────────────
+export interface BpsInfo {
+  ok: boolean;
+  source_size: number;
+  target_size: number;
+  metadata: string;
+  source_crc: string;
+  target_crc: string;
+}
+
+/** Read a .bps patch's header without applying it, so the UI can show
+ *  what the patch expects before anything is written. */
+export async function bpsInspect(patchPath: string): Promise<BpsInfo> {
+  return invoke("bps_inspect", { req: { patch_path: patchPath } });
+}
+
+/** Apply a .bps patch to a library on the engine's machine. Rejects a
+ *  source whose checksum does not match the one the patch was built for
+ *  — that is the common mistake, and it otherwise yields a file that
+ *  only fails at game launch. */
+export async function bpsApply(
+  sourcePath: string,
+  patchPath: string,
+  destPath: string,
+): Promise<{ ok: boolean; bytes: number; dest: string }> {
+  return invoke("bps_apply", {
+    req: { source_path: sourcePath, patch_path: patchPath, dest_path: destPath },
+  });
 }
 
 // ── SMB Browser ──────────────────────────────────────────────────────
@@ -4326,4 +4415,30 @@ export async function smbDownloadFile(
       password: password ?? "",
     },
   });
+}
+
+/** Stage an SMB path on the host and FTX2 it to the PS5. Returns a job
+ *  id — poll with `waitForJob` / `jobStatus`. Lands at
+ *  `destRoot/<basename(path)>` on the console. */
+export async function smbTransferToPs5(
+  server: string,
+  user: string,
+  share: string,
+  path: string,
+  destRoot: string,
+  addr?: string,
+  password?: string,
+): Promise<string> {
+  const res = await invoke<{ job_id: string }>("smb_transfer", {
+    req: {
+      server,
+      user,
+      share,
+      path,
+      dest_root: destRoot,
+      addr: addr ?? null,
+      password: password ?? "",
+    },
+  });
+  return res.job_id;
 }

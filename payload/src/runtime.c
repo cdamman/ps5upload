@@ -10679,8 +10679,12 @@ static int handle_sdk_patch(runtime_state_t *state, int client_fd,
 
     char resp[512];
     if (rc == 0) {
-        snprintf(resp, sizeof(resp), "{\"ok\":true,\"title_id\":\"%s\",\"target_sdk\":\"%s\"}",
-                 title_id, target_sdk);
+        /* `err` carries the per-site counts on success — the UI shows
+         * them so "patched" is verifiable rather than asserted. */
+        snprintf(resp, sizeof(resp),
+                 "{\"ok\":true,\"title_id\":\"%s\",\"target_sdk\":\"%s\","
+                 "\"detail\":\"%s\"}",
+                 title_id, target_sdk, err);
     } else {
         snprintf(resp, sizeof(resp), "{\"ok\":false,\"error\":\"%s\"}",
                  err[0] ? err : "patch_failed");

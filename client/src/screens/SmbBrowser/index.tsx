@@ -8,14 +8,28 @@ import {
   HardDrive,
   Download,
   Home,
+  Upload,
 } from "lucide-react";
-import { PageHeader, Button, ErrorCard, ConnectionGate, Card, EmptyState, Input, Spinner } from "../../components";
+import {
+  PageHeader,
+  Button,
+  ErrorCard,
+  ConnectionGate,
+  Card,
+  EmptyState,
+  Input,
+  Spinner,
+} from "../../components";
 import { useTr } from "../../state/lang";
+import { useConnectionStore } from "../../state/connection";
+import { transferAddr } from "../../lib/addr";
 import { humanizePs5Error } from "../../lib/humanizeError";
 import {
   smbListShares,
   smbListDir,
   smbDownloadFile,
+  smbTransferToPs5,
+  waitForJob,
   type SmbShare,
   type SmbDirEntry,
 } from "../../api/ps5";
@@ -29,8 +43,14 @@ function formatSize(bytes: number): string {
 
 export default function SmbBrowserScreen() {
   const tr = useTr();
+  const host = useConnectionStore((s) => s.host);
+  const payloadStatus = useConnectionStore((s) => s.payloadStatus);
+  const addr = host ? transferAddr(host) : "";
 
-  const [server, setServer] = useState("smb://192.168.1.100:445");
+  // Empty rather than a sample address: the old default pointed at a
+  // subnet almost nobody is on, so "Connect" looked broken until you
+  // noticed it needed editing. The placeholder shows the shape instead.
+  const [server, setServer] = useState("");
   const [user, setUser] = useState("guest");
   const [password, setPassword] = useState("");
   const [connected, setConnected] = useState(false);
@@ -40,11 +60,16 @@ export default function SmbBrowserScreen() {
   const [pathStack, setPathStack] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState<string | null>(null);
+  const [uploading, setUploading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  // Same default parent as the Upload screen's mental model.
+  const [destRoot, setDestRoot] = useState("/data/homebrew");
 
   const handleConnect = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setStatus(null);
     setShares([]);
     setEntries([]);
     setConnected(false);
@@ -157,10 +182,69 @@ export default function SmbBrowserScreen() {
     [currentShare, pathStack, server, user, password],
   );
 
+  const handleUploadToPs5 = useCallback(
+    async (name: string, isDir: boolean) => {
+      if (!currentShare) return;
+      if (payloadStatus !== "up" || !addr) {
+        setError(
+          tr("smb_need_payload", undefined, "Connect a PS5 with the payload loaded first"),
+        );
+        return;
+      }
+      const root = destRoot.trim();
+      if (!root) {
+        setError(tr("smb_need_dest", undefined, "Enter a PS5 destination folder"));
+        return;
+      }
+      const fullPath = [...pathStack, name].join("/");
+      const key = isDir ? `dir:${name}` : name;
+      setUploading(key);
+      setError(null);
+      setStatus(tr("smb_uploading", undefined, "Staging from SMB and uploading…"));
+      try {
+        const jobId = await smbTransferToPs5(
+          server,
+          user,
+          currentShare,
+          fullPath,
+          root,
+          addr,
+          password,
+        );
+        const snap = await waitForJob(jobId);
+        const dest =
+          snap.status === "done" && "dest" in snap && typeof snap.dest === "string"
+            ? snap.dest
+            : `${root.replace(/\/$/, "")}/${name}`;
+        setStatus(
+          tr("smb_upload_done", { dest }, `Uploaded to ${dest}`),
+        );
+      } catch (e) {
+        setError(humanizePs5Error(String(e)));
+        setStatus(null);
+      } finally {
+        setUploading(null);
+      }
+    },
+    [
+      currentShare,
+      pathStack,
+      destRoot,
+      payloadStatus,
+      addr,
+      server,
+      user,
+      password,
+      tr,
+    ],
+  );
+
   const sortedEntries = [...entries].sort((a, b) => {
     if (a.is_dir !== b.is_dir) return a.is_dir ? -1 : 1;
     return a.name.localeCompare(b.name);
   });
+
+  const canUploadPs5 = payloadStatus === "up" && !!addr;
 
   return (
     <div className="p-6">
@@ -171,11 +255,18 @@ export default function SmbBrowserScreen() {
           description={tr(
             "smb_subtitle",
             undefined,
-            "Browse and download from SMB2/3 shares (Windows, Samba, NAS)",
+            "Browse a NAS or Windows share, download to this computer, or upload straight to the PS5",
           )}
         />
 
-        {error && <div className="mb-4"><ErrorCard title={error} /></div>}
+        {error && (
+          <div className="mb-4">
+            <ErrorCard title={error} />
+          </div>
+        )}
+        {status && !error && (
+          <Card className="mb-4 text-sm text-[var(--color-good)]">{status}</Card>
+        )}
 
         {/* Connection form */}
         {!connected && (
@@ -187,7 +278,7 @@ export default function SmbBrowserScreen() {
                 value={server}
                 onChange={(e) => setServer(e.target.value)}
                 className="font-mono"
-                placeholder="192.168.1.100:445"
+                placeholder="192.168.1.100"
                 inputMode="url"
               />
               <Input
@@ -204,8 +295,13 @@ export default function SmbBrowserScreen() {
                 onChange={(e) => setPassword(e.target.value)}
               />
             </div>
-            <Button variant="primary" size="md" onClick={() => void handleConnect()} disabled={loading}>
-                {loading ? <Spinner size={16} tone="inherit" /> : <Network size={16} />}
+            <Button
+              variant="primary"
+              size="md"
+              onClick={() => void handleConnect()}
+              disabled={loading}
+            >
+              {loading ? <Spinner size={16} tone="inherit" /> : <Network size={16} />}
               {tr("smb_connect", undefined, "Connect")}
             </Button>
           </Card>
@@ -214,48 +310,66 @@ export default function SmbBrowserScreen() {
         {/* Connected: show shares or directory listing */}
         {connected && (
           <>
-            <Card className="mb-4 flex flex-wrap items-center justify-between gap-2">
-              <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm">
-                <HardDrive size={16} className="shrink-0 text-[var(--color-muted)]" />
-                <span className="font-mono">{server}</span>
-                <span className="text-[var(--color-muted)]">·</span>
-                <span>{user}</span>
+            <Card className="mb-4 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm">
+                  <HardDrive size={16} className="shrink-0 text-[var(--color-muted)]" />
+                  <span className="font-mono">{server}</span>
+                  <span className="text-[var(--color-muted)]">·</span>
+                  <span>{user}</span>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  {currentShare && (
+                    <>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => void goUp()}
+                        disabled={loading || pathStack.length === 0}
+                      >
+                        <ChevronLeft size={14} />
+                        {tr("smb_up", undefined, "Up")}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => void browseShare(currentShare)}
+                        disabled={loading}
+                      >
+                        <RefreshCw size={14} />
+                      </Button>
+                    </>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setConnected(false);
+                      setShares([]);
+                      setEntries([]);
+                      setCurrentShare(null);
+                      setStatus(null);
+                    }}
+                  >
+                    {tr("smb_disconnect", undefined, "Disconnect")}
+                  </Button>
+                </div>
               </div>
-              <div className="flex shrink-0 items-center gap-2">
-                {currentShare && (
-                  <>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => void goUp()}
-                      disabled={loading || pathStack.length === 0}
-                    >
-                      <ChevronLeft size={14} />
-                      {tr("smb_up", undefined, "Up")}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => void browseShare(currentShare)}
-                      disabled={loading}
-                    >
-                      <RefreshCw size={14} />
-                    </Button>
-                  </>
+              <Input
+                label={tr("smb_dest_root", undefined, "PS5 destination folder")}
+                type="text"
+                value={destRoot}
+                onChange={(e) => setDestRoot(e.target.value)}
+                className="font-mono"
+                placeholder="/data/homebrew"
+              />
+              <p className="text-xs text-[var(--color-muted)]">
+                {tr(
+                  "smb_dest_root_hint",
+                  undefined,
+                  "Source name is appended (same as Upload)",
                 )}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setConnected(false);
-                    setShares([]);
-                    setEntries([]);
-                    setCurrentShare(null);
-                  }}
-                >
-                  {tr("smb_disconnect", undefined, "Disconnect")}
-                </Button>
-              </div>
+              </p>
             </Card>
 
             {/* Breadcrumb navigation */}
@@ -291,7 +405,11 @@ export default function SmbBrowserScreen() {
                 <EmptyState
                   icon={Network}
                   title={tr("smb_no_shares", undefined, "No shares found")}
-                  message={tr("smb_no_shares_desc", undefined, "The server has no accessible shares")}
+                  message={tr(
+                    "smb_no_shares_desc",
+                    undefined,
+                    "The server has no accessible shares",
+                  )}
                 />
               ) : (
                 <div className="space-y-2">
@@ -308,7 +426,9 @@ export default function SmbBrowserScreen() {
                           <div className="text-sm text-[var(--color-muted)]">{s.comment}</div>
                         )}
                       </div>
-                      <span className="shrink-0 text-xs text-[var(--color-muted)]">{s.share_type}</span>
+                      <span className="shrink-0 text-xs text-[var(--color-muted)]">
+                        {s.share_type}
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -321,46 +441,71 @@ export default function SmbBrowserScreen() {
               />
             ) : (
               <div className="space-y-1">
-                {sortedEntries.map((e) => (
-                  <div
-                    key={e.name}
-                    className={`flex items-center gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] p-3 transition-colors ${
-                      e.is_dir ? "cursor-pointer hover:bg-[var(--color-surface-3)]" : ""
-                    }`}
-                    onClick={() => {
-                      if (e.is_dir) void browseDir(e.name);
-                    }}
-                  >
-                    {e.is_dir ? (
-                      <Folder size={18} className="shrink-0 text-[var(--color-accent)]" />
-                    ) : (
-                      <File size={18} className="shrink-0 text-[var(--color-muted)]" />
-                    )}
-                    <span className="min-w-0 flex-1 truncate font-mono text-sm">{e.name}</span>
-                    {!e.is_dir && (
-                      <span className="shrink-0 text-xs text-[var(--color-muted)]">
-                        {formatSize(e.size)}
+                {sortedEntries.map((e) => {
+                  const upKey = e.is_dir ? `dir:${e.name}` : e.name;
+                  const isUp = uploading === upKey;
+                  return (
+                    <div
+                      key={e.name}
+                      className={`flex items-center gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] p-3 transition-colors ${
+                        e.is_dir ? "cursor-pointer hover:bg-[var(--color-surface-3)]" : ""
+                      }`}
+                      onClick={() => {
+                        if (e.is_dir) void browseDir(e.name);
+                      }}
+                    >
+                      {e.is_dir ? (
+                        <Folder size={18} className="shrink-0 text-[var(--color-accent)]" />
+                      ) : (
+                        <File size={18} className="shrink-0 text-[var(--color-muted)]" />
+                      )}
+                      <span className="min-w-0 flex-1 truncate font-mono text-sm">
+                        {e.name}
                       </span>
-                    )}
-                    {!e.is_dir && (
+                      {!e.is_dir && (
+                        <span className="shrink-0 text-xs text-[var(--color-muted)]">
+                          {formatSize(e.size)}
+                        </span>
+                      )}
+                      {!e.is_dir && (
+                        <button
+                          className="shrink-0 rounded p-1.5 text-[var(--color-muted)] transition-colors hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text)]"
+                          onClick={(ev) => {
+                            ev.stopPropagation();
+                            void handleDownload(e.name);
+                          }}
+                          disabled={downloading === e.name || !!uploading}
+                          title={tr("smb_download", undefined, "Download to this computer")}
+                        >
+                          {downloading === e.name ? (
+                            <Spinner size={14} tone="inherit" />
+                          ) : (
+                            <Download size={14} />
+                          )}
+                        </button>
+                      )}
                       <button
-                        className="shrink-0 rounded p-1.5 text-[var(--color-muted)] transition-colors hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text)]"
+                        className="shrink-0 rounded p-1.5 text-[var(--color-muted)] transition-colors hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text)] disabled:opacity-40"
                         onClick={(ev) => {
                           ev.stopPropagation();
-                          void handleDownload(e.name);
+                          void handleUploadToPs5(e.name, e.is_dir);
                         }}
-                        disabled={downloading === e.name}
-                        title={tr("smb_download", undefined, "Download")}
+                        disabled={!canUploadPs5 || !!uploading || !!downloading}
+                        title={
+                          e.is_dir
+                            ? tr("smb_upload_folder_ps5", undefined, "Upload folder to PS5")
+                            : tr("smb_upload_ps5", undefined, "Upload to PS5")
+                        }
                       >
-                        {downloading === e.name ? (
+                        {isUp ? (
                           <Spinner size={14} tone="inherit" />
                         ) : (
-                          <Download size={14} />
+                          <Upload size={14} />
                         )}
                       </button>
-                    )}
-                  </div>
-                ))}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </>

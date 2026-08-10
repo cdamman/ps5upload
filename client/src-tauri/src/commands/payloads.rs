@@ -518,6 +518,29 @@ const CATALOGUE: &[CatalogueEntry] = &[
         homepage: "https://github.com/drakmor/nanoDNS",
     },
     CatalogueEntry {
+        // BestPig/BackPork — step 3 of backporting. Watches for game
+        // launches and union-mounts <title>/fakelib over the sandbox's
+        // common/lib, so a game can run against libraries from a newer
+        // firmware. Pairs with our SDK Version Changer, which does step 2
+        // (downgrading the SDK version recorded in eboot/prx); neither
+        // half boots a title on its own. Release 0.1 ships
+        // `ps5-backpork.elf`, so the hint matches only the payload.
+        id: "backpork",
+        display_name: "BackPork (backport helper)",
+        role: "Mount replacement system libraries into a game at launch",
+        description: "Runs in the background and watches for game launches. When a title starts, it looks for a `fakelib` folder inside that game's install directory and union-mounts it over the sandbox's `common/lib`, so the game loads newer system libraries without altering the originals. This is the runtime half of backporting a game to older firmware — use it together with the SDK Version Changer, which lowers the SDK version recorded in `eboot.bin` and every `prx`/`sprx`. A title needs both: downgraded ELFs so the system agrees to launch it, and compatible libraries so it does not crash on missing imports. The libraries themselves usually need patching to drop imports your firmware lacks; upstream ships BPS patch sets for 6.xx and 7.xx.",
+        repo_host: "github.com",
+        repo_owner: "BestPig",
+        repo_name: "BackPork",
+        asset_name_hint: "ps5-backpork.elf",
+        on_console_marker_path: None,
+        process_name_hint: Some("ps5-backpork.elf"),
+        ports: &[],
+        autoload_priority: 6,
+        autoload_delay_ms: 300,
+        homepage: "https://github.com/BestPig/BackPork",
+    },
+    CatalogueEntry {
         // StonedModder/Ghostpad — creates a virtual PS5 controller and
         // redirects input to it. GitHub-hosted; releases ship `ghostpad.elf`
         // (the on-console payload) alongside a Windows companion `.exe`. The

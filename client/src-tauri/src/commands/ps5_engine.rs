@@ -354,6 +354,43 @@ pub async fn transfer_zip(req: TransferZipReq) -> Result<JsonValue, String> {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct BpsInspectReq {
+    pub patch_path: String,
+}
+
+/// Read a `.bps` patch header without applying it, so the UI can show
+/// what the patch expects before anything is written.
+#[tauri::command]
+pub async fn bps_inspect(req: BpsInspectReq) -> Result<JsonValue, String> {
+    let base = engine::url();
+    let url = format!("{base}/api/bps/inspect");
+    let body = serde_json::json!({ "patch_path": req.patch_path });
+    post_json(&url, &body).await
+}
+
+#[derive(Debug, Deserialize)]
+pub struct BpsApplyReq {
+    pub source_path: String,
+    pub patch_path: String,
+    pub dest_path: String,
+}
+
+/// Apply a `.bps` patch to a library on this machine. Long client: the
+/// libraries run to hundreds of KB and the whole file is read, patched
+/// and written back out.
+#[tauri::command]
+pub async fn bps_apply(req: BpsApplyReq) -> Result<JsonValue, String> {
+    let base = engine::url();
+    let url = format!("{base}/api/bps/apply");
+    let body = serde_json::json!({
+        "source_path": req.source_path,
+        "patch_path": req.patch_path,
+        "dest_path": req.dest_path,
+    });
+    post_json_long(&url, &body).await
+}
+
+#[derive(Debug, Deserialize)]
 pub struct ZipInspectReq {
     pub zip_path: String,
 }
@@ -1313,6 +1350,41 @@ pub struct SmbDownloadReq {
     pub share: String,
     pub path: String,
     pub dest_path: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SmbTransferReq {
+    pub server: String,
+    pub user: String,
+    #[serde(default)]
+    pub password: String,
+    pub share: String,
+    #[serde(default)]
+    pub path: String,
+    pub dest_root: String,
+    #[serde(default)]
+    pub addr: Option<String>,
+    #[serde(default)]
+    pub bandwidth_cap_mbps: Option<f64>,
+}
+
+/// Stage an SMB file or folder on the host, then FTX2 it to the PS5.
+/// Returns `{ job_id }` — poll `job_status` like any other transfer.
+#[tauri::command]
+pub async fn smb_transfer(req: SmbTransferReq) -> Result<JsonValue, String> {
+    let base = engine::url();
+    let url = format!("{base}/api/smb/transfer");
+    let body = serde_json::json!({
+        "server": req.server,
+        "user": req.user,
+        "password": req.password,
+        "share": req.share,
+        "path": req.path,
+        "dest_root": req.dest_root,
+        "addr": req.addr,
+        "bandwidth_cap_mbps": req.bandwidth_cap_mbps,
+    });
+    post_json(&url, &body).await
 }
 
 /// Download a file from an SMB share and save it to `dest_path` (an
