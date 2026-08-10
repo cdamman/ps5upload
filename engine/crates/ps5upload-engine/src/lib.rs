@@ -3182,6 +3182,288 @@ async fn ps5_readiness(
 }
 
 /// POST /api/transfer/file
+/// POST /api/smb/transfer — stage an SMB file or directory to a host
+/// temp dir (chunked stream, no full-file RAM buffer), then FTX2 it to
+/// the PS5. One job covers both phases; the staging tree is deleted
+/// when the job ends. Destination rule matches Upload: always
+/// `dest_root/<source_basename>`.
+#[derive(Deserialize)]
+struct SmbTransferReq {
+    server: String,
+    #[serde(default)]
+    user: String,
+    #[serde(default)]
+    password: String,
+    share: String,
+    #[serde(default)]
+    path: String,
+    /// Parent directory on the PS5 (e.g. `/data/homebrew`).
+    dest_root: String,
+    addr: Option<String>,
+    #[serde(default)]
+    bandwidth_cap_mbps: Option<f64>,
+}
+
+async fn smb_transfer_handler(
+    State(state): State<AppState>,
+    Json(req): Json<SmbTransferReq>,
+) -> impl IntoResponse {
+    if req.server.trim().is_empty() {
+        return json_err(StatusCode::BAD_REQUEST, "server is required").into_response();
+    }
+    if req.share.trim().is_empty() {
+        return json_err(StatusCode::BAD_REQUEST, "share is required").into_response();
+    }
+    if req.dest_root.trim().is_empty() {
+        return json_err(StatusCode::BAD_REQUEST, "dest_root is required").into_response();
+    }
+    // PS5 dest must stay under the usual writable roots.
+    let dest_root = req.dest_root.trim().to_string();
+    if !dest_root.starts_with('/') {
+        return json_err(
+            StatusCode::BAD_REQUEST,
+            "dest_root must be an absolute PS5 path",
+        )
+        .into_response();
+    }
+
+    let addr = req.addr.unwrap_or_else(|| state.default_ps5_addr.clone());
+    let job_id = Uuid::new_v4();
+    let started_at_ms = now_ms();
+    let stage_dir = std::env::temp_dir()
+        .join("ps5upload-smb-stage")
+        .join(job_id.to_string());
+
+    crate::log_info!(
+        "smb_transfer: job={job_id} server={} share={} path={} dest_root={dest_root} addr={addr}",
+        req.server,
+        req.share,
+        req.path
+    );
+
+    let progress = Arc::new(AtomicU64::new(0));
+    let progress_files = Arc::new(AtomicU64::new(0));
+    let progress_files_finalized = Arc::new(AtomicU64::new(0));
+    let progress_bytes_finalized = Arc::new(AtomicU64::new(0));
+    // total_bytes unknown until staging finishes — seed 0 so the UI shows activity.
+    let ctx = TickerContext {
+        started_at_ms,
+        total_bytes: 0,
+        skipped_files: 0,
+        skipped_bytes: 0,
+    };
+    set_job(
+        &state.jobs,
+        &state.events_tx,
+        job_id,
+        JobState::Running {
+            started_at_ms,
+            bytes_sent: 0,
+            total_bytes: 0,
+            files: vec![],
+            skipped_files: 0,
+            skipped_bytes: 0,
+            files_processing: 0,
+            files_finalized: 0,
+            files_finalizing_total: 0,
+            bytes_finalized: 0,
+        },
+    );
+
+    let jobs = Arc::clone(&state.jobs);
+    let events_tx = state.events_tx.clone();
+    let stop_ticker = spawn_progress_ticker(
+        Arc::clone(&jobs),
+        events_tx.clone(),
+        job_id,
+        ctx,
+        Arc::clone(&progress),
+        Arc::clone(&progress_files),
+        Arc::clone(&progress_files_finalized),
+        Arc::clone(&progress_bytes_finalized),
+    );
+    let cancel = register_transfer_cancel(job_id);
+    let bandwidth_cap = req.bandwidth_cap_mbps;
+    let source = smb::SmbSource {
+        server: req.server,
+        user: req.user,
+        password: req.password,
+        share: req.share,
+        path: req.path,
+    };
+
+    tokio::spawn(async move {
+        let _stop_guard = TickerStopGuard::new(stop_ticker);
+        let mut fail_guard =
+            JobFailOnDropGuard::new(Arc::clone(&jobs), events_tx.clone(), job_id, started_at_ms);
+
+        let staged = match smb::stage_smb_path(
+            &source,
+            &stage_dir,
+            Some(Arc::clone(&progress)),
+            Some(Arc::clone(&cancel)),
+        )
+        .await
+        {
+            Ok(s) => s,
+            Err(e) => {
+                smb::cleanup_stage(&stage_dir);
+                let completed_at_ms = now_ms();
+                set_job(
+                    &jobs,
+                    &events_tx,
+                    job_id,
+                    job_failed_from_err(started_at_ms, completed_at_ms, &e),
+                );
+                fail_guard.mark_succeeded();
+                return;
+            }
+        };
+
+        let dest = smb::resolve_ps5_dest(&dest_root, &staged.basename);
+        let local_path = staged.local_path.clone();
+        let is_dir = staged.is_dir;
+        let total_bytes = staged.total_bytes;
+        let file_count = staged.file_count;
+        let basename = staged.basename.clone();
+
+        // Refresh Running with real totals after stage so the progress bar has a denominator.
+        set_job(
+            &jobs,
+            &events_tx,
+            job_id,
+            JobState::Running {
+                started_at_ms,
+                bytes_sent: progress.load(Ordering::Relaxed),
+                total_bytes,
+                files: vec![PlannedFile {
+                    rel_path: basename.clone(),
+                    size: total_bytes,
+                }],
+                skipped_files: 0,
+                skipped_bytes: 0,
+                files_processing: 0,
+                files_finalized: 0,
+                files_finalizing_total: 0,
+                bytes_finalized: 0,
+            },
+        );
+        // Reset progress for the FTX2 phase so the bar reflects wire bytes.
+        progress.store(0, Ordering::Relaxed);
+
+        let tx_id = match parse_or_random_tx_id(None) {
+            Ok(id) => id,
+            Err(e) => {
+                smb::cleanup_stage(&stage_dir);
+                let completed_at_ms = now_ms();
+                set_job(
+                    &jobs,
+                    &events_tx,
+                    job_id,
+                    job_failed_from_err(started_at_ms, completed_at_ms, &e),
+                );
+                fail_guard.mark_succeeded();
+                return;
+            }
+        };
+
+        let cancel_xfer = Arc::clone(&cancel);
+        let progress_xfer = Arc::clone(&progress);
+        let progress_files_xfer = Arc::clone(&progress_files);
+        let progress_ff = Arc::clone(&progress_files_finalized);
+        let progress_bf = Arc::clone(&progress_bytes_finalized);
+        let addr_xfer = addr.clone();
+        let dest_xfer = dest.clone();
+
+        let result = tokio::task::spawn_blocking(move || {
+            let mut cfg = make_transfer_config(&addr_xfer);
+            apply_per_request_bandwidth(&mut cfg, bandwidth_cap);
+            cfg.cancel = Some(cancel_xfer);
+            cfg.progress_bytes = Some(progress_xfer);
+            cfg.progress_files = Some(progress_files_xfer);
+            cfg.progress_files_finalized = Some(progress_ff);
+            cfg.progress_bytes_finalized = Some(progress_bf);
+            if is_dir {
+                transfer_dir_resumable(
+                    &cfg,
+                    tx_id,
+                    &dest_xfer,
+                    &local_path,
+                    DEFAULT_RESUME_RETRIES,
+                    0,
+                )
+            } else {
+                transfer_file_path_resumable(
+                    &cfg,
+                    tx_id,
+                    &dest_xfer,
+                    &local_path,
+                    DEFAULT_RESUME_RETRIES,
+                    0,
+                )
+            }
+        })
+        .await;
+
+        smb::cleanup_stage(&stage_dir);
+
+        match result {
+            Ok(Ok(r)) => {
+                let completed_at_ms = now_ms();
+                set_job(
+                    &jobs,
+                    &events_tx,
+                    job_id,
+                    JobState::Done {
+                        started_at_ms,
+                        completed_at_ms,
+                        elapsed_ms: completed_at_ms.saturating_sub(started_at_ms),
+                        tx_id_hex: r.tx_id_hex,
+                        shards_sent: r.shards_sent,
+                        bytes_sent: r.bytes_sent,
+                        dest: r.dest,
+                        files_sent: file_count.max(1),
+                        skipped_files: 0,
+                        skipped_bytes: 0,
+                        commit_ack: serde_json::from_str(&r.commit_ack_body).ok(),
+                    },
+                );
+            }
+            Ok(Err(e)) => {
+                let completed_at_ms = now_ms();
+                set_job(
+                    &jobs,
+                    &events_tx,
+                    job_id,
+                    job_failed_from_err(started_at_ms, completed_at_ms, &e),
+                );
+            }
+            Err(e) => {
+                let completed_at_ms = now_ms();
+                set_job(
+                    &jobs,
+                    &events_tx,
+                    job_id,
+                    job_failed_from_err(
+                        started_at_ms,
+                        completed_at_ms,
+                        &anyhow::anyhow!("transfer task join: {e}"),
+                    ),
+                );
+            }
+        }
+        fail_guard.mark_succeeded();
+    });
+
+    (
+        StatusCode::ACCEPTED,
+        Json(JobCreated {
+            job_id: job_id.to_string(),
+        }),
+    )
+        .into_response()
+}
+
 async fn transfer_file_handler(
     State(state): State<AppState>,
     Json(req): Json<TransferFileReq>,
@@ -7157,6 +7439,7 @@ async fn run(cfg: EngineConfig) -> anyhow::Result<()> {
         .route("/api/smb/list-shares", post(smb::smb_list_shares))
         .route("/api/smb/list-dir", post(smb::smb_list_dir))
         .route("/api/smb/download", post(smb::smb_download_file))
+        .route("/api/smb/transfer", post(smb_transfer_handler))
         .route("/api/ps5/saves/list", get(ps5_saves_list))
         .route("/api/ps5/screenshots/list", get(ps5_screenshots_list))
         .route("/api/ps5/videos/list", get(ps5_videos_list))

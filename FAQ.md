@@ -69,6 +69,10 @@ protocol (FTX2) over your LAN.
   files to the PS5's loader port (typical defaults: `.elf` → 9021,
   `.js` → 50000, `.lua` → 9026, `.jar` → 9025 for BD-JB / BDJ), with
   a replay-from-history panel.
+- **SMB / NAS** — browse a share and upload a file or folder to the
+  PS5 in one step.
+- **FTP server** — optional on-console FTP for external clients
+  (port 2122 by default).
 
 **Q: What does it NOT do?**
 Install **system pkgs** (NPXS-prefix — Store updates, Settings app
@@ -1237,6 +1241,44 @@ maintainer asks for the raw values in a private channel.
 than a few days are dropped and the folder is size-limited — so they
 can't grow without bound. Use **Open logs folder** on the Bug report or
 Logs page to find them.
+
+---
+
+## FTP, SMB, metadata, and backport helpers
+
+**Q: What is the FTP Server screen for?**
+It starts a small **FTP server on the PS5** (like `ftpsrv.elf`), so
+FileZilla, curl, or another PC can connect **to the console**. Default
+port is **2122** so it does not fight with ftpsrv on **2121**. Use this
+for interop with other tools — for bulk game uploads, prefer the
+Upload tab (FTX2 is faster and resumes).
+
+**Q: What is the SMB Browser for?**
+It browses a **Windows share or Samba NAS from your computer** (not
+on the PS5). You can download a file to this PC, or **upload a file
+or whole folder straight to the PS5** in one step: the engine streams
+from the share into a temp folder, then FTX2 transfers it. Destination
+works like Upload — set a parent path such as `/data/homebrew` and the
+source name is appended.
+
+**Q: What is Game Metadata (was “TMDB”)?**
+Not The Movie Database. It looks up a title ID’s display name. Names
+come from the console’s app database when the title is installed;
+the old PlayStation Store scrape no longer works. Most users never
+need this screen — Library already shows titles.
+
+**Q: SDK Changer vs Fakelib / BackPork — is that “backport”?**
+Related halves of a workflow, not one magic button:
+
+1. **SDK Changer** — rewrites a folder dump’s declared firmware/SDK
+   when the files are **not** signed SELFs.
+2. **Fakelib** — put newer system libraries in `game/fakelib/`,
+   optionally apply a **BPS** patch first.
+3. **Runtime** — **BackPork** *or* **ShadowMount+** mounts that
+   `fakelib` when the game launches (don’t run both).
+
+We help prepare and ship files; we do **not** guarantee every high-FW
+title will boot on an older console.
 
 ---
 

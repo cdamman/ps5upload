@@ -18,6 +18,7 @@ import {
   appsInstalled,
   fsListDir,
   startTransferFile,
+  waitForJob,
   bpsInspect,
   bpsApply,
   type InstalledTitle,
@@ -115,8 +116,16 @@ export default function FakelibScreen() {
         upload = res.dest;
       }
 
+      // startTransferFile only enqueues the job — without waitForJob the
+      // UI claimed "Added" and re-listed the folder while the transfer
+      // was still in flight (or already failed).
       setStatus(tr("fakelib_uploading", undefined, "Uploading…"));
-      await startTransferFile(upload, `${selected.source}/fakelib/${name}`, addr);
+      const jobId = await startTransferFile(
+        upload,
+        `${selected.source}/fakelib/${name}`,
+        addr,
+      );
+      await waitForJob(jobId);
       setStatus(tr("fakelib_added", undefined, `Added ${name}`));
       await loadContents(selected);
     } catch (e) {

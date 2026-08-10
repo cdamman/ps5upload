@@ -239,6 +239,7 @@ pub fn run() {
             commands::smb_list_shares,
             commands::smb_list_dir,
             commands::smb_download_file,
+            commands::smb_transfer,
             commands::profile_avatar_preview,
             commands::profile_avatar_current,
             commands::profile_apply_avatar,

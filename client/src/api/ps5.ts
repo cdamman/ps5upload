@@ -229,9 +229,13 @@ export async function profileActivate(
   id?: number | null,
   addr?: string,
 ): Promise<{ ok: boolean; id: string }> {
-  return invoke("profile_activate", {
-    req: { addr: addr ?? null, slot, id: id ?? null },
-  });
+  const resp = await invoke<{ ok: boolean; id: string; error?: string | null }>(
+    "profile_activate",
+    {
+      req: { addr: addr ?? null, slot, id: id ?? null },
+    },
+  );
+  return assertOk(resp, "Activate profile");
 }
 
 /** De-activate (clear id+flags) an offline-account slot. */
@@ -260,9 +264,14 @@ export async function userDelete(
   wipeSaves: boolean,
   addr?: string,
 ): Promise<{ ok: boolean; uid: number }> {
-  return invoke("user_delete", {
+  const resp = await invoke<{
+    ok: boolean;
+    uid: number;
+    error?: string | null;
+  }>("user_delete", {
     req: { addr: addr ?? null, uid, wipe_saves: wipeSaves },
   });
+  return assertOk(resp, "Delete user");
 }
 
 // ─── Backup & restore ───────────────────────────────────────────────────
@@ -332,9 +341,15 @@ export async function backupDelete(
   timestamp: number,
   addr?: string,
 ): Promise<{ ok: boolean; tag: string; timestamp: number }> {
-  return invoke("backup_delete", {
+  const resp = await invoke<{
+    ok: boolean;
+    tag: string;
+    timestamp: number;
+    error?: string | null;
+  }>("backup_delete", {
     req: { addr: addr ?? null, tag, timestamp },
   });
+  return assertOk(resp, "Delete backup");
 }
 
 /** Render a 440² crop/fit preview of `imagePath`. Returns a PNG data URL. */
@@ -4400,4 +4415,30 @@ export async function smbDownloadFile(
       password: password ?? "",
     },
   });
+}
+
+/** Stage an SMB path on the host and FTX2 it to the PS5. Returns a job
+ *  id — poll with `waitForJob` / `jobStatus`. Lands at
+ *  `destRoot/<basename(path)>` on the console. */
+export async function smbTransferToPs5(
+  server: string,
+  user: string,
+  share: string,
+  path: string,
+  destRoot: string,
+  addr?: string,
+  password?: string,
+): Promise<string> {
+  const res = await invoke<{ job_id: string }>("smb_transfer", {
+    req: {
+      server,
+      user,
+      share,
+      path,
+      dest_root: destRoot,
+      addr: addr ?? null,
+      password: password ?? "",
+    },
+  });
+  return res.job_id;
 }

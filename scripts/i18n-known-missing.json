@@ -35,7 +35,15 @@
       "sdk_explain_what",
       "sdk_target_fw",
       "sidebar_collapse",
-      "sidebar_expand"
+      "sidebar_expand",
+      "smb_dest_root",
+      "smb_dest_root_hint",
+      "smb_need_dest",
+      "smb_need_payload",
+      "smb_upload_done",
+      "smb_upload_folder_ps5",
+      "smb_upload_ps5",
+      "smb_uploading"
     ],
     "stale": [],
     "untranslated": [
@@ -81,7 +89,15 @@
       "sdk_explain_what",
       "sdk_target_fw",
       "sidebar_collapse",
-      "sidebar_expand"
+      "sidebar_expand",
+      "smb_dest_root",
+      "smb_dest_root_hint",
+      "smb_need_dest",
+      "smb_need_payload",
+      "smb_upload_done",
+      "smb_upload_folder_ps5",
+      "smb_upload_ps5",
+      "smb_uploading"
     ],
     "stale": [],
     "untranslated": [
@@ -128,7 +144,15 @@
       "sdk_explain_what",
       "sdk_target_fw",
       "sidebar_collapse",
-      "sidebar_expand"
+      "sidebar_expand",
+      "smb_dest_root",
+      "smb_dest_root_hint",
+      "smb_need_dest",
+      "smb_need_payload",
+      "smb_upload_done",
+      "smb_upload_folder_ps5",
+      "smb_upload_ps5",
+      "smb_uploading"
     ],
     "stale": [],
     "untranslated": [
@@ -180,7 +204,15 @@
       "sdk_explain_what",
       "sdk_target_fw",
       "sidebar_collapse",
-      "sidebar_expand"
+      "sidebar_expand",
+      "smb_dest_root",
+      "smb_dest_root_hint",
+      "smb_need_dest",
+      "smb_need_payload",
+      "smb_upload_done",
+      "smb_upload_folder_ps5",
+      "smb_upload_ps5",
+      "smb_uploading"
     ],
     "stale": [],
     "untranslated": [
@@ -230,7 +262,15 @@
       "sdk_explain_what",
       "sdk_target_fw",
       "sidebar_collapse",
-      "sidebar_expand"
+      "sidebar_expand",
+      "smb_dest_root",
+      "smb_dest_root_hint",
+      "smb_need_dest",
+      "smb_need_payload",
+      "smb_upload_done",
+      "smb_upload_folder_ps5",
+      "smb_upload_ps5",
+      "smb_uploading"
     ],
     "stale": [],
     "untranslated": [
@@ -280,7 +320,15 @@
       "sdk_explain_what",
       "sdk_target_fw",
       "sidebar_collapse",
-      "sidebar_expand"
+      "sidebar_expand",
+      "smb_dest_root",
+      "smb_dest_root_hint",
+      "smb_need_dest",
+      "smb_need_payload",
+      "smb_upload_done",
+      "smb_upload_folder_ps5",
+      "smb_upload_ps5",
+      "smb_uploading"
     ],
     "stale": [],
     "untranslated": [
@@ -327,7 +375,15 @@
       "sdk_explain_what",
       "sdk_target_fw",
       "sidebar_collapse",
-      "sidebar_expand"
+      "sidebar_expand",
+      "smb_dest_root",
+      "smb_dest_root_hint",
+      "smb_need_dest",
+      "smb_need_payload",
+      "smb_upload_done",
+      "smb_upload_folder_ps5",
+      "smb_upload_ps5",
+      "smb_uploading"
     ],
     "stale": [],
     "untranslated": [
@@ -379,7 +435,15 @@
       "sdk_explain_what",
       "sdk_target_fw",
       "sidebar_collapse",
-      "sidebar_expand"
+      "sidebar_expand",
+      "smb_dest_root",
+      "smb_dest_root_hint",
+      "smb_need_dest",
+      "smb_need_payload",
+      "smb_upload_done",
+      "smb_upload_folder_ps5",
+      "smb_upload_ps5",
+      "smb_uploading"
     ],
     "stale": [],
     "untranslated": [
@@ -431,7 +495,15 @@
       "sdk_explain_what",
       "sdk_target_fw",
       "sidebar_collapse",
-      "sidebar_expand"
+      "sidebar_expand",
+      "smb_dest_root",
+      "smb_dest_root_hint",
+      "smb_need_dest",
+      "smb_need_payload",
+      "smb_upload_done",
+      "smb_upload_folder_ps5",
+      "smb_upload_ps5",
+      "smb_uploading"
     ],
     "stale": [],
     "untranslated": [
@@ -480,7 +552,15 @@
       "sdk_explain_what",
       "sdk_target_fw",
       "sidebar_collapse",
-      "sidebar_expand"
+      "sidebar_expand",
+      "smb_dest_root",
+      "smb_dest_root_hint",
+      "smb_need_dest",
+      "smb_need_payload",
+      "smb_upload_done",
+      "smb_upload_folder_ps5",
+      "smb_upload_ps5",
+      "smb_uploading"
     ],
     "stale": [],
     "untranslated": [
@@ -527,7 +607,15 @@
       "sdk_explain_what",
       "sdk_target_fw",
       "sidebar_collapse",
-      "sidebar_expand"
+      "sidebar_expand",
+      "smb_dest_root",
+      "smb_dest_root_hint",
+      "smb_need_dest",
+      "smb_need_payload",
+      "smb_upload_done",
+      "smb_upload_folder_ps5",
+      "smb_upload_ps5",
+      "smb_uploading"
     ],
     "stale": [],
     "untranslated": [
@@ -575,7 +663,15 @@
       "sdk_explain_what",
       "sdk_target_fw",
       "sidebar_collapse",
-      "sidebar_expand"
+      "sidebar_expand",
+      "smb_dest_root",
+      "smb_dest_root_hint",
+      "smb_need_dest",
+      "smb_need_payload",
+      "smb_upload_done",
+      "smb_upload_folder_ps5",
+      "smb_upload_ps5",
+      "smb_uploading"
     ],
     "stale": [],
     "untranslated": [
@@ -627,7 +723,15 @@
       "sdk_explain_what",
       "sdk_target_fw",
       "sidebar_collapse",
-      "sidebar_expand"
+      "sidebar_expand",
+      "smb_dest_root",
+      "smb_dest_root_hint",
+      "smb_need_dest",
+      "smb_need_payload",
+      "smb_upload_done",
+      "smb_upload_folder_ps5",
+      "smb_upload_ps5",
+      "smb_uploading"
     ],
     "stale": [],
     "untranslated": [
@@ -676,7 +780,15 @@
       "sdk_explain_what",
       "sdk_target_fw",
       "sidebar_collapse",
-      "sidebar_expand"
+      "sidebar_expand",
+      "smb_dest_root",
+      "smb_dest_root_hint",
+      "smb_need_dest",
+      "smb_need_payload",
+      "smb_upload_done",
+      "smb_upload_folder_ps5",
+      "smb_upload_ps5",
+      "smb_uploading"
     ],
     "stale": [],
     "untranslated": [
@@ -725,7 +837,15 @@
       "sdk_explain_what",
       "sdk_target_fw",
       "sidebar_collapse",
-      "sidebar_expand"
+      "sidebar_expand",
+      "smb_dest_root",
+      "smb_dest_root_hint",
+      "smb_need_dest",
+      "smb_need_payload",
+      "smb_upload_done",
+      "smb_upload_folder_ps5",
+      "smb_upload_ps5",
+      "smb_uploading"
     ],
     "stale": [],
     "untranslated": [
@@ -773,7 +893,15 @@
       "sdk_explain_what",
       "sdk_target_fw",
       "sidebar_collapse",
-      "sidebar_expand"
+      "sidebar_expand",
+      "smb_dest_root",
+      "smb_dest_root_hint",
+      "smb_need_dest",
+      "smb_need_payload",
+      "smb_upload_done",
+      "smb_upload_folder_ps5",
+      "smb_upload_ps5",
+      "smb_uploading"
     ],
     "stale": [],
     "untranslated": [
@@ -822,7 +950,15 @@
       "sdk_explain_what",
       "sdk_target_fw",
       "sidebar_collapse",
-      "sidebar_expand"
+      "sidebar_expand",
+      "smb_dest_root",
+      "smb_dest_root_hint",
+      "smb_need_dest",
+      "smb_need_payload",
+      "smb_upload_done",
+      "smb_upload_folder_ps5",
+      "smb_upload_ps5",
+      "smb_uploading"
     ],
     "stale": [],
     "untranslated": [
@@ -869,7 +1005,15 @@
       "sdk_explain_what",
       "sdk_target_fw",
       "sidebar_collapse",
-      "sidebar_expand"
+      "sidebar_expand",
+      "smb_dest_root",
+      "smb_dest_root_hint",
+      "smb_need_dest",
+      "smb_need_payload",
+      "smb_upload_done",
+      "smb_upload_folder_ps5",
+      "smb_upload_ps5",
+      "smb_uploading"
     ],
     "stale": [],
     "untranslated": [

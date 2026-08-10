@@ -1352,6 +1352,41 @@ pub struct SmbDownloadReq {
     pub dest_path: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct SmbTransferReq {
+    pub server: String,
+    pub user: String,
+    #[serde(default)]
+    pub password: String,
+    pub share: String,
+    #[serde(default)]
+    pub path: String,
+    pub dest_root: String,
+    #[serde(default)]
+    pub addr: Option<String>,
+    #[serde(default)]
+    pub bandwidth_cap_mbps: Option<f64>,
+}
+
+/// Stage an SMB file or folder on the host, then FTX2 it to the PS5.
+/// Returns `{ job_id }` — poll `job_status` like any other transfer.
+#[tauri::command]
+pub async fn smb_transfer(req: SmbTransferReq) -> Result<JsonValue, String> {
+    let base = engine::url();
+    let url = format!("{base}/api/smb/transfer");
+    let body = serde_json::json!({
+        "server": req.server,
+        "user": req.user,
+        "password": req.password,
+        "share": req.share,
+        "path": req.path,
+        "dest_root": req.dest_root,
+        "addr": req.addr,
+        "bandwidth_cap_mbps": req.bandwidth_cap_mbps,
+    });
+    post_json(&url, &body).await
+}
+
 /// Download a file from an SMB share and save it to `dest_path` (an
 /// absolute path the user picked via the save dialog). The engine
 /// returns raw binary (`application/octet-stream`), so we can't use

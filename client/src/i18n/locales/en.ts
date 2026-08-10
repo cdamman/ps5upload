@@ -2483,7 +2483,8 @@ shortcuts_activate: "Open / activate",
 
   // SmbBrowser extras
   smb_title: "SMB Browser",
-  smb_subtitle: "Browse and download from SMB2/3 shares (Windows, Samba, NAS)",
+  smb_subtitle:
+    "Browse a NAS or Windows share, download to this computer, or upload straight to the PS5",
   smb_server: "Server",
   smb_user: "Username",
   smb_user_placeholder: "guest",
@@ -2495,7 +2496,15 @@ shortcuts_activate: "Open / activate",
   smb_no_shares_desc: "The server has no accessible shares",
   smb_empty: "Empty directory",
   smb_empty_desc: "This folder contains no files",
-  smb_download: "Download",
+  smb_download: "Download to this computer",
+  smb_upload_ps5: "Upload to PS5",
+  smb_upload_folder_ps5: "Upload folder to PS5",
+  smb_dest_root: "PS5 destination folder",
+  smb_dest_root_hint: "Source name is appended (same as Upload)",
+  smb_uploading: "Staging from SMB and uploading…",
+  smb_upload_done: "Uploaded to {dest}",
+  smb_need_payload: "Connect a PS5 with the payload loaded first",
+  smb_need_dest: "Enter a PS5 destination folder",
 
   // FwSpoof extras
   fw_spoof_title: "Firmware Spoof Detection",
