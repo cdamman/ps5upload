@@ -217,7 +217,9 @@ export const NAV_ITEMS: NavItem[] = [
   {
     to: "/tmdb",
     key: "tmdb_title",
-    fallback: "TMDB",
+    // "TMDB" reads as The Movie Database; it is actually Title MetaData,
+    // and it now sources from the console rather than the PS Store.
+    fallback: "Game Metadata",
     icon: Database,
   },
   {

@@ -35,8 +35,8 @@ export default function TmdbScreen() {
       setResult(resp);
       if (!resp.ok) {
         const msgs: Record<string, string> = {
-          not_found: tr("tmdb_not_found", undefined, "Title not found on PlayStation Store."),
-          not_cached: tr("tmdb_not_cached", undefined, "No cached metadata on PS5."),
+          not_found: tr("tmdb_not_found", undefined, "No metadata found for that title on this console."),
+          not_cached: tr("tmdb_not_cached", undefined, "Not cached yet — fetching from the console."),
           invalid_title_id: tr("tmdb_invalid_id", undefined, "Invalid format. Expected CUSA00001_00 or full content ID (UP9000-CUSA00001_00-LABEL)"),
         };
         setError(msgs[resp.error ?? ""] ?? humanizePs5Error(resp.error ?? "Unknown error"));
@@ -53,11 +53,11 @@ export default function TmdbScreen() {
       <ConnectionGate>
         <PageHeader
           icon={Database}
-          title={tr("tmdb_title", undefined, "TMDB Metadata")}
+          title={tr("tmdb_title", undefined, "Game Metadata")}
           description={tr(
             "tmdb_subtitle",
             undefined,
-            "Fetch PlayStation Store title metadata from the PS5 cache",
+            "Look up a game's name and details, cached on the console",
           )}
         />
 

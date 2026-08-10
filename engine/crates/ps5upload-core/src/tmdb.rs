@@ -412,6 +412,42 @@ pub fn tmdb_fetch(
         }
     }
 
+    // The store no longer answers, so fall back to what the console
+    // already knows.
+    //
+    // The PS Store's product pages render client-side: the
+    // `application/ld+json` block the scrape above reads is served as an
+    // empty skeleton (`"name": ""`), and the backend GraphQL API needs a
+    // whitelisted query hash that rotates with every store deploy. The
+    // console's own app.db carries the title name regardless, needs no
+    // network, and cannot rot.
+    // Note this reads app.db through the activity query, not
+    // diagnostics::appdb_query — the latter still uses the older
+    // whole-file heuristic and returns metadata blobs rather than title
+    // names.
+    let short = &title_id[..title_id.len().min(9)];
+    if let Ok(list) = crate::activity::activity_db_query(addr, "recently_played") {
+        if let Some(row) = list
+            .rows
+            .iter()
+            .find(|r| r.title_id.starts_with(short) && r.name.is_some())
+        {
+            let result = TmdbFetchResponse {
+                ok: true,
+                title_id: title_id.clone(),
+                np_title_id: Some(row.title_id.clone()),
+                name: row.name.clone(),
+                // Named so the UI can say where this came from rather
+                // than implying store data it does not have.
+                category: Some("console".to_string()),
+                ..Default::default()
+            };
+            let json = serde_json::to_string(&result).unwrap_or_default();
+            let _ = tmdb_store_on_payload(addr, &title_id, &json).ok();
+            return Ok(result);
+        }
+    }
+
     Ok(TmdbFetchResponse {
         ok: false,
         title_id,
