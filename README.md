@@ -63,14 +63,14 @@
   Android shade) when a transfer finishes or fails in the background,
   and the PS5 itself shows a toast when an upload starts and completes.
   Your machine is kept awake automatically while a transfer runs.
-- **Hardware view** — model, serial, uptime, storage, RAM, and the PS5
-  date/time, refreshed live; plus a fan-threshold control that rings
-  through to `/dev/icc_fan` for quieter operation. Live CPU/SoC
-  temperature, clock, and power are read **on demand** (a button), not
-  auto-polled — each read briefly pauses the system UI, so polling them
-  could destabilize the console. They're also unreliable on current
-  firmware (libkernel exports drift between FW points), so a reading may
-  show `—`; everything else on the panel is stable.
+- **Hardware view** — model, serial, uptime, storage and RAM, refreshed
+  live; plus a fan-threshold control that rings through to
+  `/dev/icc_fan` for quieter operation. Temperatures (CPU, SoC, M.2) and
+  CPU frequency are read **on demand** (a button), not auto-polled — each
+  read briefly pauses the system UI, so polling them could destabilize the
+  console. Some readings on that panel are simply not available on retail
+  firmware and show `—`: SoC clock, SoC power, CPU usage, fan duty, and
+  the per-drive sensor list. Storage totals and temperatures do work.
 - **Send any payload** — push `.elf`, `.bin`, `.js`, `.lua`, or
   `.jar` files to the PS5's loader port (typical defaults: `.elf` →
   9021 elfldr, `.js` → 50000 WebKit-stage, `.lua` → 9026, `.jar` →
@@ -350,10 +350,12 @@ The process-list feature (Hardware tab's process snapshot) reads
 have been stable across every SDK-supported firmware — pid at
 byte 72, thread name at byte 447. No firmware-specific fallback
 table required; real command names appear across the full 1.00 –
-13.60 range. Transfer, mount, file browse, hardware monitor
-(except CPU/SoC temps, which Sony gates on a different credential
-check unrelated to firmware), and FS ops work identically across
-all supported firmwares.
+13.60 range. Transfer, mount, file browse, hardware monitor and FS
+ops work identically across all supported firmwares. The Hardware
+tab's blank readings (SoC clock, SoC power, CPU usage, fan duty,
+date/time) are values retail firmware doesn't expose at all, not a
+firmware-version difference — temperatures and CPU frequency read
+fine on 5.10 and 9.60 alike.
 
 **What actually gates users in practice is the ELF loader** on
 port 9021 — a third-party component, not part of ps5upload.
@@ -423,15 +425,17 @@ port 9021 — a third-party component, not part of ps5upload.
   expected for now. Other PS5-side tools see the mount via
   `/mnt/ps5upload/`, and the source path is recorded in our
   tracker so reconcile-on-next-boot keeps state consistent.
-* Live CPU/SoC temperature, clock, and SoC power are read **on demand**
-  (the Hardware tab's "Read sensors" button), not on a timer. Each read
-  briefly ptrace-pauses the system UI, and doing that on a loop could
-  destabilize the console — it powered some consoles off — so the auto-
-  refresh now covers only the ptrace-free data (info, uptime, storage,
-  date/time). These readings are also unreliable across firmware
-  revisions: libkernel exports them by NID-only on some FW points and the
-  call returns garbage or fails, so a persistent `—` usually means your
-  firmware's exports are NID-only, not that the payload is broken.
+* Sensors are read **on demand** (the Hardware tab's "Read sensors"
+  button), not on a timer. Each read briefly ptrace-pauses the system UI,
+  and doing that on a loop could destabilize the console — it powered
+  some consoles off — so the auto-refresh covers only the ptrace-free
+  data (info, uptime, storage).
+* Which readings actually work, measured on FW 9.60 and 5.10:
+  * **Work:** CPU / SoC / M.2 temperature, CPU frequency, storage totals.
+  * **Show `—`:** SoC clock, SoC power, CPU usage, fan duty, per-drive
+    sensors, and the console date/time. These aren't broken payload code
+    — retail firmware doesn't expose them to us. A persistent `—` there
+    is the expected result, not a fault to report.
 
 **Q: "No writable storage found"?**
 * The tool blocks writes to read-only system partitions. If you

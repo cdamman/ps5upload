@@ -1282,6 +1282,61 @@ title will boot on an older console.
 
 ---
 
+## Console tools
+
+**Q: What does the Game Activity Tracker actually track?**
+Any game you launch, however you launch it — with your controller, from
+the PS5 dashboard, or from this app. It works by watching the console's
+process list, so it has no idea *how* a game was started.
+
+Two things to know before you trust the numbers:
+
+* It only counts time **while the payload is loaded**. Reboot or rest
+  mode stops the payload, and play time during that window is never seen.
+* It polls every 30 seconds, so a very short session can be missed
+  entirely. Your history survives re-sending the payload.
+
+The **Recently Played** list is separate — it reads the console's own app
+database, so it shows titles regardless of whether the tracker was
+running. It is not Sony's play-time record; the console does not expose
+that to us.
+
+**Q: What is the Cheats screen?**
+It applies memory patches to a **running** game — the usual trainer
+model. A watcher polls every few seconds for a game process, applies
+always-on patches automatically, and re-applies the ones you toggled.
+Cheat files can be downloaded from community repositories from inside
+the screen.
+
+Two formats work (native JSON and SHN trainer XML). The encrypted **MC4**
+format is not supported. Cheats only affect the running game, change
+nothing on disk, and stop when the game does.
+
+**Q: What is the Remote Play screen?**
+It requests a Remote Play registration from the console, so you can pair
+a client without navigating the PS5's own menus. It shows the pending
+PIN and lets you cancel a request in flight. It does not stream anything
+itself — pairing only; you still use Sony's Remote Play app or Chiaki to
+connect.
+
+**Q: What is nanoDNS?**
+A small DNS server that runs **on the console** (from the Payloads
+catalogue, not built in). It blocks PSN and update domains by default and
+can redirect any domain to a machine on your LAN — useful for staying
+offline-friendly while jailbroken. This app's nanoDNS screen edits its
+config: it detects which version is running and preserves your existing
+rules, comments and custom resolvers rather than rewriting the file.
+
+Point the console's DNS at it once it's running.
+
+**Q: What is the Backup screen?**
+It snapshots console-side files to a tagged copy on the PS5 and restores
+them later. It is meant for the small, breakable things — app database
+state and configuration — before a bulk operation, not as a game backup.
+For save data specifically, use the Save data screen.
+
+---
+
 ## Advanced
 
 **Q: Can I run the engine standalone (without the desktop app)?**
