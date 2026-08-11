@@ -1,6 +1,13 @@
 # Design: .rar support (multi-part + password)
 
-Status: proposal (not yet implemented). Requested alongside the existing
+> **Status: historical.** This document is kept for the reasoning
+> behind decisions that have since shipped. It describes intent at the
+> time of writing, not current behaviour — check the code, `CHANGELOG.md`
+> or `FAQ.md` before relying on anything here.
+
+Status: **shipped** — `.rar` upload (multi-part + password) is in the
+product; the desktop build bundles UnRAR under a GPLv3 §7 linking
+exception. Originally written as a proposal alongside the existing
 `.zip` / `.7z` host-side streaming, referencing `bizkut/unrar-ps5`.
 
 ## Goal

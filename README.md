@@ -390,7 +390,7 @@ port 9021 — a third-party component, not part of ps5upload.
   exploited PS5 to the open Internet.
 
 **Q: How do I install / launch a game from the Library tab?**
-* The 2.2.26 Library row exposes **Mount** for `.exfat` / `.ffpkg` /
+* The Library row exposes **Mount** for `.exfat` / `.ffpkg` /
   `.ffpfs` images plus **Register** / **Register (patch DRM)** /
   **Launch** / **Unregister** buttons on the games inside.
 * **Mount** is hardware-validated on FW 9.60 — a 76 GiB UFS

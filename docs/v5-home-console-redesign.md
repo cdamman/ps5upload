@@ -1,5 +1,10 @@
 # ps5upload v5.0 — Home Tab & Console Tab (Revised Design)
 
+> **Status: historical.** This document is kept for the reasoning
+> behind decisions that have since shipped. It describes intent at the
+> time of writing, not current behaviour — check the code, `CHANGELOG.md`
+> or `FAQ.md` before relying on anything here.
+
 > **Scope.** This document revises §3.1 (Home), §3.4 (Console), §4-C
 > (Backup smart suggestions), §4-D (Thermal Dashboard), and Appendix B
 > rows for the 14 v4 screens that collapse into these two tabs. It is

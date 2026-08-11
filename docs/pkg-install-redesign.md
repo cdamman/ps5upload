@@ -1,6 +1,13 @@
 # Design: PKG install UX — answers + redesign
 
-Status: proposal (not yet implemented). Triggered by a user report on FW 12.00.
+> **Status: historical.** This document is kept for the reasoning
+> behind decisions that have since shipped. It describes intent at the
+> time of writing, not current behaviour — check the code, `CHANGELOG.md`
+> or `FAQ.md` before relying on anything here.
+
+Status: **shipped** — package install runs through the DPI daemon, with
+the package library, variant grouping and Stream fallback described here.
+Originally triggered by a user report on FW 12.00.
 
 ## The report
 

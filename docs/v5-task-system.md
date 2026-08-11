@@ -1,5 +1,10 @@
 # ps5upload v5.0 — Unified Task System (REVISED)
 
+> **Status: historical.** This document is kept for the reasoning
+> behind decisions that have since shipped. It describes intent at the
+> time of writing, not current behaviour — check the code, `CHANGELOG.md`
+> or `FAQ.md` before relying on anything here.
+
 > **Supersedes** §6 "Unified Task System" of `docs/v5-design.md`.
 >
 > Grounded in the actual systems it replaces:
