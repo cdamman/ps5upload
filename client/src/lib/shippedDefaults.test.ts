@@ -1,12 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { dirname, resolve } from "node:path";
 import { fwToSdkHex, PS5_FIRMWARES } from "./fwVersion";
 
-const here = dirname(fileURLToPath(import.meta.url));
-const screens = resolve(here, "../screens");
-const read = (p: string) => readFileSync(resolve(screens, p), "utf8");
+/**
+ * Screen sources, read through Vite rather than node:fs — the client
+ * tsconfig ships no node types, so a fs import typechecks in vitest but
+ * fails `tsc --noEmit`, which is the gate that matters.
+ */
+const sources = import.meta.glob("../screens/*/index.tsx", {
+  query: "?raw",
+  import: "default",
+  eager: true,
+}) as Record<string, string>;
+
+function read(rel: string): string {
+  const key = Object.keys(sources).find((k) => k.endsWith(`/${rel}`));
+  if (!key) throw new Error(`no source for ${rel}`);
+  return sources[key];
+}
 
 /**
  * Values a screen ships pre-filled must be valid before anyone touches
