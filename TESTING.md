@@ -1,228 +1,210 @@
-# Testing And Quality Strategy
+# Testing
 
-This repo has three validation layers:
+Four layers, cheapest first. Push a check down to the cheapest layer that
+can hold it — a host self-test runs in milliseconds and cannot wedge a
+console, which a hardware test very much can.
 
-1. Hardware-free checks that must pass for every change.
-2. Cross-platform compile checks that catch Windows/Linux/macOS drift.
-3. Live PS5 validation for payload, protocol, throughput, and storage behavior.
+| Layer | Command | Needs |
+|---|---|---|
+| 1. Host gate | `npm run validate` | nothing |
+| 2. Payload build + self-tests | `npm run validate:full` | `PS5_PAYLOAD_SDK` |
+| 3. Live console | `npm run validate:hardware` | a PS5 with the payload loaded |
+| 4. Fresh-install matrix | manual, per release | clean VMs |
 
-## Local Gates
-
-Use these from the repo root.
-
-```sh
-npm run validate
-# same gate through Make:
-make quality
-```
-
-Runs the normal non-hardware gate:
-
-- Version drift check against `VERSION`.
-- Script syntax checks for Node, Bash, Python, and PowerShell when `pwsh` is installed.
-- Script inventory audit.
-- `git diff --check`.
-- Engine Rust `fmt`, `clippy`, and full workspace tests.
-- Desktop/Tauri Rust `check`, `clippy`, and tests.
-- Client TypeScript typecheck, ESLint, Vitest, and Vite build.
+## Layer 1 — the host gate
 
 ```sh
-npm run validate:full
-# same gate through Make:
-make quality-full
+npm run validate      # or: make quality
 ```
 
-Adds payload validation through `make test-payload`. This requires `PS5_PAYLOAD_SDK`.
+Runs, and fails on any of: version drift against `VERSION`; script syntax
+(Node, Bash, Python, and PowerShell when `pwsh` is present); the script
+inventory audit; `git whitespace` (`git diff --check`); **engine fmt**,
+**engine clippy** (`-D warnings`) and **engine tests**; **desktop cargo
+check**, **desktop clippy** and **desktop tests**; **client typecheck**,
+**client lint**, **client tests** and **client vite build**; and **i18n
+coverage**.
+
+Two of these catch things the others structurally cannot, and both have
+caught real regressions:
+
+- **`engine fmt`** fails on formatting no test exercises. Run
+  `cargo fmt --all` in `engine/` before assuming a failure is real.
+- **`client typecheck`** covers test files too. Vitest does not typecheck,
+  so a test can pass while calling a function with the wrong argument
+  types.
+
+Running a narrower check and assuming the wider one follows is the most
+common way to burn a cycle here.
+
+## Layer 2 — payload build and self-tests
 
 ```sh
-npm run validate:hardware
-# same gate through Make:
-make quality-hardware
+export PS5_PAYLOAD_SDK=/opt/ps5-payload-sdk
+npm run validate:full          # or: make quality-full / make test-payload
 ```
 
-Runs the non-hardware gate and then `make validate`, which reloads the payload to the PS5, runs smoke tests, and runs the default sweep.
+Builds `payload/ps5upload.elf` and the DPI daemon, checks both are PS5
+ELFs with valid gzip resources, then runs every host self-test with
+`-Wall -Wextra -Werror`:
 
-## Coverage
+| Self-test | Pins |
+|---|---|
+| `hw_guard` | Recovering from a faulting Sony getter without losing the helper |
+| `ptrace_recovery` | Timeout recovery never resuming injected registers |
+| `timed_init` | Bounded one-time init never starting a second initializer |
+| `appdb_scan` | Reading `app.db` as real SQLite records, not printable runs |
+| `ftp_format` | PASV/EPSV/LIST reply shapes clients parse strictly |
+| `ftp_lifecycle` | Session registration, generations, stop-to-kill |
+| `sdk_param` | `param.json` rewrite, and reporting when nothing changed |
+| `elf_param` | Finding SDK fields via program headers, not stray magic bytes |
+| `sdk_changer_file` | Patching only tracked sources; durable backups |
+
+The SDK version is pinned in `scripts/ps5-sdk.env` (currently **v0.42**)
+and verified by checksum. Local installers and CI read the same file.
+
+**Adding payload logic?** If it can be separated from the console, put it
+header-only in `payload/include/` and give it a self-test here. That is
+the established convention and the reason the list above exists.
+
+## Layer 3 — live console
+
+Nothing here is tied to one network. Every entry point takes an address:
 
 ```sh
-npm run coverage
-# or:
-make coverage
+export PS5_HOST=192.168.1.50            # console IP (loader + payload)
+export PS5_ADDR=192.168.1.50:9113       # transfer port, for scripts/bench
+
+make send-payload PS5_HOST=$PS5_HOST
+npm run smoke:hardware                  # or: node tests/smoke-hardware.mjs
+npm run validate:hardware               # host gate + make validate
 ```
 
-Outputs:
+Keep your own addresses in a gitignored local file rather than editing
+committed defaults — those stay generic on purpose.
 
-- `client/coverage/index.html` for frontend Vitest coverage.
-- `coverage/engine/html/index.html` for Rust engine/core coverage.
-- `coverage/engine/lcov.info` for CI/reporting tools.
+| Command | Does |
+|---|---|
+| `make validate` | Build, send, wait for `:9113`, smoke, sweep, write `bench/reports/<ts>-sweep.{json,md}` |
+| `make validate-xl` | Adds the 200k-file stress profile |
+| `node tests/smoke-hardware.mjs --no-spawn-engine` | Against an engine already running |
 
-Split coverage targets are available when you only need one side:
-
-```sh
-make coverage-client
-make coverage-engine
-```
-
-Rust coverage uses `cargo-llvm-cov`. If missing:
-
-```sh
-npm run coverage -- --install-tools
-```
-
-or install manually:
-
-```sh
-cargo install cargo-llvm-cov --locked
-```
-
-## Mock And Unit Coverage
-
-Rust mock/integration coverage lives in `engine/crates/ps5upload-tests/tests/`:
-
-- `transfer_integration.rs` spins up a loopback FTX2 mock server and covers single-file, streaming file, directory, packed small-file shards, resume-after-drop, retry classification, digest mismatch, and exclude behavior.
-- `hw_integration.rs` covers hardware-command protocol handling against mocks.
-- `volumes_integration.rs` covers PS5 volume parsing and mock volume responses.
-
-Rust unit coverage lives directly beside modules in `ps5upload-core` and `ftx2-proto`:
-
-- Frame encoding/decoding.
-- Filesystem operation parsing and inventory/reconcile behavior.
-- Exclude rules.
-- Game metadata parsing.
-- Hardware telemetry parsing.
-- Payload-loader behavior.
-- Volume parsing.
-
-Frontend mock/unit tests live under `client/src/**/*.test.ts`:
-
-- Destination path resolution, including Windows separators.
-- Error-message humanization.
-- Firmware parsing.
-- Polling/retry timing.
-
-## Cross-Platform Support
-
-CI checks the engine/core crate for all shipped OS/arch targets:
-
-- `x86_64-unknown-linux-gnu`
-- `aarch64-unknown-linux-gnu`
-- `aarch64-apple-darwin`
-- `x86_64-apple-darwin`
-- `x86_64-pc-windows-msvc`
-- `aarch64-pc-windows-msvc`
-
-Release CI builds the actual desktop bundles for the same target matrix. Local macOS machines usually cannot compile Windows/Linux targets unless those Rust stdlibs and cross-linkers are installed, so CI is the source of truth for full target coverage.
-
-CI also runs desktop/Tauri Rust `cargo check`, `clippy`, and tests on native GitHub runners for:
-
-- Linux (`ubuntu-24.04`)
-- macOS (`macos-14`)
-- Windows (`windows-2022`)
-
-That native matrix exercises `#[cfg(target_os = "...")]` desktop code paths such as keep-awake, update/download path handling, launcher behavior, and sidecar extraction logic.
-
-## Live PS5 Validation
-
-Use live validation when touching any of these areas:
-
-- Payload C runtime.
-- FTX2 transfer framing.
-- Transfer/reconcile/resume behavior.
-- Storage, mount, cleanup, file browser, or volume commands.
-- Performance-sensitive transfer code.
-
-Commands:
-
-```sh
-make validate
-```
-
-Runs payload build/send, waits for runtime port `9113`, runs smoke, then runs the default sweep and writes `bench/reports/<timestamp>-sweep.{json,md}`.
-
-```sh
-make validate-xl
-```
-
-Adds the 200k-file stress profile.
-
-```sh
-node tests/smoke-hardware.mjs --no-spawn-engine
-```
-
-Use this when the engine is already running.
-
-```sh
-node bench/run-ftx2-upload.mjs \
-  --source=/path/to/file-or-dir \
-  --dest-root=/data/ps5upload/tests/manual \
-  --spawn-engine \
-  --no-write-result
-```
-
-Use this for targeted real-file validation. Clean test uploads with:
+Clean up test uploads afterwards:
 
 ```sh
 curl -X POST http://127.0.0.1:19113/api/ps5/cleanup \
   -H 'content-type: application/json' \
-  -d '{"addr":"192.168.137.2:9114","path":"/data/ps5upload/tests/manual"}'
+  -d '{"addr":"'"$PS5_HOST"':9114","path":"/data/ps5upload/tests/manual"}'
 ```
 
-## Script Hygiene
+**Use a live console when touching:** the payload C runtime, FTX2
+framing, transfer/reconcile/resume, storage, mount, cleanup, the file
+browser, volume commands, or anything performance-sensitive.
+
+### Hardware testing has teeth
+
+A payload bug can leave a console needing a **power cycle** — ports stay
+open but every connection resets, so payload takeover cannot recover it.
+That has happened, from a stack overflow in a file-transfer handler.
+Before testing a payload change:
+
+- Prefer a read-only probe first; confirm the payload still answers
+  `/api/ps5/status` between steps.
+- Some reads (temperatures, power telemetry) ptrace-pause the system UI.
+  They are safe on demand and unsafe on a loop.
+- Expect blanks that are not bugs: SoC clock, SoC power, CPU usage, fan
+  duty, per-drive sensors and the console date/time are not exposed by
+  retail firmware.
+
+## Layer 4 — fresh-install matrix, per release
+
+CI proves the binaries build. It does not prove they launch on a machine
+that has never been a dev box. Every artifact has a historical
+"ships green, fails on fresh install" failure:
+
+| Platform | Failure caught before | Guard now in tree |
+|---|---|---|
+| Windows x64 / arm64 | `VCRUNTIME140.dll not found` | `.cargo/config.toml` sets `+crt-static` |
+| Windows x64 / arm64 | Explorer "Extract All" rejects the zip | `publish.yml` packs via `pwsh Compress-Archive` |
+| Linux x64 / arm64 | AppImage needs FUSE | ships `PS5Upload.sh` with `APPIMAGE_EXTRACT_AND_RUN=1` |
+| Linux (any) | glibc too new | built on `ubuntu-24.04` (glibc 2.39) |
+| macOS x64 / arm64 | Gatekeeper on first run | documented; right-click → Open |
+
+Before tagging: unzip with the OS's own tool and launch on a clean
+Windows x64 VM, Windows arm64, Ubuntu 24.04, arm64 Linux, macOS arm64 and
+macOS x64. Sideload the APK on a real Android device.
+
+See `v2.5.1` and `v2.5.2` for the "noticed after release, patched same
+day" playbook.
+
+## Coverage reports
 
 ```sh
-npm run scripts:check
-npm run scripts:audit
+npm run coverage            # or: make coverage
+make coverage-client        # one side only
+make coverage-engine
 ```
 
-`scripts:check` is a syntax gate. `scripts:audit` lists tracked utility scripts and marks intentionally manual entry points. Do not remove a script just because it is not referenced by another script; lab/debug utilities can be intentionally manual. Remove only generated artifacts or scripts whose replacement path is documented.
+Outputs `client/coverage/index.html`, `coverage/engine/html/index.html`
+and `coverage/engine/lcov.info`. Rust coverage needs `cargo-llvm-cov`
+(`npm run coverage -- --install-tools`).
 
-## i18n Coverage
+## Cross-platform
+
+CI checks the core crate for every shipped target
+(`x86_64`/`aarch64` × linux-gnu, apple-darwin, pc-windows-msvc) and runs
+the desktop Rust suite natively on `ubuntu-24.04`, `macos-14` and
+`windows-2022` — that native matrix is what exercises the
+`#[cfg(target_os = ...)]` paths (keep-awake, update/download handling,
+launcher, sidecar extraction). A macOS dev box generally cannot build the
+Windows/Linux targets, so CI is the source of truth there.
+
+## Android
 
 ```sh
-npm run i18n:check          # gate — fails on any non-allowlisted miss
-npm run i18n:report         # same gate but always prints per-language summary
-npm run i18n:bootstrap      # rewrites allowlist to current state — use sparingly
+make android-deps      # verify SDK / JDK 17 / NDK / rustup target
+make android-build     # debug APK, no device needed
+make android-deploy    # build + install on connected devices
+make run-android       # run on a device with live reload
 ```
 
-The 18-language `client/src/i18n.ts` table is parity-checked against English on every `npm run validate`. Per-language allowlists live at `scripts/i18n-known-missing.json`; entries record both keys English has but the language doesn't (`missing`) and keys the language has but English doesn't (`stale`). When you add a new English key, the gate fails with the missing key listed — translate it and add it to the language's table, OR add it to the allowlist if the translation is genuinely deferred. Never run `i18n:bootstrap` casually — it papers over every current gap and silences whatever you were about to forget to translate.
+Android links the engine **in-process** rather than spawning a sidecar,
+so engine startup failures surface differently — check the in-app log.
+`.rar` is desktop-only (the UnRAR C dependency is excluded).
 
-## Recommended Change Workflow
+## Self-hosted engine
 
-1. Run focused tests while editing.
-2. Run `npm run validate` before committing.
-3. Run `npm run coverage` for changes that affect logic or tests.
-4. Run `make validate` for transfer/payload/storage changes when PS5 hardware is available.
-5. Let CI validate all shipped OS/arch targets and release packaging.
+```sh
+make docker-engine        # build the image
+make docker-engine-run    # run it; exposes :19113
+```
 
-## Fresh-Install Verification Matrix (Release Day)
+CI publishes the same image to GHCR on every release tag. The API is
+**unauthenticated and can read, write and delete files on the console** —
+LAN only, never the internet.
 
-CI proves the binaries build. It does NOT prove they launch on a vanilla
-system that hasn't been used as a dev box. Every release artifact has at
-least one historical "ships green, fails on fresh install" failure mode:
+## i18n
 
-| Platform / arch       | Failure mode caught in the past                                              | Fix in tree (don't regress)                                                              |
-| --------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| Windows x64 / arm64   | `VCRUNTIME140.dll not found` (no C++ Redist on fresh Win11, especially arm64) | `.cargo/config.toml` sets `+crt-static` for both MSVC targets — embeds the MSVC CRT      |
-| Windows x64 / arm64   | Windows Explorer "Extract All" → "compressed (zipped) folder is invalid"     | `publish.yml` packs the .zip via `pwsh Compress-Archive` (bit-3 free), not `tar -a`      |
-| Linux x64 / arm64     | AppImage hangs / "AppImage requires FUSE" on fresh Ubuntu 24.04+              | `publish.yml` ships `PS5Upload.sh` wrapper that sets `APPIMAGE_EXTRACT_AND_RUN=1`         |
-| Linux (any)           | glibc-too-new on older distros                                               | Build base is `ubuntu-24.04` (glibc 2.39) — users below 24.04 LTS are unsupported        |
-| macOS x64 / arm64     | Gatekeeper / "unidentified developer" on first run                           | Documented in README — right-click → Open. No code-signing planned.                      |
+```sh
+npm run i18n:check        # gate: fails on any non-allowlisted miss
+npm run i18n:report       # same, always prints the per-language summary
+```
 
-Before tagging a release, run this hands-on test pass (the only fully
-reliable proof; a green CI run is necessary but not sufficient):
+`client/src/i18n/locales/en.ts` is the source of truth. A new `tr()` key
+must exist there or the gate fails. Then either translate it into the 18
+locales or add it to `scripts/i18n-known-missing.json` as a deliberate,
+scoped deferral.
 
-1. **Windows x64** — fresh Win11 VM. Unzip with built-in **Extract All**.
-   Run `PS5Upload.exe`. App window must open.
-2. **Windows arm64** — same, on an arm64 VM (Surface Pro 9/X, Parallels
-   arm64, etc.).
-3. **Linux x64** — fresh Ubuntu 24.04 LTS desktop VM with no extra
-   packages. Double-click `PS5Upload.sh`. App window must open.
-4. **Linux arm64** — same, on a Raspberry Pi 5 / arm64 cloud VM.
-5. **macOS arm64** — fresh macOS Sonoma+ user account. Mount the .dmg,
-   drag to Applications, right-click → Open. App window must open.
-6. **macOS x64** — same, on an Intel Mac (real or virtualised).
+**Do not run `i18n:bootstrap`.** It rewrites the allowlist to the current
+state, silencing every gap at once — including whatever you were about to
+forget.
 
-If any of those fails: the release is broken and needs a follow-up patch
-— see `v2.5.1` (Windows zip bit-3) and `v2.5.2` (VCRUNTIME140 /
-Linux libfuse2) for the playbook of "noticed-after-release, patched
-same day."
+## Script hygiene
+
+```sh
+npm run scripts:check     # syntax
+npm run scripts:audit     # inventory
+```
+
+A lab or debug script with no caller is intentional, not dead code. Only
+remove generated artifacts, or scripts whose replacement is documented.
