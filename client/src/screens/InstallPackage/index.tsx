@@ -50,6 +50,8 @@ import {
   pkgEntryIdentity,
   loadPkgAlternativeSelections,
   recordPkgAlternativeSelection,
+  skipPkgAlternativeSelection,
+  PKG_ALTERNATIVE_SKIP,
   type PkgEntry,
   type PkgAlternativeSelections,
 } from "../../state/pkgLibrary";
@@ -311,33 +313,41 @@ function PkgRow({
       </div>
 
       {alternativeKey && onSelectAlternative && !busy && (
-        <label className="flex cursor-pointer items-center gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-1)] px-2.5 py-2 text-xs">
+        <label className="flex cursor-pointer items-start gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-1)] px-2.5 py-2 text-xs">
           <input
-            type="radio"
-            name={`pkg-variant-${alternativeKey}`}
+            type="checkbox"
             checked={!!selectedForInstallAll}
             onChange={onSelectAlternative}
             disabled={installDisabled}
-            className="accent-[var(--color-accent)]"
+            className="mt-0.5 accent-[var(--color-accent)]"
           />
-          <span
-            className={
-              selectedForInstallAll
-                ? "font-medium text-[var(--color-accent)]"
-                : "text-[var(--color-muted)]"
-            }
-          >
-            {selectedForInstallAll
-              ? tr(
-                  "pkglib.variant.selected",
-                  undefined,
-                  "Selected for Install all on this PS5",
-                )
-              : tr(
-                  "pkglib.variant.select",
-                  undefined,
-                  "Use this variant for Install all on this PS5",
-                )}
+          <span className="min-w-0 leading-snug">
+            <span
+              className={
+                selectedForInstallAll
+                  ? "font-medium text-[var(--color-accent)]"
+                  : "text-[var(--color-text)]"
+              }
+            >
+              {selectedForInstallAll
+                ? tr(
+                    "pkglib.variant.selected",
+                    undefined,
+                    "Included in Install all (this PS5)",
+                  )
+                : tr(
+                    "pkglib.variant.select",
+                    undefined,
+                    "Include in Install all (this PS5)",
+                  )}
+            </span>
+            <span className="mt-0.5 block text-[var(--color-muted)]">
+              {tr(
+                "pkglib.variant.help",
+                undefined,
+                "When several packages are the same game update or DLC, pick exactly one for the bulk Install all button. Uncheck to leave it out. Single Install on the row always installs this package only.",
+              )}
+            </span>
           </span>
         </label>
       )}
@@ -773,7 +783,7 @@ export default function InstallPackageScreen() {
     // Manually installing an alternative is an explicit choice. Remember it
     // for this console so a later Install all never replaces it with a sibling
     // merely because that sibling appears later in the list.
-    selectAlternative(entry);
+    chooseAlternative(entry);
     void install(entry.path, host);
   }
 
@@ -812,6 +822,13 @@ export default function InstallPackageScreen() {
   const effectiveAlternativeSelections = useMemo(() => {
     const next = { ...alternativeSelections };
     for (const group of alternativeGroups) {
+      // An explicit checkbox opt-out must win over auto-detection of the
+      // currently installed artifact. Without a sentinel, deleting the saved
+      // choice simply selected the same row again on the next render.
+      if (alternativeSelections[group.key] === PKG_ALTERNATIVE_SKIP) {
+        delete next[group.key];
+        continue;
+      }
       const identities = new Set(
         group.entries.map((entry) => pkgEntryIdentity(entry)),
       );
@@ -839,7 +856,7 @@ export default function InstallPackageScreen() {
     installedIds,
   ]);
 
-  function selectAlternative(entry: PkgEntry) {
+  function chooseAlternative(entry: PkgEntry) {
     const key = alternativeKeyByPath.get(entry.path);
     if (!key) return;
     const identity = pkgEntryIdentity(entry);
@@ -848,6 +865,25 @@ export default function InstallPackageScreen() {
       ...current,
       [key]: identity,
     }));
+  }
+
+  function toggleAlternative(entry: PkgEntry) {
+    const key = alternativeKeyByPath.get(entry.path);
+    if (!key) return;
+    const identity = pkgEntryIdentity(entry);
+    const already =
+      effectiveAlternativeSelections[key] === identity ||
+      alternativeSelections[key] === identity;
+    if (already) {
+      // Checkbox toggle-off: leave the group unselected so Install all
+      // skips the conflict until the user picks again.
+      skipPkgAlternativeSelection(host, key);
+      setAlternativeSelections((current) => {
+        return { ...current, [key]: PKG_ALTERNATIVE_SKIP };
+      });
+      return;
+    }
+    chooseAlternative(entry);
   }
 
   const totalSize = useMemo(
@@ -946,7 +982,7 @@ export default function InstallPackageScreen() {
             pkgEntryIdentity(entry)
         }
         onSelectAlternative={
-          alternativeKey ? () => selectAlternative(entry) : undefined
+          alternativeKey ? () => toggleAlternative(entry) : undefined
         }
         onInstall={() => void handleInstall(entry)}
         onDelete={() => void handleDelete(entry)}
@@ -1109,6 +1145,19 @@ export default function InstallPackageScreen() {
           )}
         />
       </div>
+
+      {alternativeGroups.length > 0 && (
+        <div className="mb-4 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-4 py-3 text-sm leading-relaxed text-[var(--color-muted)]">
+          <strong className="text-[var(--color-text)]">
+            {tr("pkglib.installAll.what", undefined, "What is Install all?")}
+          </strong>{" "}
+          {tr(
+            "pkglib.installAll.whatBody",
+            undefined,
+            "Install all runs every ready package in order: base game → updates → DLC. When you have two updates of the same version (or two DLC packs that conflict), use the checkbox on each row to choose which one this console should install — only one per group. Uncheck to leave that group out. The Install button on a single row always installs just that package.",
+          )}
+        </div>
+      )}
 
       {!hostReady && (
         <div className="mb-4">

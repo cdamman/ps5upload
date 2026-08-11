@@ -4190,6 +4190,8 @@ export interface SdkTitle {
   name: string;
   sdk_version: string;
   fw_required: string;
+  patchable?: boolean;
+  source?: string;
 }
 
 export interface SdkScanResponse {
@@ -4201,6 +4203,7 @@ export interface SdkPatchResponse {
   ok: boolean;
   title_id?: string;
   target_sdk?: string;
+  detail?: string;
   error?: string;
 }
 

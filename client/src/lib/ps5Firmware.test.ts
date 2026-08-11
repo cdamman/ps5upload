@@ -45,7 +45,7 @@ describe("firmwareMajor (Stream Install FW gate)", () => {
     ).toBe(9);
     expect(firmwareMajor("r/releases/05.00")).toBe(5);
     expect(firmwareMajor("r/releases/10.40")).toBe(10);
-    // FW < 11: stream install hangs (PPR patches missing). Button disabled.
+    // Major extraction is descriptive only; Stream support is not gated by it.
     expect(firmwareMajor("r/releases/09.60")! < 11).toBe(true);
     expect(firmwareMajor("r/releases/10.40")! < 11).toBe(true);
   });
@@ -53,7 +53,7 @@ describe("firmwareMajor (Stream Install FW gate)", () => {
   it("returns >= 11 at and above the cutoff (stream ALLOWED with advisory)", () => {
     expect(firmwareMajor("r/releases/11.00")).toBe(11);
     expect(firmwareMajor("r/releases/12.40")).toBe(12);
-    // FW >= 11: stream install may work, advisory warning only.
+    // Newer major versions parse the same way.
     expect(firmwareMajor("r/releases/12.40")! >= 11).toBe(true);
     expect(firmwareMajor("r/releases/09.60")! >= 11).toBe(false);
   });

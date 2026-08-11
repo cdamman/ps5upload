@@ -62,6 +62,8 @@ import {
   isPkgInstalledHere,
   loadPkgAlternativeSelections,
   recordPkgAlternativeSelection,
+  skipPkgAlternativeSelection,
+  PKG_ALTERNATIVE_SKIP,
   PKG_MAY_NOT_LAUNCH_MESSAGE,
   PKG_ACCEPTED_UNVERIFIED_HINT,
   PKG_PATCH_REJECTED_HINT,
@@ -378,6 +380,131 @@ describe("addAndUpload drag-event deduplication", () => {
       },
     });
     await first;
+  });
+});
+
+describe("installStream — DPI lifecycle and HTTP fallback", () => {
+  const host = "192.168.55.9";
+  const localPath = "/tmp/game.pkg";
+  const mockedInvoke = vi.mocked(invoke);
+  const metadata = {
+    parts: [localPath],
+    total_size: 8_192_000,
+    head: {
+      content_id: "UP0000-CUSA33334_00-TEST000000000000",
+      title: "Test Game",
+      category: "gd",
+      fingerprint: "a".repeat(64),
+    },
+  };
+
+  afterEach(() => {
+    vi.useRealTimers();
+    mockedInvoke.mockReset();
+    evictPkgLibraryStore(host);
+  });
+
+  it("restores the main payload and closes the host session when DPI was sent but never became ready", async () => {
+    mockedInvoke.mockImplementation(async (cmd: unknown) => {
+      if (cmd === "pkg_metadata_split") return metadata;
+      if (cmd === "pkg_install_start")
+        return { err_code: 0, session_id: "stream-timeout" };
+      if (cmd === "dpi_ensure")
+        return {
+          ok: false,
+          sent: true,
+          listening: false,
+          error: "DPI daemon did not come up",
+        };
+      if (cmd === "payload_bundled_path")
+        return { ok: true, path: "/tmp/ps5upload.elf" };
+      return {};
+    });
+
+    const result = await pkgLibraryStore(host)
+      .getState()
+      .installStream(localPath, host);
+
+    expect(result.ok).toBe(false);
+    expect(result.stagedFallbackRecommended).toBe(true);
+    expect(mockedInvoke).toHaveBeenCalledWith("payload_send", {
+      ip: host,
+      path: "/tmp/ps5upload.elf",
+      port: null,
+    });
+    expect(mockedInvoke).toHaveBeenCalledWith("pkg_install_cancel", {
+      session: "stream-timeout",
+    });
+  });
+
+  it("explains a pre-fetch Sony proxy reject and still restores/cleans up", async () => {
+    mockedInvoke.mockImplementation(async (cmd: unknown) => {
+      if (cmd === "pkg_metadata_split") return metadata;
+      if (cmd === "pkg_install_start")
+        return { err_code: 0, session_id: "stream-proxy" };
+      if (cmd === "dpi_ensure") return { ok: true, sent: true };
+      if (cmd === "pkg_dpi_direct_install")
+        return {
+          ok: false,
+          rc: 0x80431084,
+          requests_served: 0,
+          bytes_served: 0,
+        };
+      if (cmd === "payload_bundled_path")
+        return { ok: true, path: "/tmp/ps5upload.elf" };
+      return {};
+    });
+
+    const result = await pkgLibraryStore(host)
+      .getState()
+      .installStream(localPath, host);
+
+    expect(result.ok).toBe(false);
+    expect(result.stagedFallbackRecommended).toBe(true);
+    expect(result.message).toMatch(/SCE_HTTP_ERROR_PROXY/);
+    expect(result.message).toMatch(/Do Not Use/);
+    expect(mockedInvoke).toHaveBeenCalledWith("payload_send", expect.anything());
+    expect(mockedInvoke).toHaveBeenCalledWith("pkg_install_cancel", {
+      session: "stream-proxy",
+    });
+  });
+
+  it("keeps serving through async verification, then closes the session on success", async () => {
+    vi.useFakeTimers();
+    mockedInvoke.mockImplementation(async (cmd: unknown) => {
+      if (cmd === "pkg_metadata_split") return metadata;
+      if (cmd === "pkg_install_start")
+        return { err_code: 0, session_id: "stream-ok" };
+      if (cmd === "dpi_ensure") return { ok: true, sent: true };
+      if (cmd === "pkg_dpi_direct_install")
+        return {
+          ok: true,
+          rc: 0,
+          requests_served: 4,
+          bytes_served: metadata.total_size,
+        };
+      if (cmd === "payload_bundled_path")
+        return { ok: true, path: "/tmp/ps5upload.elf" };
+      if (cmd === "pkg_install_status")
+        return {
+          phase: "done",
+          launchable: true,
+          installed_bytes: metadata.total_size,
+          total: metadata.total_size,
+        };
+      return {};
+    });
+
+    const pending = pkgLibraryStore(host)
+      .getState()
+      .installStream(localPath, host);
+    await vi.advanceTimersByTimeAsync(3_000);
+    const result = await pending;
+
+    expect(result.ok).toBe(true);
+    expect(mockedInvoke).toHaveBeenCalledWith("pkg_install_cancel", {
+      session: "stream-ok",
+    });
   });
 });
 
@@ -741,6 +868,13 @@ describe("recordPkgInstalled / isPkgInstalledHere (per-console isolation)", () =
     recordPkgAlternativeSelection(B, key, "backport-fingerprint");
     expect(loadPkgAlternativeSelections(A)[key]).toBe("optional-fingerprint");
     expect(loadPkgAlternativeSelections(B)[key]).toBe("backport-fingerprint");
+  });
+
+  it("persists an explicit skip instead of falling back to auto-selection", () => {
+    const key = "patch:CUSA33334:01.02";
+    recordPkgAlternativeSelection(A, key, "optional-fingerprint");
+    skipPkgAlternativeSelection(A, key);
+    expect(loadPkgAlternativeSelections(A)[key]).toBe(PKG_ALTERNATIVE_SKIP);
   });
 });
 

@@ -17,6 +17,10 @@ pub struct SdkTitle {
     pub sdk_version: String,
     #[serde(default)]
     pub fw_required: String,
+    #[serde(default)]
+    pub patchable: bool,
+    #[serde(default)]
+    pub source: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -41,6 +45,8 @@ pub struct SdkPatchResponse {
     pub title_id: String,
     #[serde(default)]
     pub target_sdk: String,
+    #[serde(default)]
+    pub detail: Option<String>,
     #[serde(default)]
     pub error: Option<String>,
 }
@@ -147,10 +153,11 @@ mod tests {
 
     #[test]
     fn deserialize_sdk_patch_ok() {
-        let json = r#"{"ok":true,"title_id":"CUSA00001","target_sdk":"0x09060000"}"#;
+        let json = r#"{"ok":true,"title_id":"CUSA00001","target_sdk":"0x09060000","detail":"ELF sites: 1"}"#;
         let resp: SdkPatchResponse = serde_json::from_str(json).unwrap();
         assert!(resp.ok);
         assert_eq!(resp.title_id, "CUSA00001");
+        assert_eq!(resp.detail.as_deref(), Some("ELF sites: 1"));
         assert!(resp.error.is_none());
     }
 
