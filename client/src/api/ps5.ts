@@ -1905,11 +1905,13 @@ export interface PowerControlAck {
 /** Reboot the PS5. Async — the connection drops as soon as Sony's
  *  reboot starts, but the payload sends ACK first; core treats the
  *  expected drop as success. */
+/** ok-checked-by-caller: PowerControl reports a declined power action in place. */
 export async function powerReboot(addr: string): Promise<PowerControlAck> {
   return invoke<PowerControlAck>("power_reboot", { addr });
 }
 
-/** Power off the PS5. Same drop-is-success semantics as reboot. */
+/** Power off the PS5. Same drop-is-success semantics as reboot.
+ *  ok-checked-by-caller: PowerControl reports a declined power action in place. */
 export async function powerShutdown(addr: string): Promise<PowerControlAck> {
   return invoke<PowerControlAck>("power_shutdown", { addr });
 }
@@ -1956,6 +1958,7 @@ export async function processList(addr: string): Promise<ProcessListResult> {
 
 /** SIGKILL a process by pid. The payload guards self/kernel/init; the
  *  caller must confirm before killing a "system" process. */
+/** ok-checked-by-caller: Processes screen distinguishes refused from gone. */
 export async function processKill(
   addr: string,
   pid: number,
@@ -1966,12 +1969,14 @@ export async function processKill(
 /** Enter rest mode (standby). May be unavailable on some firmware
  *  revisions where the symbol moved — ack carries `err:"standby_unavailable"`
  *  in that case. */
+/** ok-checked-by-caller: PowerControl reports a declined power action in place. */
 export async function powerStandby(addr: string): Promise<PowerControlAck> {
   return invoke<PowerControlAck>("power_standby", { addr });
 }
 
 /** Defer the auto-sleep timer by one tick. Non-destructive; useful
  *  to run on a schedule during long uploads to keep the PS5 awake. */
+/** ok-checked-by-caller: PowerControl reports a declined power action in place. */
 export async function powerTick(addr: string): Promise<PowerControlAck> {
   return invoke<PowerControlAck>("power_tick", { addr });
 }
@@ -2273,18 +2278,21 @@ export interface AppLifecycleAck {
   apps?: RunningApp[];
 }
 
+/** ok-checked-by-caller: Process/app controls report a refusal in place. */
 export async function appSuspend(
   addr: string,
   appId: number,
 ): Promise<AppLifecycleAck> {
   return invoke<AppLifecycleAck>("app_suspend", { addr, appId });
 }
+/** ok-checked-by-caller: Process/app controls report a refusal in place. */
 export async function appResume(
   addr: string,
   appId: number,
 ): Promise<AppLifecycleAck> {
   return invoke<AppLifecycleAck>("app_resume", { addr, appId });
 }
+/** ok-checked-by-caller: InstalledApps checks ok to distinguish 'refused' from 'not running'. */
 export async function appKill(
   addr: string,
   appId: number,
@@ -2355,21 +2363,26 @@ export interface PeripheralAck {
   code?: number;
   err?: string;
 }
+/** ok-checked-by-caller: PeripheralPanel's run() checks ok once for every action. */
 export async function peripheralEject(addr: string): Promise<PeripheralAck> {
   return invoke<PeripheralAck>("peripheral_eject", { addr });
 }
+/** ok-checked-by-caller: PeripheralPanel's run() checks ok once for every action. */
 export async function peripheralBdOff(addr: string): Promise<PeripheralAck> {
   return invoke<PeripheralAck>("peripheral_bd_off", { addr });
 }
+/** ok-checked-by-caller: PeripheralPanel's run() checks ok once for every action. */
 export async function peripheralBdOn(addr: string): Promise<PeripheralAck> {
   return invoke<PeripheralAck>("peripheral_bd_on", { addr });
 }
+/** ok-checked-by-caller: PeripheralPanel's run() checks ok once for every action. */
 export async function peripheralUsbOff(
   addr: string,
   port: number,
 ): Promise<PeripheralAck> {
   return invoke<PeripheralAck>("peripheral_usb_off", { addr, port });
 }
+/** ok-checked-by-caller: PeripheralPanel's run() checks ok once for every action. */
 export async function peripheralUsbOn(
   addr: string,
   port: number,
@@ -2411,6 +2424,7 @@ export interface ProcList {
 }
 /** Full running-process list (pid + name) — the rich "what's running" used by
  *  the bug-report snapshot. Distinct from {@link procModulesGet}. */
+/** ok-checked-by-caller: Processes screen treats ok:false as 'unavailable'. */
 export async function procListGet(addr: string): Promise<ProcList> {
   return invoke<ProcList>("proc_list_get", { addr });
 }
@@ -2500,6 +2514,7 @@ export interface PkgDirectMountResult {
 /** Mount a .pkg file directly via sceFsMountGamePkg (bypasses BGFT
  *  install). Faster for testing patches; doesn't register the title
  *  in the home screen. */
+/** ok-checked-by-caller: Install callers render the refusal. */
 export async function pkgDirectMount(
   addr: string,
   pkgPath: string,
@@ -2522,6 +2537,7 @@ export interface UfsFsckResult {
 
 /** Run UFS fsck on a device. repair=false is a read-only check;
  *  true attempts repair (UI should confirm before sending true). */
+/** ok-checked-by-caller: Disk tools render the refusal. */
 export async function ufsFsck(
   addr: string,
   device: string,
@@ -2554,6 +2570,7 @@ export interface FsWriteBytesResult {
 /** Atomic small-file write (≤256 KB). `bytes` is raw bytes — this
  *  helper handles base64 encoding to dodge IPC binary-transfer
  *  awkwardness. For larger files use the regular transfer pipeline. */
+/** ok-checked-by-caller: Callers surface a write refusal inline. */
 export async function fsWriteBytes(
   addr: string,
   path: string,
@@ -2573,6 +2590,7 @@ export async function fsWriteBytes(
 }
 
 /** Convenience: write a UTF-8 string. */
+/** ok-checked-by-caller: File editor surfaces a write refusal inline. */
 export async function fsWriteText(
   addr: string,
   path: string,
@@ -2615,6 +2633,7 @@ export async function smpManualInstall(
 
 /** Mount a LWFS patch overlay (sceFsMountLwfs). Lets a title see
  *  patched files without a full reinstall. */
+/** ok-checked-by-caller: Mount callers render the refusal. */
 export async function lwfsMount(
   addr: string,
   patchPath: string,
@@ -2713,6 +2732,7 @@ export interface SmpMetaControlAck {
 
 export type SmpMetaAction = "start" | "run_now" | "set_poll";
 
+/** ok-checked-by-caller: ShadowMount panel reports refusal in place. */
 export async function smpMetaControl(
   transferAddr: string,
   action: SmpMetaAction,
@@ -4057,6 +4077,7 @@ export async function cheatsGet(
   });
 }
 
+/** ok-checked-by-caller: Cheats screen reflects the toggle's real state. */
 export async function cheatsToggle(
   titleId: string,
   index: number,
@@ -4133,6 +4154,7 @@ export async function cheatsReposSearch(
   return invoke("cheats_repos_search", { req: { query } });
 }
 
+/** ok-checked-by-caller: Cheats screen shows per-repo outcome. */
 export async function cheatsReposDownload(
   repoId: string,
   filename: string,
@@ -4211,6 +4233,7 @@ export async function sdkScan(addr?: string): Promise<SdkScanResponse> {
   return invoke("sdk_scan", { req: { addr: addr ?? null } });
 }
 
+/** ok-checked-by-caller: SdkChanger renders ok/error into its result card. */
 export async function sdkPatch(
   titleId: string,
   targetSdk: string,
@@ -4228,6 +4251,7 @@ export interface SdkRestoreResponse {
   error?: string;
 }
 
+/** ok-checked-by-caller: SdkChanger renders ok/error into its result card. */
 export async function sdkRestore(
   titleId: string,
   addr?: string,
@@ -4254,6 +4278,7 @@ export interface TmdbFetchResponse {
   sku?: string;
 }
 
+/** ok-checked-by-caller: Game Metadata renders not-found as an empty state. */
 export async function tmdbFetch(
   titleId: string,
   refresh?: boolean,
@@ -4338,6 +4363,7 @@ export interface BpsInfo {
 
 /** Read a .bps patch's header without applying it, so the UI can show
  *  what the patch expects before anything is written. */
+/** ok-checked-by-caller: Fakelib surfaces a bad patch via the thrown HTTP error. */
 export async function bpsInspect(patchPath: string): Promise<BpsInfo> {
   return invoke("bps_inspect", { req: { patch_path: patchPath } });
 }
