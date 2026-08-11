@@ -31,6 +31,8 @@
 #include <regex.h>
 #include "config.h"
 #include "runtime.h"
+
+#include "appdb_scan.h"
 #include "register.h"
 #include "hw_info.h"
 #include "drive_sensors.h"
@@ -10677,17 +10679,24 @@ static int handle_sdk_patch(runtime_state_t *state, int client_fd,
     int rc = sdk_changer_patch(title_id, target_sdk, err, sizeof(err));
     cheat_inc_cmd_count(state);
 
-    char resp[512];
+    char title_id_esc[64];
+    char target_sdk_esc[64];
+    char err_esc[768];
+    json_escape_into(title_id, title_id_esc, sizeof(title_id_esc));
+    json_escape_into(target_sdk, target_sdk_esc, sizeof(target_sdk_esc));
+    json_escape_into(err, err_esc, sizeof(err_esc));
+
+    char resp[1024];
     if (rc == 0) {
         /* `err` carries the per-site counts on success — the UI shows
          * them so "patched" is verifiable rather than asserted. */
         snprintf(resp, sizeof(resp),
                  "{\"ok\":true,\"title_id\":\"%s\",\"target_sdk\":\"%s\","
                  "\"detail\":\"%s\"}",
-                 title_id, target_sdk, err);
+                 title_id_esc, target_sdk_esc, err_esc);
     } else {
         snprintf(resp, sizeof(resp), "{\"ok\":false,\"error\":\"%s\"}",
-                 err[0] ? err : "patch_failed");
+                 err[0] ? err_esc : "patch_failed");
     }
     return send_frame(client_fd, FTX2_FRAME_SDK_PATCH_ACK, 0,
                       trace_id, resp, strlen(resp));
@@ -10715,15 +10724,20 @@ static int handle_sdk_restore(runtime_state_t *state, int client_fd,
     int rc = sdk_changer_restore(title_id, &restored, err, sizeof(err));
     cheat_inc_cmd_count(state);
 
-    char resp[512];
+    char title_id_esc[64];
+    char err_esc[768];
+    json_escape_into(title_id, title_id_esc, sizeof(title_id_esc));
+    json_escape_into(err, err_esc, sizeof(err_esc));
+
+    char resp[1024];
     if (rc == 0) {
         snprintf(resp, sizeof(resp),
                  "{\"ok\":true,\"title_id\":\"%s\",\"restored\":%d,\"error\":\"%s\"}",
-                 title_id, restored,
-                 (rc == 0 && restored > 0) ? "" : (err[0] ? err : ""));
+                 title_id_esc, restored,
+                 (rc == 0 && restored > 0) ? "" : (err[0] ? err_esc : ""));
     } else {
         snprintf(resp, sizeof(resp), "{\"ok\":false,\"error\":\"%s\"}",
-                 err[0] ? err : "restore_failed");
+                 err[0] ? err_esc : "restore_failed");
     }
     return send_frame(client_fd, FTX2_FRAME_SDK_RESTORE_ACK, 0,
                       trace_id, resp, strlen(resp));
@@ -10807,7 +10821,7 @@ static int handle_fw_spoof_status(runtime_state_t *state, int client_fd,
 static int handle_ftp_start(runtime_state_t *state, int client_fd,
                              uint64_t trace_id, const char *body) {
     if (!state) return -1;
-    int port = 2121;
+    int port = 2122;
     char root[256] = "/";
     int readonly = 0;
     char user[64] = {0};
@@ -14653,7 +14667,7 @@ static int appdb_raw_scan(runtime_state_t *state, int client_fd,
                           trace_id, err, strlen(err));
     }
 
-    /* Read up to 1 MB of app.db (typical size is 400–800 KB). */
+    /* Read up to 1 MB of app.db (typical size is 400-800 KB). */
     size_t cap = 1 * 1024 * 1024;
     unsigned char *buf = (unsigned char *)malloc(cap);
     if (!buf) {
@@ -14670,166 +14684,67 @@ static int appdb_raw_scan(runtime_state_t *state, int client_fd,
     }
     close(fd);
 
-    if (total < 100 || memcmp(buf, "SQLite format 3\0", 16) != 0) {
-        free(buf);
-        const char *err = "{\"err\":\"invalid_appdb\",\"apps\":[]}";
-        return send_frame(client_fd, FTX2_FRAME_APPDB_QUERY_ACK, 0,
-                          trace_id, err, strlen(err));
-    }
-
-    /* Build JSON response. We scan the entire buffer for title-id patterns
-     * (4 uppercase ASCII letters + 5 digits). For each match, we look
-     * forward up to 256 bytes for the longest printable ASCII string
-     * that looks like a game title (length > 5, contains at least one
-     * letter). Deduplicate by title_id — only keep the first (longest)
-     * title per ID. */
-    char *resp = (char *)malloc(128 * 1024);
-    if (!resp) {
+    /* Shares appdb_scan_entries_ex() with activity.c rather than keeping
+     * a second implementation. The previous copy here scanned the whole
+     * file for two magic values and took the longest printable run as the
+     * name, which returned metadata blobs because SQLite stores a row's
+     * columns with no separators between them.
+     *
+     * ids_only: this path feeds install verification, which only asks
+     * whether a title id is present. A row whose name cannot be recovered
+     * must still be reported or a real install reads as a failure. */
+    const int max_rows = 256;
+    appdb_entry_t *entries =
+        (appdb_entry_t *)malloc(sizeof(appdb_entry_t) * (size_t)max_rows);
+    if (!entries) {
         free(buf);
         const char *err = "{\"err\":\"oom\",\"apps\":[]}";
         return send_frame(client_fd, FTX2_FRAME_APPDB_QUERY_ACK, 0,
                           trace_id, err, strlen(err));
     }
-    int rcap = 128 * 1024;
-    int rn = 0;
-    rn += snprintf(resp + rn, rcap - rn, "{\"err\":null,\"apps\":[");
+    int count = appdb_scan_entries_ex(buf, total, entries, max_rows, 1);
+    free(buf);
 
-    /* Simple dedup: track the last title_id we wrote so we don't emit
-     * duplicates (app.db stores multiple rows per title for different
-     * metadata keys). */
-    char last_tid[16] = {0};
-    int wrote_one = 0;
-
-    for (size_t i = 0; i + 9 <= total; i++) {
-        /* Check for title-id pattern: 4 uppercase letters + 5 digits */
-        if (buf[i] >= 'A' && buf[i] <= 'Z' &&
-            buf[i+1] >= 'A' && buf[i+1] <= 'Z' &&
-            buf[i+2] >= 'A' && buf[i+2] <= 'Z' &&
-            buf[i+3] >= 'A' && buf[i+3] <= 'Z' &&
-            buf[i+4] >= '0' && buf[i+4] <= '9' &&
-            buf[i+5] >= '0' && buf[i+5] <= '9' &&
-            buf[i+6] >= '0' && buf[i+6] <= '9' &&
-            buf[i+7] >= '0' && buf[i+7] <= '9' &&
-            buf[i+8] >= '0' && buf[i+8] <= '9') {
-            /* Must be bounded by non-alphanumeric on both sides to avoid
-             * matching substrings of longer strings. */
-            if (i > 0 && ((buf[i-1] >= 'A' && buf[i-1] <= 'Z') ||
-                          (buf[i-1] >= 'a' && buf[i-1] <= 'z') ||
-                          (buf[i-1] >= '0' && buf[i-1] <= '9')))
-                continue;
-            if (i + 9 < total && ((buf[i+9] >= 'A' && buf[i+9] <= 'Z') ||
-                                   (buf[i+9] >= 'a' && buf[i+9] <= 'z') ||
-                                   (buf[i+9] >= '0' && buf[i+9] <= '9')))
-                continue;
-
-            char tid[10];
-            memcpy(tid, buf + i, 9);
-            tid[9] = '\0';
-
-            /* Skip if same as last (dedup) */
-            if (strcmp(tid, last_tid) == 0) continue;
-
-            /* Look forward for a title string: scan up to 256 bytes for
-             * the longest printable run > 5 chars with at least one letter. */
-            char best_title[256];
-            best_title[0] = '\0';
-            size_t best_len = 0;
-
-            size_t scan_end = i + 9 + 256;
-            if (scan_end > total) scan_end = total;
-            size_t j = i + 9;
-            while (j < scan_end) {
-                /* Extract a printable run */
-                size_t run_start = j;
-                while (j < scan_end &&
-                       ((buf[j] >= 0x20 && buf[j] < 0x7f) ||
-                        buf[j] == 0xC3 || buf[j] == 0xC2 ||  /* UTF-8 2-byte (é, ö, etc.) */
-                        (buf[j] >= 0x80 && buf[j] <= 0xBF))) {
-                    j++;
-                }
-                size_t run_len = j - run_start;
-                if (run_len > best_len && run_len > 5) {
-                    /* Check it has at least one letter and isn't the tid itself */
-                    int has_letter = 0;
-                    int is_tid = 1;
-                    for (size_t k = 0; k < run_len; k++) {
-                        unsigned char c = buf[run_start + k];
-                        if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z'))
-                            has_letter = 1;
-                    }
-                    if (has_letter) {
-                        /* Skip if this run IS the title id or starts with it */
-                        if (run_len == 9 && memcmp(buf + run_start, tid, 9) == 0)
-                            is_tid = 1;
-                        else
-                            is_tid = 0;
-                        if (!is_tid) {
-                            best_len = run_len;
-                            if (best_len >= sizeof(best_title))
-                                best_len = sizeof(best_title) - 1;
-                            memcpy(best_title, buf + run_start, best_len);
-                            best_title[best_len] = '\0';
-                        }
-                    }
-                }
-                j++;
-            }
-
-            /* Skip system apps with no title */
-            if (best_len == 0) {
-                strncpy(last_tid, tid, sizeof(last_tid) - 1);
-                continue;
-            }
-
-            /* Trim trailing non-printable from best_title. Cast to unsigned
-             * char before comparing with UTF-8 lead bytes (0xC2/0xC3) to
-             * avoid tautological-compare warnings on platforms where char
-             * is signed. */
-            while (best_len > 0) {
-                unsigned char c = (unsigned char)best_title[best_len-1];
-                if ((c >= 0x20 && c < 0x7f) || c == 0xC3 || c == 0xC2)
-                    break;
-                best_title[--best_len] = '\0';
-            }
-
-            if (best_len < 3) {
-                strncpy(last_tid, tid, sizeof(last_tid) - 1);
-                continue;
-            }
-
-            char tid_esc[32];
-            char name_esc[512];
-            json_escape_into(tid, tid_esc, sizeof(tid_esc));
-            json_escape_into(best_title, name_esc, sizeof(name_esc));
-
-            if (rn >= rcap - 700) break;
-            if (wrote_one) resp[rn++] = ',';
-            wrote_one = 1;
-            int w = snprintf(resp + rn, rn < rcap ? (size_t)(rcap - rn) : 0,
-                           "{\"title_id\":\"%s\",\"app_id\":0,\"name\":\"%s\"}",
-                           tid_esc, name_esc);
-            if (w < 0) break;
-            if ((size_t)w >= (size_t)(rcap - rn)) { rn = rcap; break; }
-            rn += w;
-            strncpy(last_tid, tid, sizeof(last_tid) - 1);
-            last_tid[sizeof(last_tid) - 1] = '\0';
-        }
+    if (count < 0) {
+        free(entries);
+        const char *err = "{\"err\":\"invalid_appdb\",\"apps\":[]}";
+        return send_frame(client_fd, FTX2_FRAME_APPDB_QUERY_ACK, 0,
+                          trace_id, err, strlen(err));
     }
 
+    int rcap = 128 * 1024;
+    char *resp = (char *)malloc((size_t)rcap);
+    if (!resp) {
+        free(entries);
+        const char *err = "{\"err\":\"oom\",\"apps\":[]}";
+        return send_frame(client_fd, FTX2_FRAME_APPDB_QUERY_ACK, 0,
+                          trace_id, err, strlen(err));
+    }
+    int rn = snprintf(resp, (size_t)rcap, "{\"err\":null,\"apps\":[");
+    for (int i = 0; i < count; i++) {
+        char tid_esc[32];
+        char name_esc[512];
+        json_escape_into(entries[i].title_id, tid_esc, sizeof(tid_esc));
+        json_escape_into(entries[i].name, name_esc, sizeof(name_esc));
+        int w = snprintf(resp + rn, (size_t)(rcap - rn),
+                         "%s{\"title_id\":\"%s\",\"app_id\":0,\"name\":\"%s\"}",
+                         i ? "," : "", tid_esc, name_esc);
+        if (w < 0 || w >= rcap - rn - 4) break;
+        rn += w;
+    }
+    free(entries);
     if (rn < rcap - 2) {
         resp[rn++] = ']';
         resp[rn++] = '}';
     }
 
-    free(buf);
-
-    int rc2 = send_frame(client_fd, FTX2_FRAME_APPDB_QUERY_ACK, 0,
-                         trace_id, resp, (uint64_t)rn);
+    int rc = send_frame(client_fd, FTX2_FRAME_APPDB_QUERY_ACK, 0, trace_id,
+                        resp, (uint64_t)rn);
     free(resp);
     pthread_mutex_lock(&state->state_mtx);
     state->command_count += 1;
     pthread_mutex_unlock(&state->state_mtx);
-    return rc2;
+    return rc;
 }
 
 static int handle_appdb_query(runtime_state_t *state, int client_fd,
