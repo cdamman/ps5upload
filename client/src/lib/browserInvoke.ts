@@ -634,6 +634,18 @@ export async function browserInvoke<T>(
         /*long=*/ true,
       );
 
+    // Host-filesystem helpers. The desktop app answers these in-process
+    // via Tauri commands; in the browser the "host" is the engine's own
+    // machine, which is exactly what the Upload screen browses there.
+    // Without these, picking a folder threw BrowserUnsupportedError (#262).
+    case "path_kind":
+      return getJson<T>(`/api/local/path-kind?path=${uenc(args["path"] as string)}`);
+
+    case "inspect_folder":
+      return getJson<T>(
+        `/api/local/inspect-folder?path=${uenc(args["path"] as string)}`,
+      );
+
     // ── Native-only / unsupported ────────────────────────────────────────────
 
     default:

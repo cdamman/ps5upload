@@ -3966,6 +3966,57 @@ async fn transfer_dir_handler(
 /// fired. Entry + outcome + duration logs make the next report trivially
 /// diagnosable from engine.log alone.
 #[derive(Deserialize)]
+struct LocalPathQuery {
+    path: String,
+}
+
+/// GET /api/local/path-kind — classify a path on the engine's machine.
+///
+/// The desktop app answers this in-process via a Tauri command. The
+/// browser UI has no such thing, so the Upload screen's drag-drop router
+/// had nothing to call and threw BrowserUnsupportedError (issue #262).
+async fn local_path_kind_handler(Query(q): Query<LocalPathQuery>) -> impl IntoResponse {
+    let kind = match std::fs::metadata(&q.path) {
+        Ok(md) if md.is_dir() => "folder",
+        Ok(md) if md.is_file() => "file",
+        Ok(_) => "other",
+        Err(_) => "missing",
+    };
+    (StatusCode::OK, Json(serde_json::json!({ "kind": kind }))).into_response()
+}
+
+/// GET /api/local/inspect-folder — preview a game folder on the engine's
+/// machine, matching the desktop command's response shape exactly so the
+/// renderer needs no branch of its own.
+async fn local_inspect_folder_handler(Query(q): Query<LocalPathQuery>) -> impl IntoResponse {
+    let path = q.path;
+    let r = tokio::task::spawn_blocking(move || {
+        let p = std::path::Path::new(&path);
+        match ps5upload_core::game_meta::inspect_folder(p) {
+            Ok(r) => {
+                // Only worth hinting when the folder is not itself a game.
+                let hint = if r.meta_source == "none" {
+                    ps5upload_core::game_meta::wrapped_game_hint(p)
+                } else {
+                    None
+                };
+                serde_json::json!({ "ok": true, "result": r, "wrapped_hint": hint })
+            }
+            Err(e) => serde_json::json!({ "ok": false, "error": format!("{e:#}") }),
+        }
+    })
+    .await;
+    match r {
+        Ok(v) => (StatusCode::OK, Json(v)).into_response(),
+        Err(e) => (
+            StatusCode::OK,
+            Json(serde_json::json!({ "ok": false, "error": format!("join: {e}") })),
+        )
+            .into_response(),
+    }
+}
+
+#[derive(Deserialize)]
 struct BpsInspectReq {
     patch_path: String,
 }
@@ -7483,6 +7534,11 @@ async fn run(cfg: EngineConfig) -> anyhow::Result<()> {
         .route("/api/transfer/file", post(transfer_file_handler))
         .route("/api/transfer/dir", post(transfer_dir_handler))
         .route("/api/transfer/zip", post(transfer_zip_handler))
+        .route("/api/local/path-kind", get(local_path_kind_handler))
+        .route(
+            "/api/local/inspect-folder",
+            get(local_inspect_folder_handler),
+        )
         .route("/api/bps/inspect", post(bps_inspect_handler))
         .route("/api/bps/apply", post(bps_apply_handler))
         .route("/api/zip/inspect", post(zip_inspect_handler))
