@@ -13,7 +13,7 @@
 //! `docs/smb-ps5-upload-design.md`.
 
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 
@@ -28,6 +28,7 @@ use crate::json_err;
 /// Hard cap on files staged from one SMB tree — same order of magnitude as
 /// a real game dump, stops runaway recursion on misconfigured shares.
 pub const SMB_STAGE_MAX_FILES: u64 = 200_000;
+pub const SMB_STAGE_MAX_DIRS: u64 = 200_000;
 
 /// Normalize a user-entered server address into the `host:port` form
 /// `smb2::connect` expects.
@@ -387,6 +388,26 @@ fn reject_dotdot(path: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Validate one server-provided filename before joining it to the host staging
+/// tree. A malicious or broken SMB server must not be able to return an
+/// absolute name, separator, or parent component that escapes the job temp
+/// directory. `Component` also catches Windows drive/UNC prefixes.
+fn validate_stage_component(name: &str) -> anyhow::Result<()> {
+    if name.is_empty()
+        || name == "."
+        || name == ".."
+        || name.contains(['/', '\\'])
+        || name.chars().any(char::is_control)
+    {
+        anyhow::bail!("unsafe SMB filename returned by server: {name:?}");
+    }
+    let mut components = Path::new(name).components();
+    if !matches!(components.next(), Some(Component::Normal(_))) || components.next().is_some() {
+        anyhow::bail!("unsafe SMB filename returned by server: {name:?}");
+    }
+    Ok(())
+}
+
 /// Stream one remote file to `local` via chunked SMB reads.
 async fn stream_file_to_disk(
     client: &mut smb2::SmbClient,
@@ -453,6 +474,7 @@ pub async fn stage_smb_path(
     } else {
         smb_basename(remote)
     };
+    validate_stage_component(&basename)?;
 
     // Stat to decide file vs dir. Share root may not stat; treat as dir.
     let is_dir = if remote.is_empty() {
@@ -497,6 +519,7 @@ pub async fn stage_smb_path(
     let mut queue: Vec<(String, PathBuf)> = vec![(remote.to_string(), dir_local.clone())];
     let mut total_bytes = 0u64;
     let mut file_count = 0u64;
+    let mut dir_count = 1u64;
 
     while let Some((remote_dir, local_dir)) = queue.pop() {
         if cancel.as_ref().is_some_and(|c| c.load(Ordering::Relaxed)) {
@@ -511,9 +534,16 @@ pub async fn stage_smb_path(
             if name == "." || name == ".." {
                 continue;
             }
+            validate_stage_component(&name)?;
             let child_remote = join_smb_path(&remote_dir, &name);
             let child_local = local_dir.join(&name);
             if e.is_directory {
+                dir_count += 1;
+                if dir_count > SMB_STAGE_MAX_DIRS {
+                    anyhow::bail!(
+                        "SMB tree has more than {SMB_STAGE_MAX_DIRS} directories; refusing to stage"
+                    );
+                }
                 std::fs::create_dir_all(&child_local)
                     .map_err(|e| anyhow::anyhow!("mkdir {}: {e}", child_local.display()))?;
                 queue.push((child_remote, child_local));
@@ -557,7 +587,7 @@ pub fn cleanup_stage(path: &Path) {
 #[cfg(test)]
 mod tests {
     use super::normalize_smb_server;
-    use super::{join_smb_path, resolve_ps5_dest, smb_basename};
+    use super::{join_smb_path, resolve_ps5_dest, smb_basename, validate_stage_component};
 
     /// The form our own placeholder suggested, and the form every file
     /// manager displays. Passing it through unchanged made `connect`
@@ -658,5 +688,23 @@ mod tests {
             "/data/homebrew/foo.pkg"
         );
         assert_eq!(resolve_ps5_dest("", "x"), "/data/x");
+    }
+
+    #[test]
+    fn rejects_server_filenames_that_can_escape_the_stage_root() {
+        for bad in [
+            "",
+            ".",
+            "..",
+            "../outside",
+            "/absolute",
+            "a/b",
+            "a\\b",
+            "bad\nname",
+        ] {
+            assert!(validate_stage_component(bad).is_err(), "accepted {bad:?}");
+        }
+        assert!(validate_stage_component("eboot.bin").is_ok());
+        assert!(validate_stage_component("Game Folder").is_ok());
     }
 }

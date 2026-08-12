@@ -133,7 +133,7 @@ static inline int appdb_is_clean_text(const char *s, size_t n) {
 static inline int appdb_row_to_entry(const unsigned char *buf, size_t len,
                                      const size_t *val_off,
                                      const size_t *val_len, int nvals,
-                                     appdb_entry_t *out) {
+                                     appdb_entry_t *out, int ids_only) {
     int tid_at = -1;
     for (int i = 0; i < nvals; i++) {
         if (val_off[i] + val_len[i] > len) return 0;
@@ -157,14 +157,26 @@ static inline int appdb_row_to_entry(const unsigned char *buf, size_t len,
         out->name[n] = '\0';
         /* Trailing padding shows up in some rows. */
         while (n > 0 && out->name[n - 1] == ' ') out->name[--n] = '\0';
-        return n >= 2;
+        if (n >= 2) return 1;
+        break;
+    }
+
+    /* No usable name. Install verification only asks whether the id is
+     * present, so report it there; the default caller feeds a
+     * user-visible list and must not show a nameless row. */
+    if (ids_only) {
+        memcpy(out->title_id, buf + val_off[tid_at], 9);
+        out->title_id[9] = '\0';
+        out->name[0] = '\0';
+        return 1;
     }
     return 0;
 }
 
 /* Decode one leaf cell into `out`. Returns 1 on success. */
 static inline int appdb_read_cell(const unsigned char *buf, size_t len,
-                                  size_t coff, appdb_entry_t *out) {
+                                  size_t coff, appdb_entry_t *out,
+                                  int ids_only) {
     uint64_t payload = 0, rowid = 0, hsize = 0;
     size_t o = coff;
     size_t got = appdb_varint(buf, len, o, &payload);
@@ -211,15 +223,17 @@ static inline int appdb_read_cell(const unsigned char *buf, size_t len,
         voff += width;
     }
     if (nvals == 0) return 0;
-    return appdb_row_to_entry(buf, len, val_off, val_len, nvals, out);
+    return appdb_row_to_entry(buf, len, val_off, val_len, nvals, out,
+                              ids_only);
 }
 
 /* Scan an app.db image for title-id/name pairs.
  *
  * Returns the number of entries written to `out` (at most `max`), or -1
  * if the buffer is too short or lacks the SQLite file header. */
-static inline int appdb_scan_entries(const unsigned char *buf, size_t len,
-                                     appdb_entry_t *out, int max) {
+static inline int appdb_scan_entries_ex(const unsigned char *buf, size_t len,
+                                        appdb_entry_t *out, int max,
+                                        int ids_only) {
     if (!buf || !out || max <= 0) return -1;
     if (len < 100 || memcmp(buf, "SQLite format 3\0", 16) != 0) return -1;
 
@@ -245,7 +259,7 @@ static inline int appdb_scan_entries(const unsigned char *buf, size_t len,
             if (coff >= len) continue;
 
             appdb_entry_t entry;
-            if (!appdb_read_cell(buf, len, coff, &entry)) continue;
+            if (!appdb_read_cell(buf, len, coff, &entry, ids_only)) continue;
 
             /* app.db repeats a title across several tables; keep the
              * first name we see for each id. */
@@ -264,6 +278,12 @@ static inline int appdb_scan_entries(const unsigned char *buf, size_t len,
     }
 
     return count;
+}
+
+/* Title/name pairs for display: rows without a usable name are skipped. */
+static inline int appdb_scan_entries(const unsigned char *buf, size_t len,
+                                     appdb_entry_t *out, int max) {
+    return appdb_scan_entries_ex(buf, len, out, max, 0);
 }
 
 #endif

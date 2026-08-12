@@ -1,6 +1,9 @@
 # ps5upload v5.0 — Master Design Specification
 
-> **Status:** PLANNING — no v5 code written yet. v4.3.2 is the current release.
+> **Status: historical.** This document is kept for the reasoning
+> behind decisions that have since shipped. It describes intent at the
+> time of writing, not current behaviour — check the code, `CHANGELOG.md`
+> or `FAQ.md` before relying on anything here.
 >
 > **Authority:** This is the **canonical, build-ready** v5 specification. It
 > consolidates eight prior design docs into one self-contained document. All

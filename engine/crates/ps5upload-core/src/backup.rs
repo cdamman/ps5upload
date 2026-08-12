@@ -184,3 +184,81 @@ pub fn backup_delete(addr: &str, tag: &str, timestamp: i64) -> Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The tag names a directory on the console, so anything that could
+    /// climb out of the backup root has to be refused before the frame
+    /// is sent — not left to the payload to catch.
+    #[test]
+    fn rejects_tags_that_could_escape_the_backup_directory() {
+        for bad in ["..", "../etc", "a/b", "a\\b", "a/../..", "./x", "a b"] {
+            assert!(validate_tag(bad).is_err(), "tag {bad:?} should be rejected");
+        }
+    }
+
+    #[test]
+    fn rejects_empty_and_overlong_tags() {
+        assert!(validate_tag("").is_err());
+        assert!(validate_tag(&"a".repeat(33)).is_err());
+        assert!(
+            validate_tag(&"a".repeat(32)).is_ok(),
+            "32 is the documented limit"
+        );
+        assert!(validate_tag("a").is_ok());
+    }
+
+    #[test]
+    fn rejects_control_and_non_ascii_characters() {
+        for bad in ["a\nb", "a\0b", "café", "日本語", "a\tb"] {
+            assert!(validate_tag(bad).is_err(), "tag {bad:?} should be rejected");
+        }
+    }
+
+    #[test]
+    fn accepts_the_documented_character_set() {
+        for good in ["pre-install", "snapshot_1", "ABC123", "a-b_c"] {
+            assert!(
+                validate_tag(good).is_ok(),
+                "tag {good:?} should be accepted"
+            );
+        }
+    }
+
+    /// The payload emits snake_case JSON and every optional field has a
+    /// serde default, so a renamed key does not error — it silently
+    /// yields a zero. These pin the shapes the payload actually sends.
+    #[test]
+    fn parses_a_successful_snapshot() {
+        let r: BackupSnapshotResult = serde_json::from_str(
+            r#"{"ok":true,"tag":"pre-install","timestamp":1786320000,"files":12,"bytes":4096}"#,
+        )
+        .unwrap();
+        assert!(r.ok);
+        assert_eq!(r.tag, "pre-install");
+        assert_eq!(r.files, 12);
+        assert_eq!(r.bytes, 4096);
+        assert!(r.err.is_empty());
+    }
+
+    #[test]
+    fn parses_a_refused_snapshot_without_losing_the_reason() {
+        let r: BackupSnapshotResult =
+            serde_json::from_str(r#"{"ok":false,"err":"store_failed"}"#).unwrap();
+        assert!(!r.ok);
+        assert_eq!(r.err, "store_failed");
+    }
+
+    #[test]
+    fn parses_a_restore_and_an_empty_list() {
+        let r: BackupRestoreResult =
+            serde_json::from_str(r#"{"ok":true,"tag":"t","restored":3}"#).unwrap();
+        assert!(r.ok);
+        assert_eq!(r.restored, 3);
+
+        let l: BackupList = serde_json::from_str(r#"{"snapshots":[]}"#).unwrap();
+        assert!(l.snapshots.is_empty());
+    }
+}

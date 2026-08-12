@@ -2,6 +2,7 @@ import js from "@eslint/js";
 import reactHooks from "eslint-plugin-react-hooks";
 import tseslint from "typescript-eslint";
 import localRules from "./eslint-rules/no-untranslated-jsx.mjs";
+import requireAssertOk from "./eslint-rules/require-assert-ok.mjs";
 
 const browserGlobals = {
   AbortController: "readonly",
@@ -58,7 +59,9 @@ export default tseslint.config(
     },
     plugins: {
       "react-hooks": reactHooks,
-      local: localRules,
+      local: {
+        rules: { ...localRules.rules, ...requireAssertOk.rules },
+      },
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
@@ -72,6 +75,8 @@ export default tseslint.config(
       // existing backlog (178 strings) has been fully extracted — a
       // new hardcoded string is now a build failure, not a warning.
       "local/no-untranslated-jsx": "error",
+      // A refused action must not read as success — see the rule header.
+      "local/require-assert-ok": "error",
       "@typescript-eslint/no-explicit-any": "off",
       "@typescript-eslint/no-unused-vars": [
         "error",

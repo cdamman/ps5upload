@@ -21,9 +21,12 @@ import {
   waitForJob,
   bpsInspect,
   bpsApply,
+  saveArchiveMakeTemp,
+  saveArchiveCleanupTemp,
   type InstalledTitle,
   type FsDirEntry,
 } from "../../api/ps5";
+import { joinDir } from "../../lib/screenshotConvert";
 
 /**
  * Fakelib manager — the runtime half of backporting a game.
@@ -103,6 +106,7 @@ export default function FakelibScreen() {
     setBusy(true);
     setError(null);
     setStatus(null);
+    let tempDir: string | null = null;
     try {
       let upload = src;
       const name = src.split(/[/\\]/).pop() ?? "library.sprx";
@@ -110,7 +114,8 @@ export default function FakelibScreen() {
       if (patchPath) {
         // Patch first. A mismatched source is rejected here rather than
         // producing a library that only fails at game launch.
-        const dest = `${src}.patched`;
+        tempDir = await saveArchiveMakeTemp("fakelib-bps");
+        const dest = joinDir(tempDir, name);
         setStatus(tr("fakelib_patching", undefined, "Applying patch…"));
         const res = await bpsApply(src, patchPath, dest);
         upload = res.dest;
@@ -132,6 +137,7 @@ export default function FakelibScreen() {
       setError(humanizePs5Error(String(e)));
       setStatus(null);
     } finally {
+      if (tempDir) await saveArchiveCleanupTemp(tempDir).catch(() => {});
       setBusy(false);
     }
   };

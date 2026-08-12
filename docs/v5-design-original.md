@@ -1,5 +1,10 @@
 # ps5upload v5.0 — Design & Architecture Plan
 
+> **Status: historical.** This document is kept for the reasoning
+> behind decisions that have since shipped. It describes intent at the
+> time of writing, not current behaviour — check the code, `CHANGELOG.md`
+> or `FAQ.md` before relying on anything here.
+
 > **Goal**: Redesign the app from a flat 40-screen toolset into a cohesive,
 > workflow-driven PS5 companion. Focus: fewer places to look, features that
 > work together, touch-friendly controls, beautiful visual design.

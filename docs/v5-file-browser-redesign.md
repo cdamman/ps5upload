@@ -1,5 +1,10 @@
 # ps5upload v5.0 — Unified File Browser (Revised Design)
 
+> **Status: historical.** This document is kept for the reasoning
+> behind decisions that have since shipped. It describes intent at the
+> time of writing, not current behaviour — check the code, `CHANGELOG.md`
+> or `FAQ.md` before relying on anything here.
+
 > **Scope:** Revises §3, §4-E, §9.3, and Appendix B of `v5-design.md`.
 > The Files tab consolidates 6 v4 screens (FileSystem, Search, Volumes,
 > DiskUsage, SmbBrowser, FTP-Server toggle) into **one browser** and

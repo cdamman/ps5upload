@@ -277,6 +277,11 @@ export function pkgEntryIdentity(
 
 export type PkgAlternativeSelections = Record<string, string>;
 
+/** Persisted marker for an explicit "leave this conflict group out" choice.
+ * Fingerprints are hexadecimal and fallback identities are absolute PS5 paths,
+ * so this value cannot collide with a real package identity. */
+export const PKG_ALTERNATIVE_SKIP = "__ps5upload_skip__";
+
 export interface PkgAlternativeGroup {
   key: string;
   entries: PkgEntry[];
@@ -579,6 +584,22 @@ export function recordPkgAlternativeSelection(
     const all = loadAllAlternativeSelections();
     const consoleSelections = { ...(all[hostOf(host)] ?? {}) };
     consoleSelections[key] = identity;
+    all[hostOf(host)] = consoleSelections;
+    safeSetItem(ALTERNATIVE_SELECTIONS_CACHE_KEY, JSON.stringify(all));
+  } catch {
+    /* best-effort */
+  }
+}
+
+/** Remember an explicit opt-out. Deleting the key is not enough: the Install
+ * Package screen safely auto-detects the currently installed artifact when no
+ * choice exists, which would immediately select the checkbox again. */
+export function skipPkgAlternativeSelection(host: string, key: string): void {
+  if (!host?.trim() || !key || typeof window === "undefined") return;
+  try {
+    const all = loadAllAlternativeSelections();
+    const consoleSelections = { ...(all[hostOf(host)] ?? {}) };
+    consoleSelections[key] = PKG_ALTERNATIVE_SKIP;
     all[hostOf(host)] = consoleSelections;
     safeSetItem(ALTERNATIVE_SELECTIONS_CACHE_KEY, JSON.stringify(all));
   } catch {
@@ -1148,6 +1169,22 @@ async function verifyDpiInstalledArtifact(
  * genuine "daemon never came up" dead-end. The `rc==0`/`ok` here is NOT proof
  * of a real install — callers must rely on registration/byte-settle proof.
  */
+async function restoreMainPayload(ip: string): Promise<void> {
+  try {
+    const bp = (await invoke("payload_bundled_path")) as {
+      ok?: boolean;
+      path?: string;
+    };
+    if (bp?.ok && bp.path) {
+      await invoke("payload_send", { ip, path: bp.path, port: null });
+    }
+  } catch (e) {
+    // The app's reconnect watcher can make another attempt, but keep this in
+    // the bug bundle: a failed restore explains why the helper stayed offline.
+    log.warn("install", `couldn't restore the main payload on ${ip}: ${pkgError(e)}`);
+  }
+}
+
 async function runDpiInstall(
   host: string,
   localPs5Path: string,
@@ -1168,18 +1205,34 @@ async function runDpiInstall(
     "install",
     `DPI ensure: bringing up daemon on ${ip}:9040 (loads via :9021)`,
   );
-  const ens = (await invoke("dpi_ensure", { ip })) as {
+  let ens: {
     ok?: boolean;
     error?: string;
     listening?: boolean;
     sent?: boolean;
   };
+  try {
+    ens = (await invoke("dpi_ensure", { ip })) as typeof ens;
+  } catch (e) {
+    // The bridge can lose the response after the loader already replaced the
+    // helper. Restore defensively; no transfer is active while this lock runs.
+    await restoreMainPayload(ip);
+    return {
+      ok: false,
+      daemonFailed: true,
+      rc: 0,
+      errMessage: `couldn't start the DPI daemon: ${pkgError(e)}`,
+    };
+  }
   log.info(
     "install",
     `DPI ensure result: ok=${ens.ok} listening=${ens.listening ?? "?"} sent=${ens.sent ?? "?"}` +
       (ens.error ? ` error="${ens.error}"` : ""),
   );
   if (!ens.ok) {
+    // A sent-but-not-listening daemon has already displaced the main payload.
+    // Leaving it that way was the cause of the apparent post-install disconnect.
+    if (ens.sent) await restoreMainPayload(ip);
     return {
       ok: false,
       daemonFailed: true,
@@ -1191,42 +1244,35 @@ async function runDpiInstall(
   // (0x80020002) — it clears once the console settles, so we gate each retry on
   // the readiness probe instead of failing the way a single attempt used to.
   let resp: { ok?: boolean; rc?: number; err_message?: string } = {};
-  for (let attempt = 1; attempt <= DPI_MAX_ATTEMPTS; attempt++) {
-    try {
-      resp = (await invoke("pkg_dpi_install", {
-        ps5Addr: mgmtAddr(host),
-        localPs5Path,
-      })) as typeof resp;
-    } catch (e) {
-      resp = { ok: false, rc: 0, err_message: pkgError(e) };
-    }
-    const rcNow = (resp.rc ?? 0) >>> 0;
-    if (
-      resp.ok ||
-      rcNow !== DPI_TRANSIENT_BUSY_RC ||
-      attempt === DPI_MAX_ATTEMPTS
-    ) {
-      break;
-    }
-    // Transient busy → wait for the console to settle, then retry.
-    onStatus?.(
-      `PS5 is busy finishing the last install — waiting for it to be ready (attempt ${attempt}/${DPI_MAX_ATTEMPTS})…`,
-    );
-    await waitForConsoleReady(host, {
-      onWait: () => onStatus?.("Waiting for the PS5 to be ready…"),
-    });
-  }
-  // Restore our main payload — the daemon replaced it. Best-effort.
   try {
-    const bp = (await invoke("payload_bundled_path")) as {
-      ok?: boolean;
-      path?: string;
-    };
-    if (bp?.ok && bp.path) {
-      await invoke("payload_send", { ip, path: bp.path, port: null });
+    for (let attempt = 1; attempt <= DPI_MAX_ATTEMPTS; attempt++) {
+      try {
+        resp = (await invoke("pkg_dpi_install", {
+          ps5Addr: mgmtAddr(host),
+          localPs5Path,
+        })) as typeof resp;
+      } catch (e) {
+        resp = { ok: false, rc: 0, err_message: pkgError(e) };
+      }
+      const rcNow = (resp.rc ?? 0) >>> 0;
+      if (
+        resp.ok ||
+        rcNow !== DPI_TRANSIENT_BUSY_RC ||
+        attempt === DPI_MAX_ATTEMPTS
+      ) {
+        break;
+      }
+      // Transient busy → wait for the console to settle, then retry.
+      onStatus?.(
+        `PS5 is busy finishing the last install — waiting for it to be ready (attempt ${attempt}/${DPI_MAX_ATTEMPTS})…`,
+      );
+      await waitForConsoleReady(host, {
+        onWait: () => onStatus?.("Waiting for the PS5 to be ready…"),
+      });
     }
-  } catch {
-    /* best-effort restore */
+  } finally {
+    // Always restore, including a thrown readiness probe or DPI bridge error.
+    await restoreMainPayload(ip);
   }
   const ok = !!resp.ok;
   const rc = (resp.rc ?? 0) >>> 0;
@@ -1276,18 +1322,32 @@ async function runDpiDirectInstall(
     "install",
     `DPI ensure (direct): bringing up daemon on ${ip}:9040 (loads via :9021)`,
   );
-  const ens = (await invoke("dpi_ensure", { ip })) as {
+  let ens: {
     ok?: boolean;
     error?: string;
     listening?: boolean;
     sent?: boolean;
   };
+  try {
+    ens = (await invoke("dpi_ensure", { ip })) as typeof ens;
+  } catch (e) {
+    await restoreMainPayload(ip);
+    return {
+      ok: false,
+      daemonFailed: true,
+      rc: 0,
+      requestsServed: 0,
+      bytesServed: 0,
+      errMessage: `couldn't start the DPI daemon: ${pkgError(e)}`,
+    };
+  }
   log.info(
     "install",
     `DPI ensure (direct) result: ok=${ens.ok} listening=${ens.listening ?? "?"} sent=${ens.sent ?? "?"}` +
       (ens.error ? ` error="${ens.error}"` : ""),
   );
   if (!ens.ok) {
+    if (ens.sent) await restoreMainPayload(ip);
     return {
       ok: false,
       daemonFailed: true,
@@ -1304,41 +1364,33 @@ async function runDpiDirectInstall(
     requests_served?: number;
     bytes_served?: number;
   } = {};
-  for (let attempt = 1; attempt <= DPI_MAX_ATTEMPTS; attempt++) {
-    try {
-      resp = (await invoke("pkg_dpi_direct_install", {
-        ps5Addr: mgmtAddr(host),
-        sessionId,
-      })) as typeof resp;
-    } catch (e) {
-      resp = { ok: false, rc: 0, err_message: pkgError(e) };
-    }
-    const rcNow = (resp.rc ?? 0) >>> 0;
-    if (
-      resp.ok ||
-      rcNow !== DPI_TRANSIENT_BUSY_RC ||
-      attempt === DPI_MAX_ATTEMPTS
-    ) {
-      break;
-    }
-    onStatus?.(
-      `PS5 is busy finishing the last install — waiting for it to be ready (attempt ${attempt}/${DPI_MAX_ATTEMPTS})…`,
-    );
-    await waitForConsoleReady(host, {
-      onWait: () => onStatus?.("Waiting for the PS5 to be ready…"),
-    });
-  }
-  // Restore the main payload — the daemon replaced it. Best-effort.
   try {
-    const bp = (await invoke("payload_bundled_path")) as {
-      ok?: boolean;
-      path?: string;
-    };
-    if (bp?.ok && bp.path) {
-      await invoke("payload_send", { ip, path: bp.path, port: null });
+    for (let attempt = 1; attempt <= DPI_MAX_ATTEMPTS; attempt++) {
+      try {
+        resp = (await invoke("pkg_dpi_direct_install", {
+          ps5Addr: mgmtAddr(host),
+          sessionId,
+        })) as typeof resp;
+      } catch (e) {
+        resp = { ok: false, rc: 0, err_message: pkgError(e) };
+      }
+      const rcNow = (resp.rc ?? 0) >>> 0;
+      if (
+        resp.ok ||
+        rcNow !== DPI_TRANSIENT_BUSY_RC ||
+        attempt === DPI_MAX_ATTEMPTS
+      ) {
+        break;
+      }
+      onStatus?.(
+        `PS5 is busy finishing the last install — waiting for it to be ready (attempt ${attempt}/${DPI_MAX_ATTEMPTS})…`,
+      );
+      await waitForConsoleReady(host, {
+        onWait: () => onStatus?.("Waiting for the PS5 to be ready…"),
+      });
     }
-  } catch {
-    /* best-effort restore */
+  } finally {
+    await restoreMainPayload(ip);
   }
   const ok = !!resp.ok;
   const rc = (resp.rc ?? 0) >>> 0;
@@ -2481,6 +2533,7 @@ const makePkgLibraryStore = () =>
       set({ installing: true, busyNotice: null, installPending: false });
       const clearBusy = () =>
         set({ installing: false, busyNotice: null, installPending: false });
+      let servingSession: string | null = null;
       try {
         // Wait behind any active transfer — the DPI payload swap would kill
         // the transfer port mid-upload, same as install()/installExternal().
@@ -2574,19 +2627,12 @@ const makePkgLibraryStore = () =>
               `The engine wouldn't start a serving session (0x${rc.toString(16).padStart(8, "0")}).`,
           };
         }
-        const closeServingSession = async () => {
-          try {
-            await invoke("pkg_install_cancel", { session: sessionId });
-          } catch {
-            /* best-effort; the engine also age-GCs sessions */
-          }
-        };
+        servingSession = sessionId;
 
         // 3. Hand the session's pkg-host URL to the DPI daemon. The daemon
         //    pulls the pkg over HTTP; no staging copy lands on the PS5.
         const dpi = await runDpiDirectInstall(host, sessionId, onStatus);
         if (dpi.daemonFailed) {
-          await closeServingSession();
           return {
             ok: false,
             message: `${dpi.errMessage}. Upload & install can still use the PS5-local staged path instead.`,
@@ -2596,7 +2642,6 @@ const makePkgLibraryStore = () =>
           };
         }
         if (!dpi.ok) {
-          await closeServingSession();
           const rcHex = `0x${dpi.rc.toString(16).padStart(8, "0")}`;
           const blockedBeforeFetch = dpi.requestsServed === 0;
           const proxyRejected = dpi.rc === DPI_HTTP_PROXY_RC;
@@ -2618,7 +2663,6 @@ const makePkgLibraryStore = () =>
         //    async install result). The pkg-host session is still alive
         //    for this, then the engine GCs it.
         const verdict = await verifyInstallCompleted(sessionId);
-        await closeServingSession();
         if (verdict.completed) {
           pushNotification("success", `Installed ${label}`, {
             body: "Stream-install complete. The pkg was fetched over HTTP — nothing was staged on the PS5.",
@@ -2640,6 +2684,13 @@ const makePkgLibraryStore = () =>
       } catch (e) {
         return { ok: false, message: pkgError(e) };
       } finally {
+        if (servingSession) {
+          try {
+            await invoke("pkg_install_cancel", { session: servingSession });
+          } catch {
+            /* best-effort; the engine also age-GCs sessions */
+          }
+        }
         clearBusy();
       }
     },

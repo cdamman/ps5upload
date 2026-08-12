@@ -18,34 +18,52 @@
 #include <fcntl.h>
 #include <stdatomic.h>
 
+/* Max concurrent control sessions. Every accepted client must be tracked so
+ * Stop can reliably tear it down; excess clients receive 421 instead of
+ * becoming an orphan that survives a restart. */
+#define FTP_MAX_SESSIONS 32
+
+/* Forward — full struct is defined below. */
+struct ftp_session;
+
 static struct {
     _Atomic int running;
     _Atomic int connections;
-    int port;
-    int listen_fd;
+    _Atomic int port;
+    _Atomic int listen_fd;
+    _Atomic unsigned int generation;
     char root[512];
     int readonly;
     char user[64];
     char pass[64];
     pthread_t thread;
+    pthread_mutex_t lifecycle_mu;
+    /* Live sessions for stop-to-kill. Protected by sessions_mu. */
+    pthread_mutex_t sessions_mu;
+    struct ftp_session *sessions[FTP_MAX_SESSIONS];
 } g_ftp = {
     .running = 0,
     .connections = 0,
     .port = 0,
     .listen_fd = -1,
+    .generation = 0,
     .root = "/",
     .readonly = 0,
     .user = {0},
     .pass = {0},
+    .lifecycle_mu = PTHREAD_MUTEX_INITIALIZER,
+    .sessions_mu = PTHREAD_MUTEX_INITIALIZER,
 };
 
 void ftp_server_init(void) {
     atomic_store(&g_ftp.running, 0);
     atomic_store(&g_ftp.connections, 0);
+    atomic_store(&g_ftp.port, 0);
+    atomic_store(&g_ftp.listen_fd, -1);
 }
 
 static int ip_is_safe(const char *ip) {
-    if (strncmp(ip, "127.", 4) == 0) return 0;
+    if (strncmp(ip, "127.", 4) == 0) return 1;
     if (strncmp(ip, "10.", 3) == 0) return 1;
     if (strncmp(ip, "192.168.", 8) == 0) return 1;
     if (strncmp(ip, "172.", 4) == 0) {
@@ -90,9 +108,9 @@ static void send_resp(int fd, int code, const char *msg) {
 }
 
 struct ftp_session {
-    int ctrl_fd;
-    int data_fd;
-    int data_listen_fd;
+    _Atomic int ctrl_fd;
+    _Atomic int data_fd;
+    _Atomic int data_listen_fd;
     struct sockaddr_in data_addr;
     int data_offset;
     char cwd[512];
@@ -107,9 +125,72 @@ struct ftp_session {
     char transfer_type;
     char line_buf[1024];
     size_t line_len;
-    int quit;
-    volatile int abort_requested;
+    unsigned int generation;
+    _Atomic int quit;
+    _Atomic int abort_requested;
 };
+
+/* Atomically take ownership of a descriptor before closing it. Stop and the
+ * session thread can race legitimately; exchange prevents a double-close from
+ * hitting an unrelated socket after the descriptor number is reused. */
+static void ftp_close_socket(_Atomic int *slot) {
+    int fd = atomic_exchange(slot, -1);
+    if (fd < 0) return;
+    (void)shutdown(fd, SHUT_RDWR);
+    close(fd);
+}
+
+static int ftp_session_register(struct ftp_session *s) {
+    if (!s) return 0;
+    int registered = 0;
+    pthread_mutex_lock(&g_ftp.sessions_mu);
+    /* A client can be accepted immediately before Stop and its thread may not
+     * run until after a new server has started. Refuse that stale session so
+     * it cannot attach itself to the next generation. */
+    if (atomic_load(&g_ftp.running) &&
+        atomic_load(&g_ftp.generation) == s->generation) {
+        for (int i = 0; i < FTP_MAX_SESSIONS; i++) {
+            if (g_ftp.sessions[i] == NULL) {
+                g_ftp.sessions[i] = s;
+                atomic_fetch_add(&g_ftp.connections, 1);
+                registered = 1;
+                break;
+            }
+        }
+    }
+    pthread_mutex_unlock(&g_ftp.sessions_mu);
+    return registered;
+}
+
+static void ftp_session_unregister(struct ftp_session *s) {
+    if (!s) return;
+    pthread_mutex_lock(&g_ftp.sessions_mu);
+    for (int i = 0; i < FTP_MAX_SESSIONS; i++) {
+        if (g_ftp.sessions[i] == s) {
+            g_ftp.sessions[i] = NULL;
+            atomic_fetch_sub(&g_ftp.connections, 1);
+            break;
+        }
+    }
+    pthread_mutex_unlock(&g_ftp.sessions_mu);
+}
+
+/* Close every open session socket so Stop actually unblocks clients stuck in
+ * RETR/STOR. The session threads still own their struct lifetime; atomic
+ * descriptor exchange makes this safe against their normal cleanup path. */
+static void ftp_kick_all_sessions(void) {
+    pthread_mutex_lock(&g_ftp.sessions_mu);
+    for (int i = 0; i < FTP_MAX_SESSIONS; i++) {
+        struct ftp_session *s = g_ftp.sessions[i];
+        if (!s) continue;
+        atomic_store(&s->quit, 1);
+        atomic_store(&s->abort_requested, 1);
+        ftp_close_socket(&s->data_fd);
+        ftp_close_socket(&s->data_listen_fd);
+        ftp_close_socket(&s->ctrl_fd);
+    }
+    pthread_mutex_unlock(&g_ftp.sessions_mu);
+}
 
 static void normalize_path(const char *src, char *out, size_t cap) {
     char stack[64][256];
@@ -173,22 +254,23 @@ static void handle_user(struct ftp_session *s, const char *arg) {
         send_resp(s->ctrl_fd, 501, "Syntax error");
         return;
     }
-    strncpy(s->user, arg, sizeof(s->user) - 1);
+    strncpy(s->pending_user, arg, sizeof(s->pending_user) - 1);
+    s->pending_user[sizeof(s->pending_user) - 1] = '\0';
     send_resp(s->ctrl_fd, 331, "User name okay, need password");
 }
 
 static void handle_pass(struct ftp_session *s, const char *arg) {
-    if (s->user[0] == '\0') {
+    if (s->pending_user[0] == '\0') {
         send_resp(s->ctrl_fd, 503, "Login with USER first");
         return;
     }
-    if (g_ftp.user[0] != '\0') {
-        if (strcmp(s->user, g_ftp.user) != 0) {
+    if (s->user[0] != '\0') {
+        if (strcmp(s->pending_user, s->user) != 0) {
             send_resp(s->ctrl_fd, 530, "Login incorrect");
             return;
         }
         const char *supplied = arg ? arg : "";
-        if (g_ftp.pass[0] != '\0' && strcmp(supplied, g_ftp.pass) != 0) {
+        if (s->pass[0] != '\0' && strcmp(supplied, s->pass) != 0) {
             send_resp(s->ctrl_fd, 530, "Login incorrect");
             return;
         }
@@ -265,15 +347,13 @@ static void open_data_connection(struct ftp_session *s) {
             socklen_t addrlen = sizeof(addr);
             s->data_fd = accept(s->data_listen_fd, (struct sockaddr *)&addr, &addrlen);
             if (s->data_fd >= 0) {
-                close(s->data_listen_fd);
-                s->data_listen_fd = -1;
+                ftp_close_socket(&s->data_listen_fd);
                 int opt = 0x100000;
                 setsockopt(s->data_fd, SOL_SOCKET, SO_SNDBUF, &opt, sizeof(opt));
                 setsockopt(s->data_fd, SOL_SOCKET, SO_RCVBUF, &opt, sizeof(opt));
             }
         } else {
-            close(s->data_listen_fd);
-            s->data_listen_fd = -1;
+            ftp_close_socket(&s->data_listen_fd);
         }
     } else if (s->data_addr.sin_port) {
         s->data_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -284,8 +364,7 @@ static void open_data_connection(struct ftp_session *s) {
             setsockopt(s->data_fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
             if (connect(s->data_fd, (struct sockaddr *)&s->data_addr,
                         sizeof(s->data_addr)) < 0) {
-                close(s->data_fd);
-                s->data_fd = -1;
+                ftp_close_socket(&s->data_fd);
             } else {
                 int opt = 0x100000;
                 setsockopt(s->data_fd, SOL_SOCKET, SO_SNDBUF, &opt, sizeof(opt));
@@ -296,7 +375,7 @@ static void open_data_connection(struct ftp_session *s) {
 }
 
 static int require_auth(struct ftp_session *s) {
-    if (g_ftp.user[0] == '\0') return 1;
+    if (s->user[0] == '\0') return 1;
     if (s->authenticated) return 1;
     send_resp(s->ctrl_fd, 530, "Not logged in");
     return 0;
@@ -350,8 +429,7 @@ static void send_listing(struct ftp_session *s, int names_only) {
         write_all(s->data_fd, linebuf, (size_t)n + 2);
     }
     closedir(d);
-    close(s->data_fd);
-    s->data_fd = -1;
+    ftp_close_socket(&s->data_fd);
     send_resp(s->ctrl_fd, 226, "Directory send OK");
 }
 
@@ -367,7 +445,7 @@ static void handle_retr(struct ftp_session *s, const char *arg) {
     }
     char path[512];
     abs_path(s, arg, path, sizeof(path));
-    s->abort_requested = 0;
+    atomic_store(&s->abort_requested, 0);
     open_data_connection(s);
     if (s->data_fd < 0) {
         s->data_offset = 0;
@@ -376,8 +454,7 @@ static void handle_retr(struct ftp_session *s, const char *arg) {
     }
     int fd = open(path, O_RDONLY);
     if (fd < 0) {
-        close(s->data_fd);
-        s->data_fd = -1;
+        ftp_close_socket(&s->data_fd);
         s->data_offset = 0;
         send_resp(s->ctrl_fd, 550, "Failed to open file");
         return;
@@ -385,8 +462,7 @@ static void handle_retr(struct ftp_session *s, const char *arg) {
     if (s->data_offset > 0) {
         if (lseek(fd, s->data_offset, SEEK_SET) < 0) {
             close(fd);
-            close(s->data_fd);
-            s->data_fd = -1;
+            ftp_close_socket(&s->data_fd);
             s->data_offset = 0;
             send_resp(s->ctrl_fd, 550, "Failed to seek");
             return;
@@ -395,8 +471,7 @@ static void handle_retr(struct ftp_session *s, const char *arg) {
     char *buf = (char *)malloc(FTP_XFER_BUF);
     if (!buf) {
         close(fd);
-        close(s->data_fd);
-        s->data_fd = -1;
+        ftp_close_socket(&s->data_fd);
         s->data_offset = 0;
         send_resp(s->ctrl_fd, 451, "Out of memory");
         return;
@@ -405,14 +480,14 @@ static void handle_retr(struct ftp_session *s, const char *arg) {
     ssize_t n;
     int aborted = 0;
     while ((n = read(fd, buf, FTP_XFER_BUF)) > 0) {
-        if (s->abort_requested || s->data_fd < 0) { aborted = 1; break; }
+        if (atomic_load(&s->abort_requested) || s->data_fd < 0) { aborted = 1; break; }
         write_all(s->data_fd, buf, (size_t)n);
     }
     free(buf);
     close(fd);
-    if (s->data_fd >= 0) { close(s->data_fd); s->data_fd = -1; }
+    ftp_close_socket(&s->data_fd);
     s->data_offset = 0;
-    s->abort_requested = 0;
+    atomic_store(&s->abort_requested, 0);
     if (!aborted) send_resp(s->ctrl_fd, 226, "Transfer complete");
 }
 
@@ -428,7 +503,7 @@ static void handle_stor(struct ftp_session *s, const char *arg) {
     }
     char path[512];
     abs_path(s, arg, path, sizeof(path));
-    s->abort_requested = 0;
+    atomic_store(&s->abort_requested, 0);
     open_data_connection(s);
     if (s->data_fd < 0) {
         s->data_offset = 0;
@@ -441,8 +516,7 @@ static void handle_stor(struct ftp_session *s, const char *arg) {
         if (fd >= 0) {
             if (lseek(fd, s->data_offset, SEEK_SET) < 0) {
                 close(fd);
-                close(s->data_fd);
-                s->data_fd = -1;
+                ftp_close_socket(&s->data_fd);
                 s->data_offset = 0;
                 send_resp(s->ctrl_fd, 550, "Failed to seek");
                 return;
@@ -452,8 +526,7 @@ static void handle_stor(struct ftp_session *s, const char *arg) {
         fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     }
     if (fd < 0) {
-        close(s->data_fd);
-        s->data_fd = -1;
+        ftp_close_socket(&s->data_fd);
         s->data_offset = 0;
         send_resp(s->ctrl_fd, 550, "Failed to open file for writing");
         return;
@@ -461,8 +534,7 @@ static void handle_stor(struct ftp_session *s, const char *arg) {
     char *buf = (char *)malloc(FTP_XFER_BUF);
     if (!buf) {
         close(fd);
-        close(s->data_fd);
-        s->data_fd = -1;
+        ftp_close_socket(&s->data_fd);
         s->data_offset = 0;
         send_resp(s->ctrl_fd, 451, "Out of memory");
         return;
@@ -472,16 +544,16 @@ static void handle_stor(struct ftp_session *s, const char *arg) {
     off_t total = s->data_offset;
     int aborted = 0;
     while ((n = read(s->data_fd, buf, FTP_XFER_BUF)) > 0) {
-        if (s->abort_requested) { aborted = 1; break; }
+        if (atomic_load(&s->abort_requested)) { aborted = 1; break; }
         write_all(fd, buf, (size_t)n);
         total += n;
     }
     free(buf);
     if (!aborted) ftruncate(fd, total);
     close(fd);
-    if (s->data_fd >= 0) { close(s->data_fd); s->data_fd = -1; }
+    ftp_close_socket(&s->data_fd);
     s->data_offset = 0;
-    s->abort_requested = 0;
+    atomic_store(&s->abort_requested, 0);
     if (!aborted) send_resp(s->ctrl_fd, 226, "Transfer complete");
 }
 
@@ -533,8 +605,7 @@ static void handle_mlsd(struct ftp_session *s) {
         if (n > 0) write_all(s->data_fd, linebuf, (size_t)n);
     }
     closedir(d);
-    close(s->data_fd);
-    s->data_fd = -1;
+    ftp_close_socket(&s->data_fd);
     send_resp(s->ctrl_fd, 226, "Directory send OK");
 }
 
@@ -621,12 +692,10 @@ static void handle_port(struct ftp_session *s, const char *arg) {
     }
 
     if (s->data_listen_fd >= 0) {
-        close(s->data_listen_fd);
-        s->data_listen_fd = -1;
+        ftp_close_socket(&s->data_listen_fd);
     }
     if (s->data_fd >= 0) {
-        close(s->data_fd);
-        s->data_fd = -1;
+        ftp_close_socket(&s->data_fd);
     }
     memset(&s->data_addr, 0, sizeof(s->data_addr));
     s->data_addr.sin_family = AF_INET;
@@ -648,12 +717,10 @@ static void handle_opts(struct ftp_session *s, const char *arg) {
  * only in how that port is reported back to the client. */
 static int open_passive_socket(struct ftp_session *s) {
     if (s->data_listen_fd >= 0) {
-        close(s->data_listen_fd);
-        s->data_listen_fd = -1;
+        ftp_close_socket(&s->data_listen_fd);
     }
     if (s->data_fd >= 0) {
-        close(s->data_fd);
-        s->data_fd = -1;
+        ftp_close_socket(&s->data_fd);
     }
     s->data_addr.sin_port = 0;
 
@@ -845,6 +912,11 @@ static void handle_site(struct ftp_session *s, const char *args) {
     subcmd[i] = '\0';
 
     if (strcasecmp(subcmd, "MTRW") == 0) {
+#ifdef PS5UPLOAD_FTP_HOST_SELFTEST
+        /* Sony/FreeBSD nmount is unavailable on Linux/macOS. Lifecycle tests
+         * exercise the socket server, not privileged console remounting. */
+        send_resp(s->ctrl_fd, 550, "MTRW unavailable in host self-test");
+#else
         const char *targets[] = {"/preinst", "/system", "/system_ex", NULL};
         struct statfs *mnts = NULL;
         int nm = getmntinfo(&mnts, MNT_NOWAIT);
@@ -892,6 +964,7 @@ static void handle_site(struct ftp_session *s, const char *args) {
         } else {
             send_resp(s->ctrl_fd, 550, "MTRW failed (need kernel R/W?)");
         }
+#endif
         return;
     }
 
@@ -909,7 +982,7 @@ static void process_command(struct ftp_session *s, char *line) {
 
     if (strcasecmp(cmd, "USER") == 0) handle_user(s, args);
     else if (strcasecmp(cmd, "PASS") == 0) handle_pass(s, args);
-    else if (strcasecmp(cmd, "QUIT") == 0) { send_resp(s->ctrl_fd, 221, "Goodbye"); s->quit = 1; }
+    else if (strcasecmp(cmd, "QUIT") == 0) { send_resp(s->ctrl_fd, 221, "Goodbye"); atomic_store(&s->quit, 1); }
     else if (strcasecmp(cmd, "SYST") == 0) handle_syst(s);
     else if (strcasecmp(cmd, "FEAT") == 0) handle_feat(s);
     else if (strcasecmp(cmd, "OPTS") == 0) handle_opts(s, args);
@@ -937,9 +1010,8 @@ static void process_command(struct ftp_session *s, char *line) {
     else if (strcasecmp(cmd, "SITE") == 0) handle_site(s, args);
     else if (strcasecmp(cmd, "ABOR") == 0) {
         if (s->data_fd >= 0) {
-            s->abort_requested = 1;
-            close(s->data_fd);
-            s->data_fd = -1;
+            atomic_store(&s->abort_requested, 1);
+            ftp_close_socket(&s->data_fd);
             send_resp(s->ctrl_fd, 426, "Transfer aborted");
             send_resp(s->ctrl_fd, 226, "ABOR successful");
         } else {
@@ -951,8 +1023,12 @@ static void process_command(struct ftp_session *s, char *line) {
 
 static void *ftp_client_thread(void *arg) {
     struct ftp_session *s = (struct ftp_session *)arg;
-    atomic_fetch_add(&g_ftp.connections, 1);
-
+    if (!ftp_session_register(s)) {
+        send_resp(s->ctrl_fd, 421, "Too many FTP connections");
+        ftp_close_socket(&s->ctrl_fd);
+        free(s);
+        return NULL;
+    }
     struct timeval tv;
     tv.tv_sec = 300;
     tv.tv_usec = 0;
@@ -961,7 +1037,9 @@ static void *ftp_client_thread(void *arg) {
     send_resp(s->ctrl_fd, 220, "PS5 FTP Server ready");
 
     char buf[1024];
-    while (1) {
+    while (atomic_load(&g_ftp.running) &&
+           atomic_load(&g_ftp.generation) == s->generation &&
+           !atomic_load(&s->quit)) {
         ssize_t n = read(s->ctrl_fd, buf, sizeof(buf));
         if (n <= 0) break;
 
@@ -974,7 +1052,9 @@ static void *ftp_client_thread(void *arg) {
             if (c == '\n') {
                 s->line_buf[s->line_len] = '\0';
                 process_command(s, s->line_buf);
-                if (s->quit) goto done;
+                if (atomic_load(&s->quit) ||
+                    !atomic_load(&g_ftp.running) ||
+                    atomic_load(&g_ftp.generation) != s->generation) goto done;
                 s->line_len = 0;
             } else {
                 s->line_buf[s->line_len++] = c;
@@ -983,24 +1063,48 @@ static void *ftp_client_thread(void *arg) {
     }
 done:
 
-    if (s->data_fd >= 0) close(s->data_fd);
-    if (s->data_listen_fd >= 0) close(s->data_listen_fd);
-    close(s->ctrl_fd);
-    atomic_fetch_sub(&g_ftp.connections, 1);
+    /* Keep the session registered until every descriptor is detached. Stop
+     * holds the registry lock while walking pointers, so it can never observe
+     * a freed struct. */
+    ftp_close_socket(&s->data_fd);
+    ftp_close_socket(&s->data_listen_fd);
+    ftp_close_socket(&s->ctrl_fd);
+    ftp_session_unregister(s);
     free(s);
     return NULL;
 }
 
+struct ftp_listener_ctx {
+    int listen_fd;
+    unsigned int generation;
+    char root[512];
+    int readonly;
+    char user[64];
+    char pass[64];
+};
+
 static void *ftp_listen_thread(void *arg) {
-    (void)arg;
-    int listen_fd = g_ftp.listen_fd;
-    while (atomic_load(&g_ftp.running)) {
+    struct ftp_listener_ctx *ctx = (struct ftp_listener_ctx *)arg;
+    int listen_fd = ctx->listen_fd;
+    unsigned int generation = ctx->generation;
+    while (atomic_load(&g_ftp.running) &&
+           atomic_load(&g_ftp.generation) == generation) {
         struct sockaddr_in client_addr;
         socklen_t addrlen = sizeof(client_addr);
         int client_fd = accept(listen_fd, (struct sockaddr *)&client_addr, &addrlen);
         if (client_fd < 0) {
-            if (!atomic_load(&g_ftp.running)) break;
+            if (!atomic_load(&g_ftp.running) ||
+                atomic_load(&g_ftp.generation) != generation) break;
             continue;
+        }
+
+        /* A Stop followed immediately by Start may reuse the same numeric
+         * descriptor. Generation ownership prevents the old listener from
+         * accepting clients for the new server instance. */
+        if (!atomic_load(&g_ftp.running) ||
+            atomic_load(&g_ftp.generation) != generation) {
+            close(client_fd);
+            break;
         }
 
         char ip[INET_ADDRSTRLEN];
@@ -1015,20 +1119,24 @@ static void *ftp_listen_thread(void *arg) {
             close(client_fd);
             continue;
         }
-        s->ctrl_fd = client_fd;
-        s->data_fd = -1;
-        s->data_listen_fd = -1;
+        atomic_store(&s->ctrl_fd, client_fd);
+        atomic_store(&s->data_fd, -1);
+        atomic_store(&s->data_listen_fd, -1);
         s->data_offset = 0;
         s->transfer_type = 'I';
         s->line_len = 0;
-        s->quit = 0;
+        s->generation = generation;
+        atomic_store(&s->quit, 0);
+        atomic_store(&s->abort_requested, 0);
         s->rename_path[0] = '\0';
         s->pending_user[0] = '\0';
-        snprintf(s->cwd, sizeof(s->cwd), "%s", g_ftp.root);
-        snprintf(s->root, sizeof(s->root), "%s", g_ftp.root);
-        s->readonly = g_ftp.readonly;
-        strncpy(s->user, g_ftp.user, sizeof(s->user) - 1);
-        strncpy(s->pass, g_ftp.pass, sizeof(s->pass) - 1);
+        snprintf(s->cwd, sizeof(s->cwd), "%s", ctx->root);
+        snprintf(s->root, sizeof(s->root), "%s", ctx->root);
+        s->readonly = ctx->readonly;
+        strncpy(s->user, ctx->user, sizeof(s->user) - 1);
+        s->user[sizeof(s->user) - 1] = '\0';
+        strncpy(s->pass, ctx->pass, sizeof(s->pass) - 1);
+        s->pass[sizeof(s->pass) - 1] = '\0';
 
         pthread_t tid;
         pthread_attr_t attr;
@@ -1042,6 +1150,7 @@ static void *ftp_listen_thread(void *arg) {
         }
         pthread_attr_destroy(&attr);
     }
+    free(ctx);
     return NULL;
 }
 
@@ -1051,10 +1160,36 @@ int ftp_server_start(int port, const char *root, int readonly,
     if (port == 0) {
         return ftp_server_stop(resp, cap, written);
     }
+    if (port < 1 || port > 65535) {
+        int n = snprintf(resp, cap,
+            "{\"ok\":false,\"error\":\"invalid_port\",\"port\":%d}", port);
+        if (written) *written = (size_t)(n > 0 ? n : 0);
+        return 0;
+    }
+
+    pthread_mutex_lock(&g_ftp.lifecycle_mu);
     if (atomic_load(&g_ftp.running)) {
         int n = snprintf(resp, cap,
-            "{\"ok\":false,\"error\":\"already_running\",\"port\":%d}", g_ftp.port);
+            "{\"ok\":false,\"error\":\"already_running\",\"port\":%d}",
+            atomic_load(&g_ftp.port));
         if (written) *written = (size_t)(n > 0 ? n : 0);
+        pthread_mutex_unlock(&g_ftp.lifecycle_mu);
+        return 0;
+    }
+
+    /* Do not reuse numeric descriptors while a stopped session can still
+     * have an in-flight read/write using the old value. Session registration
+     * and this check share sessions_mu, and stale-generation clients cannot
+     * register after the new generation starts. */
+    pthread_mutex_lock(&g_ftp.sessions_mu);
+    int draining = atomic_load(&g_ftp.connections) > 0;
+    pthread_mutex_unlock(&g_ftp.sessions_mu);
+    if (draining) {
+        int n = snprintf(resp, cap,
+            "{\"ok\":false,\"error\":\"stopping\",\"connections\":%d}",
+            atomic_load(&g_ftp.connections));
+        if (written) *written = (size_t)(n > 0 ? n : 0);
+        pthread_mutex_unlock(&g_ftp.lifecycle_mu);
         return 0;
     }
 
@@ -1062,6 +1197,7 @@ int ftp_server_start(int port, const char *root, int readonly,
     if (fd < 0) {
         int n = snprintf(resp, cap, "{\"ok\":false,\"error\":\"socket_failed\"}");
         if (written) *written = (size_t)(n > 0 ? n : 0);
+        pthread_mutex_unlock(&g_ftp.lifecycle_mu);
         return 0;
     }
     int opt = 1;
@@ -1076,17 +1212,17 @@ int ftp_server_start(int port, const char *root, int readonly,
         close(fd);
         int n = snprintf(resp, cap, "{\"ok\":false,\"error\":\"bind_failed\",\"port\":%d}", port);
         if (written) *written = (size_t)(n > 0 ? n : 0);
+        pthread_mutex_unlock(&g_ftp.lifecycle_mu);
         return 0;
     }
     if (listen(fd, 5) < 0) {
         close(fd);
         int n = snprintf(resp, cap, "{\"ok\":false,\"error\":\"listen_failed\"}");
         if (written) *written = (size_t)(n > 0 ? n : 0);
+        pthread_mutex_unlock(&g_ftp.lifecycle_mu);
         return 0;
     }
 
-    g_ftp.listen_fd = fd;
-    g_ftp.port = port;
     g_ftp.readonly = readonly;
     if (root && root[0]) {
         strncpy(g_ftp.root, root, sizeof(g_ftp.root) - 1);
@@ -1096,21 +1232,45 @@ int ftp_server_start(int port, const char *root, int readonly,
     }
     if (user && user[0]) {
         strncpy(g_ftp.user, user, sizeof(g_ftp.user) - 1);
+        g_ftp.user[sizeof(g_ftp.user) - 1] = '\0';
     } else {
         g_ftp.user[0] = '\0';
     }
     if (pass && pass[0]) {
         strncpy(g_ftp.pass, pass, sizeof(g_ftp.pass) - 1);
+        g_ftp.pass[sizeof(g_ftp.pass) - 1] = '\0';
     } else {
         g_ftp.pass[0] = '\0';
     }
+
+    struct ftp_listener_ctx *ctx = calloc(1, sizeof(*ctx));
+    if (!ctx) {
+        close(fd);
+        int n = snprintf(resp, cap, "{\"ok\":false,\"error\":\"out_of_memory\"}");
+        if (written) *written = (size_t)(n > 0 ? n : 0);
+        pthread_mutex_unlock(&g_ftp.lifecycle_mu);
+        return 0;
+    }
+    ctx->listen_fd = fd;
+    ctx->generation = atomic_fetch_add(&g_ftp.generation, 1) + 1;
+    snprintf(ctx->root, sizeof(ctx->root), "%s", g_ftp.root);
+    ctx->readonly = g_ftp.readonly;
+    snprintf(ctx->user, sizeof(ctx->user), "%s", g_ftp.user);
+    snprintf(ctx->pass, sizeof(ctx->pass), "%s", g_ftp.pass);
+
+    atomic_store(&g_ftp.listen_fd, fd);
+    atomic_store(&g_ftp.port, port);
     atomic_store(&g_ftp.running, 1);
 
-    if (pthread_create(&g_ftp.thread, NULL, ftp_listen_thread, NULL) != 0) {
-        close(fd);
+    if (pthread_create(&g_ftp.thread, NULL, ftp_listen_thread, ctx) != 0) {
         atomic_store(&g_ftp.running, 0);
+        atomic_fetch_add(&g_ftp.generation, 1);
+        ftp_close_socket(&g_ftp.listen_fd);
+        atomic_store(&g_ftp.port, 0);
+        free(ctx);
         int n = snprintf(resp, cap, "{\"ok\":false,\"error\":\"thread_failed\"}");
         if (written) *written = (size_t)(n > 0 ? n : 0);
+        pthread_mutex_unlock(&g_ftp.lifecycle_mu);
         return 0;
     }
     pthread_detach(g_ftp.thread);
@@ -1118,33 +1278,38 @@ int ftp_server_start(int port, const char *root, int readonly,
     int n = snprintf(resp, cap, "{\"ok\":true,\"port\":%d,\"root\":\"%s\"}",
                      port, g_ftp.root);
     if (written) *written = (size_t)(n > 0 ? n : 0);
+    pthread_mutex_unlock(&g_ftp.lifecycle_mu);
     return 0;
 }
 
 int ftp_server_stop(char *resp, size_t cap, size_t *written) {
-    if (!atomic_load(&g_ftp.running)) {
-        int n = snprintf(resp, cap, "{\"ok\":true,\"port\":0,\"was_running\":false}");
-        if (written) *written = (size_t)(n > 0 ? n : 0);
-        return 0;
-    }
+    pthread_mutex_lock(&g_ftp.lifecycle_mu);
+    int was = atomic_load(&g_ftp.running) ? 1 : 0;
+    /* Always tear down sockets even if the flag is already false — a
+     * wedged accept or orphaned session used to leave the port open while
+    * status reported stopped, so Stop looked broken. */
     atomic_store(&g_ftp.running, 0);
-    if (g_ftp.listen_fd >= 0) {
-        close(g_ftp.listen_fd);
-        g_ftp.listen_fd = -1;
-    }
-    g_ftp.port = 0;
-    int n = snprintf(resp, cap, "{\"ok\":true,\"port\":0,\"was_running\":true}");
+    atomic_fetch_add(&g_ftp.generation, 1);
+    ftp_close_socket(&g_ftp.listen_fd);
+    ftp_kick_all_sessions();
+    atomic_store(&g_ftp.port, 0);
+    int n = snprintf(resp, cap,
+        "{\"ok\":true,\"port\":0,\"was_running\":%s}",
+        was ? "true" : "false");
     if (written) *written = (size_t)(n > 0 ? n : 0);
+    pthread_mutex_unlock(&g_ftp.lifecycle_mu);
     return 0;
 }
 
 int ftp_server_status(char *resp, size_t cap, size_t *written) {
+    pthread_mutex_lock(&g_ftp.lifecycle_mu);
     int n = snprintf(resp, cap,
         "{\"running\":%s,\"port\":%d,\"connections\":%d,\"root\":\"%s\"}",
         atomic_load(&g_ftp.running) ? "true" : "false",
-        g_ftp.port,
+        atomic_load(&g_ftp.port),
         atomic_load(&g_ftp.connections),
         g_ftp.root);
     if (written) *written = (size_t)(n > 0 ? n : 0);
+    pthread_mutex_unlock(&g_ftp.lifecycle_mu);
     return 0;
 }

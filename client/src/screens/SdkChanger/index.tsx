@@ -6,7 +6,7 @@ import { useConnectionStore } from "../../state/connection";
 import { transferAddr } from "../../lib/addr";
 import { humanizePs5Error } from "../../lib/humanizeError";
 import { sdkScan, sdkPatch, sdkRestore, type SdkTitle } from "../../api/ps5";
-import { PS5_FIRMWARES, fwToSdkHex, sdkHexToFw } from "../../lib/fwVersion";
+import { PS5_FIRMWARES, fwToSdkHex, sdkHexToFw } from "../../lib/sdkVersionHex";
 
 export default function SdkChangerScreen() {
   const tr = useTr();
@@ -61,7 +61,7 @@ export default function SdkChangerScreen() {
       if (resp.ok) {
         // The payload reports how many sites it actually rewrote, so the
         // result is verifiable rather than asserted.
-        const detail = (resp as { detail?: string }).detail;
+        const detail = resp.detail;
         setPatchResult({
           ok: true,
           msg: detail
@@ -235,6 +235,19 @@ export default function SdkChangerScreen() {
                         </code>
                       </span>
                     </div>
+                    <div className="mt-1 truncate text-xs text-[var(--color-muted)]">
+                      {t.patchable ? (
+                        <>
+                          {tr("sdk_source", undefined, "Source")}: {t.source}
+                        </>
+                      ) : (
+                        tr(
+                          "sdk_pkg_unpatchable",
+                          undefined,
+                          "Package-installed or unavailable source — cannot safely patch in place",
+                        )
+                      )}
+                    </div>
                   </div>
                   {patchTitleId === t.title_id ? (
                     <div className="flex flex-wrap items-center gap-2">
@@ -283,6 +296,16 @@ export default function SdkChangerScreen() {
                           setPatchTitleId(t.title_id);
                           setPatchResult(null);
                         }}
+                        disabled={!t.patchable}
+                        title={
+                          t.patchable
+                            ? tr("sdk_patch", undefined, "Patch")
+                            : tr(
+                                "sdk_pkg_unpatchable",
+                                undefined,
+                                "Package-installed or unavailable source — cannot safely patch in place",
+                              )
+                        }
                       >
                         <Wrench size={14} /> {tr("sdk_patch", undefined, "Patch")}
                       </Button>

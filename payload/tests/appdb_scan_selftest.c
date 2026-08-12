@@ -263,6 +263,43 @@ int main(void) {
     CHECK(n == 1);
     if (n == 1) CHECK(strcmp(out[0].name, "Padded Title") == 0);
 
+
+    /* ids-only mode: install verification (appdb_has_title) only asks
+     * whether a title id is present. A row carrying an id but no usable
+     * name must still be reported there, or a real install reads as a
+     * failure. The default mode keeps skipping it, because "Recently
+     * Played" must not show nameless rows. */
+    {
+        const char *row[] = {"PPSA03000", "cid:scp:000000000098b7b7"};
+        db_reset();
+        db_add(row, 2);
+        CHECK(appdb_scan_entries(g_db, g_db_len, out, 8) == 0);
+        n = appdb_scan_entries_ex(g_db, g_db_len, out, 8, 1);
+        CHECK(n == 1);
+        if (n == 1) {
+            CHECK(strcmp(out[0].title_id, "PPSA03000") == 0);
+            CHECK(out[0].name[0] == '\0');
+        }
+    }
+
+    /* ids-only must not change rows that do have a name. */
+    {
+        const char *row[] = {"PPSA03001", "Astro's Playroom"};
+        db_reset();
+        db_add(row, 2);
+        n = appdb_scan_entries_ex(g_db, g_db_len, out, 8, 1);
+        CHECK(n == 1);
+        if (n == 1) CHECK(strcmp(out[0].name, "Astro's Playroom") == 0);
+    }
+
+    /* A row with no title id at all is still not a title row. */
+    {
+        const char *row[] = {"cid:scp:0000000000000001", "Some Metadata"};
+        db_reset();
+        db_add(row, 2);
+        CHECK(appdb_scan_entries_ex(g_db, g_db_len, out, 8, 1) == 0);
+    }
+
     printf("appdb_scan_selftest: %s\n", failures == 0 ? "ALL PASS" : "FAILED");
     return failures == 0 ? 0 : 1;
 }

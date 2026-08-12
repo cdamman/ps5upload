@@ -11,7 +11,7 @@
 //! wrapped child without silently descending into it — matches the
 //! "root-only detection, but tell the user" UX decision.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 /// Classify a host path so the renderer can route drag-drop into the
 /// right picker branch (file vs folder). Keeps the fs-plugin scope out
@@ -35,8 +35,10 @@ pub async fn inspect_folder(path: String) -> serde_json::Value {
         move || match ps5upload_core::game_meta::inspect_folder(&p) {
             Ok(r) => {
                 let needs_hint = r.meta_source == "none";
+                // Shared with the engine's /api/local/inspect-folder so
+                // desktop and browser give the same answer.
                 let hint = if needs_hint {
-                    wrapped_game_hint(&p)
+                    ps5upload_core::game_meta::wrapped_game_hint(&p)
                 } else {
                     None
                 };
@@ -51,37 +53,4 @@ pub async fn inspect_folder(path: String) -> serde_json::Value {
     )
     .await
     .unwrap_or_else(|e| serde_json::json!({ "ok": false, "error": format!("join: {e}") }))
-}
-
-/// If `root` has exactly one subdirectory (ignoring hidden entries)
-/// and that subdirectory parses as a game, return a lightweight hint
-/// so the UI can suggest "did you mean `<child>`?". We deliberately
-/// do NOT recurse further — wrapped-twice is almost certainly a
-/// user-packing mistake and auto-descending hides what's uploaded.
-fn wrapped_game_hint(root: &Path) -> Option<serde_json::Value> {
-    let rd = std::fs::read_dir(root).ok()?;
-    let mut subdirs: Vec<PathBuf> = Vec::new();
-    for entry in rd.flatten() {
-        let name = entry.file_name();
-        let name_str = name.to_string_lossy();
-        if name_str.starts_with('.') {
-            continue;
-        }
-        if entry.file_type().ok()?.is_dir() {
-            subdirs.push(entry.path());
-            if subdirs.len() > 1 {
-                return None;
-            }
-        }
-    }
-    let child = subdirs.into_iter().next()?;
-    let meta = ps5upload_core::game_meta::inspect_folder(&child).ok()?;
-    if meta.meta_source == "none" {
-        return None;
-    }
-    Some(serde_json::json!({
-        "path": child.to_string_lossy(),
-        "title": meta.title,
-        "title_id": meta.title_id,
-    }))
 }

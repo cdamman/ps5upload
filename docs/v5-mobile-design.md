@@ -1,5 +1,10 @@
 # ps5upload v5.0 — Mobile / Android Design (Revised)
 
+> **Status: historical.** This document is kept for the reasoning
+> behind decisions that have since shipped. It describes intent at the
+> time of writing, not current behaviour — check the code, `CHANGELOG.md`
+> or `FAQ.md` before relying on anything here.
+
 > **Scope.** This document consolidates every mobile-specific decision
 > spread across the four revised design docs (`game-hub-revised-
 > design.md`, `v5-file-browser-redesign.md`, `v5-task-system.md`,

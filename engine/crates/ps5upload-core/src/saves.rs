@@ -101,3 +101,61 @@ pub fn list_videos(addr: &str) -> Result<ScreenshotList> {
     let parsed: ScreenshotList = serde_json::from_slice(&resp)?;
     Ok(parsed)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every field here is required, so a payload-side rename is a parse
+    /// error rather than a silent zero — which is the behaviour we want
+    /// for a list the user chooses files from. These pin the shape.
+    #[test]
+    fn parses_a_save_list_with_both_platforms() {
+        let l: SaveList = serde_json::from_str(
+            r#"{"saves":[
+                {"title_id":"CUSA00900","user_id":1,"path":"/user/home/1/savedata/CUSA00900",
+                 "size":4096,"mtime":1786320000,"kind":"ps4"},
+                {"title_id":"PPSA01325","user_id":1,"path":"/user/home/1/savedata/PPSA01325",
+                 "size":8192,"mtime":1786320001,"kind":"ps5"}
+            ]}"#,
+        )
+        .unwrap();
+        assert_eq!(l.saves.len(), 2);
+        assert_eq!(l.saves[0].kind, "ps4");
+        assert_eq!(l.saves[1].title_id, "PPSA01325");
+    }
+
+    #[test]
+    fn parses_an_empty_save_list() {
+        let l: SaveList = serde_json::from_str(r#"{"saves":[]}"#).unwrap();
+        assert!(l.saves.is_empty());
+    }
+
+    /// A camelCase key is the mistake this codebase has actually made —
+    /// the payload must emit snake_case. Here it fails loudly, which is
+    /// the desired outcome for required fields.
+    #[test]
+    fn a_camel_case_key_is_a_parse_error_not_a_silent_zero() {
+        let r = serde_json::from_str::<SaveList>(
+            r#"{"saves":[{"titleId":"CUSA00900","user_id":1,"path":"/p",
+                          "size":1,"mtime":1,"kind":"ps4"}]}"#,
+        );
+        assert!(r.is_err(), "titleId should not deserialize as title_id");
+    }
+
+    /// Screenshots and video clips share this shape; `items` is the
+    /// field the payload emits for both.
+    #[test]
+    fn parses_a_capture_listing() {
+        let s: ScreenshotList = serde_json::from_str(
+            r#"{"items":[{"path":"/data/av_contents/x.jpg","size":204800,"mtime":1786320000}]}"#,
+        )
+        .unwrap();
+        assert_eq!(s.items.len(), 1);
+        assert_eq!(s.items[0].path, "/data/av_contents/x.jpg");
+        assert_eq!(s.items[0].size, 204800);
+
+        let empty: ScreenshotList = serde_json::from_str(r#"{"items":[]}"#).unwrap();
+        assert!(empty.items.is_empty());
+    }
+}

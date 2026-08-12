@@ -131,7 +131,7 @@ export default function FtpServerScreen() {
                 label={tr("ftp_port_label", undefined, "Port")}
                 type="number"
                 value={port}
-                onChange={(e) => setPort(parseInt(e.target.value) || 2121)}
+                onChange={(e) => setPort(parseInt(e.target.value) || 2122)}
                 min={1}
                 max={65535}
                 inputMode="numeric"

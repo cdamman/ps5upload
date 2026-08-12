@@ -1,5 +1,10 @@
 /**
- * PS5 firmware version encoding.
+ * Firmware version <-> the BCD word a title records.
+ *
+ * Distinct from ps5Firmware.ts, which reads the running console's version
+ * out of its kernel build string. This one converts between "9.60" and
+ * the 0x09600000 that param.json and the SDK offset table use — the two
+ * were easy to confuse when both were named for "firmware".
  *
  * Versions are stored BCD-style — the decimal digits become hex digits,
  * so 9.60 is `0x09600000`, not `0x09060000`. The console agrees: FW 9.60

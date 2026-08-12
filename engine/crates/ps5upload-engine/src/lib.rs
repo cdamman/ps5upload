@@ -574,6 +574,11 @@ fn walk_plan(root: &std::path::Path, excludes: &[String]) -> (u64, Vec<PlannedFi
 struct TickerContext {
     started_at_ms: u64,
     total_bytes: u64,
+    /// Transfers such as SMB staging discover their total only after an
+    /// asynchronous preparation phase. When present, this atomic becomes the
+    /// authoritative denominator and prevents a ticker created with total=0
+    /// from overwriting the later real total.
+    dynamic_total_bytes: Option<Arc<AtomicU64>>,
     skipped_files: u64,
     skipped_bytes: u64,
 }
@@ -608,6 +613,7 @@ fn spawn_progress_ticker(
         let mut last_files = u64::MAX;
         let mut last_ff = u64::MAX;
         let mut last_bf = u64::MAX;
+        let mut last_total = u64::MAX;
         loop {
             interval.tick().await;
             // `Acquire` pairs with the `Release` store in
@@ -632,9 +638,13 @@ fn spawn_progress_ticker(
             // exceed the target, so cap it (when the total is known); the bar
             // pins at 100% instead of overshooting. Dedup below then also sees
             // a steady value once capped, so it stops emitting noise ticks.
+            let total_bytes = ctx
+                .dynamic_total_bytes
+                .as_ref()
+                .map_or(ctx.total_bytes, |total| total.load(Ordering::Acquire));
             let raw_bytes = progress.load(Ordering::Relaxed);
-            let bytes_sent = if ctx.total_bytes > 0 {
-                raw_bytes.min(ctx.total_bytes)
+            let bytes_sent = if total_bytes > 0 {
+                raw_bytes.min(total_bytes)
             } else {
                 raw_bytes
             };
@@ -653,6 +663,7 @@ fn spawn_progress_ticker(
                 && files_processing == last_files
                 && files_finalized == last_ff
                 && bytes_finalized == last_bf
+                && total_bytes == last_total
             {
                 continue;
             }
@@ -660,6 +671,7 @@ fn spawn_progress_ticker(
             last_files = files_processing;
             last_ff = files_finalized;
             last_bf = bytes_finalized;
+            last_total = total_bytes;
             // Mutate in place so the handler's initial `files` list is
             // preserved across ticks — we no longer carry it in the ctx.
             let maybe_snapshot = {
@@ -682,7 +694,7 @@ fn spawn_progress_ticker(
                         ..
                     }) => {
                         *b = bytes_sent;
-                        *t = ctx.total_bytes;
+                        *t = total_bytes;
                         *s = ctx.started_at_ms;
                         *sf = ctx.skipped_files;
                         *sb = ctx.skipped_bytes;
@@ -3204,6 +3216,14 @@ struct SmbTransferReq {
     bandwidth_cap_mbps: Option<f64>,
 }
 
+struct SmbStageCleanup(std::path::PathBuf);
+
+impl Drop for SmbStageCleanup {
+    fn drop(&mut self) {
+        smb::cleanup_stage(&self.0);
+    }
+}
+
 async fn smb_transfer_handler(
     State(state): State<AppState>,
     Json(req): Json<SmbTransferReq>,
@@ -3219,12 +3239,8 @@ async fn smb_transfer_handler(
     }
     // PS5 dest must stay under the usual writable roots.
     let dest_root = req.dest_root.trim().to_string();
-    if !dest_root.starts_with('/') {
-        return json_err(
-            StatusCode::BAD_REQUEST,
-            "dest_root must be an absolute PS5 path",
-        )
-        .into_response();
+    if let Err((code, msg)) = validate_meta_path(&dest_root) {
+        return json_err(code, format!("invalid dest_root: {msg}")).into_response();
     }
 
     let addr = req.addr.unwrap_or_else(|| state.default_ps5_addr.clone());
@@ -3245,10 +3261,12 @@ async fn smb_transfer_handler(
     let progress_files = Arc::new(AtomicU64::new(0));
     let progress_files_finalized = Arc::new(AtomicU64::new(0));
     let progress_bytes_finalized = Arc::new(AtomicU64::new(0));
+    let dynamic_total_bytes = Arc::new(AtomicU64::new(0));
     // total_bytes unknown until staging finishes — seed 0 so the UI shows activity.
     let ctx = TickerContext {
         started_at_ms,
         total_bytes: 0,
+        dynamic_total_bytes: Some(Arc::clone(&dynamic_total_bytes)),
         skipped_files: 0,
         skipped_bytes: 0,
     };
@@ -3293,6 +3311,7 @@ async fn smb_transfer_handler(
     };
 
     tokio::spawn(async move {
+        let _stage_cleanup = SmbStageCleanup(stage_dir.clone());
         let _stop_guard = TickerStopGuard::new(stop_ticker);
         let mut fail_guard =
             JobFailOnDropGuard::new(Arc::clone(&jobs), events_tx.clone(), job_id, started_at_ms);
@@ -3327,14 +3346,18 @@ async fn smb_transfer_handler(
         let file_count = staged.file_count;
         let basename = staged.basename.clone();
 
-        // Refresh Running with real totals after stage so the progress bar has a denominator.
+        // Switch the shared counter from SMB-download bytes to FTX2 wire bytes.
+        // Publish the denominator through the ticker's dynamic total so its
+        // next tick cannot restore the initial zero over this Running state.
+        progress.store(0, Ordering::Release);
+        dynamic_total_bytes.store(total_bytes, Ordering::Release);
         set_job(
             &jobs,
             &events_tx,
             job_id,
             JobState::Running {
                 started_at_ms,
-                bytes_sent: progress.load(Ordering::Relaxed),
+                bytes_sent: 0,
                 total_bytes,
                 files: vec![PlannedFile {
                     rel_path: basename.clone(),
@@ -3348,9 +3371,6 @@ async fn smb_transfer_handler(
                 bytes_finalized: 0,
             },
         );
-        // Reset progress for the FTX2 phase so the bar reflects wire bytes.
-        progress.store(0, Ordering::Relaxed);
-
         let tx_id = match parse_or_random_tx_id(None) {
             Ok(id) => id,
             Err(e) => {
@@ -3544,6 +3564,7 @@ async fn transfer_file_handler(
     let ctx = TickerContext {
         started_at_ms,
         total_bytes,
+        dynamic_total_bytes: None,
         skipped_files: 0,
         skipped_bytes: 0,
     };
@@ -3820,6 +3841,7 @@ async fn transfer_dir_handler(
     let ctx = TickerContext {
         started_at_ms,
         total_bytes,
+        dynamic_total_bytes: None,
         skipped_files: 0,
         skipped_bytes: 0,
     };
@@ -3943,6 +3965,57 @@ async fn transfer_dir_handler(
 /// cold-cache HDD, or had returned successfully after the client timeout
 /// fired. Entry + outcome + duration logs make the next report trivially
 /// diagnosable from engine.log alone.
+#[derive(Deserialize)]
+struct LocalPathQuery {
+    path: String,
+}
+
+/// GET /api/local/path-kind — classify a path on the engine's machine.
+///
+/// The desktop app answers this in-process via a Tauri command. The
+/// browser UI has no such thing, so the Upload screen's drag-drop router
+/// had nothing to call and threw BrowserUnsupportedError (issue #262).
+async fn local_path_kind_handler(Query(q): Query<LocalPathQuery>) -> impl IntoResponse {
+    let kind = match std::fs::metadata(&q.path) {
+        Ok(md) if md.is_dir() => "folder",
+        Ok(md) if md.is_file() => "file",
+        Ok(_) => "other",
+        Err(_) => "missing",
+    };
+    (StatusCode::OK, Json(serde_json::json!({ "kind": kind }))).into_response()
+}
+
+/// GET /api/local/inspect-folder — preview a game folder on the engine's
+/// machine, matching the desktop command's response shape exactly so the
+/// renderer needs no branch of its own.
+async fn local_inspect_folder_handler(Query(q): Query<LocalPathQuery>) -> impl IntoResponse {
+    let path = q.path;
+    let r = tokio::task::spawn_blocking(move || {
+        let p = std::path::Path::new(&path);
+        match ps5upload_core::game_meta::inspect_folder(p) {
+            Ok(r) => {
+                // Only worth hinting when the folder is not itself a game.
+                let hint = if r.meta_source == "none" {
+                    ps5upload_core::game_meta::wrapped_game_hint(p)
+                } else {
+                    None
+                };
+                serde_json::json!({ "ok": true, "result": r, "wrapped_hint": hint })
+            }
+            Err(e) => serde_json::json!({ "ok": false, "error": format!("{e:#}") }),
+        }
+    })
+    .await;
+    match r {
+        Ok(v) => (StatusCode::OK, Json(v)).into_response(),
+        Err(e) => (
+            StatusCode::OK,
+            Json(serde_json::json!({ "ok": false, "error": format!("join: {e}") })),
+        )
+            .into_response(),
+    }
+}
+
 #[derive(Deserialize)]
 struct BpsInspectReq {
     patch_path: String,
@@ -4283,6 +4356,7 @@ async fn transfer_zip_handler(
     let ctx = TickerContext {
         started_at_ms,
         total_bytes,
+        dynamic_total_bytes: None,
         skipped_files: 0,
         skipped_bytes: 0,
     };
@@ -5586,6 +5660,7 @@ async fn transfer_7z_handler(
     let ctx = TickerContext {
         started_at_ms,
         total_bytes,
+        dynamic_total_bytes: None,
         skipped_files: 0,
         skipped_bytes: 0,
     };
@@ -5789,6 +5864,7 @@ async fn transfer_rar_handler(
     let ctx = TickerContext {
         started_at_ms,
         total_bytes,
+        dynamic_total_bytes: None,
         skipped_files: 0,
         skipped_bytes: 0,
     };
@@ -6009,6 +6085,7 @@ async fn transfer_file_list_handler(
     let ctx = TickerContext {
         started_at_ms,
         total_bytes,
+        dynamic_total_bytes: None,
         skipped_files: 0,
         skipped_bytes: 0,
     };
@@ -6312,6 +6389,7 @@ async fn transfer_download_handler(
     let ctx = TickerContext {
         started_at_ms,
         total_bytes,
+        dynamic_total_bytes: None,
         skipped_files: 0,
         skipped_bytes: 0,
     };
@@ -6513,6 +6591,7 @@ async fn transfer_download_zip_handler(
     let ctx = TickerContext {
         started_at_ms,
         total_bytes,
+        dynamic_total_bytes: None,
         skipped_files: 0,
         skipped_bytes: 0,
     };
@@ -6915,6 +6994,7 @@ async fn transfer_dir_reconcile_handler(
         let ctx = TickerContext {
             started_at_ms,
             total_bytes,
+            dynamic_total_bytes: None,
             skipped_files: skipped_files_count,
             skipped_bytes: skipped_bytes_count,
         };
@@ -7454,6 +7534,11 @@ async fn run(cfg: EngineConfig) -> anyhow::Result<()> {
         .route("/api/transfer/file", post(transfer_file_handler))
         .route("/api/transfer/dir", post(transfer_dir_handler))
         .route("/api/transfer/zip", post(transfer_zip_handler))
+        .route("/api/local/path-kind", get(local_path_kind_handler))
+        .route(
+            "/api/local/inspect-folder",
+            get(local_inspect_folder_handler),
+        )
         .route("/api/bps/inspect", post(bps_inspect_handler))
         .route("/api/bps/apply", post(bps_apply_handler))
         .route("/api/zip/inspect", post(zip_inspect_handler))
@@ -7848,6 +7933,65 @@ mod cancel_registry_tests {
 #[cfg(test)]
 mod helpers_tests {
     use super::*;
+
+    #[tokio::test]
+    async fn progress_ticker_adopts_a_late_discovered_total() {
+        let job_id = Uuid::new_v4();
+        let jobs = Arc::new(Mutex::new(HashMap::from([(
+            job_id,
+            JobState::Running {
+                started_at_ms: 1,
+                bytes_sent: 0,
+                total_bytes: 0,
+                files: vec![],
+                skipped_files: 0,
+                skipped_bytes: 0,
+                files_processing: 0,
+                files_finalized: 0,
+                files_finalizing_total: 0,
+                bytes_finalized: 0,
+            },
+        )])));
+        let (events_tx, _) = broadcast::channel::<String>(8);
+        let progress = Arc::new(AtomicU64::new(37));
+        let dynamic_total = Arc::new(AtomicU64::new(0));
+        let stop = spawn_progress_ticker(
+            Arc::clone(&jobs),
+            events_tx,
+            job_id,
+            TickerContext {
+                started_at_ms: 1,
+                total_bytes: 0,
+                dynamic_total_bytes: Some(Arc::clone(&dynamic_total)),
+                skipped_files: 0,
+                skipped_bytes: 0,
+            },
+            Arc::clone(&progress),
+            Arc::new(AtomicU64::new(0)),
+            Arc::new(AtomicU64::new(0)),
+            Arc::new(AtomicU64::new(0)),
+        );
+
+        tokio::time::sleep(Duration::from_millis(260)).await;
+        progress.store(0, Ordering::Release);
+        dynamic_total.store(100, Ordering::Release);
+        tokio::time::sleep(Duration::from_millis(260)).await;
+
+        let guard = jobs.lock().unwrap_or_else(|e| e.into_inner());
+        match guard.get(&job_id) {
+            Some(JobState::Running {
+                bytes_sent,
+                total_bytes,
+                ..
+            }) => {
+                assert_eq!(*bytes_sent, 0);
+                assert_eq!(*total_bytes, 100);
+            }
+            _ => panic!("expected running job"),
+        }
+        drop(guard);
+        stop.store(true, Ordering::Release);
+    }
 
     #[test]
     fn mgmt_addr_for_swaps_port() {

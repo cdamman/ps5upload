@@ -664,3 +664,49 @@ mod tests {
         assert!(!kv.get("TITLE").unwrap().contains('\0'));
     }
 }
+
+/// A game found one level down inside an otherwise-empty wrapper folder.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct WrappedGameHint {
+    pub path: String,
+    pub title: Option<String>,
+    pub title_id: Option<String>,
+}
+
+/// If `root` is not itself a game but holds exactly one subdirectory
+/// (ignoring hidden entries) that is, describe that child so the UI can
+/// ask "did you mean …?".
+///
+/// Deliberately does not recurse: wrapped-twice is almost certainly a
+/// packing mistake, and descending automatically hides what is actually
+/// being uploaded.
+///
+/// Lives here rather than in the desktop shell because the browser UI
+/// needs the same answer from the engine — the alternative was a second
+/// copy, which is how this codebase ended up with two app.db readers.
+pub fn wrapped_game_hint(root: &Path) -> Option<WrappedGameHint> {
+    let rd = std::fs::read_dir(root).ok()?;
+    let mut subdirs: Vec<std::path::PathBuf> = Vec::new();
+    for entry in rd.flatten() {
+        let name = entry.file_name();
+        if name.to_string_lossy().starts_with('.') {
+            continue;
+        }
+        if entry.file_type().ok()?.is_dir() {
+            subdirs.push(entry.path());
+            if subdirs.len() > 1 {
+                return None;
+            }
+        }
+    }
+    let child = subdirs.into_iter().next()?;
+    let meta = inspect_folder(&child).ok()?;
+    if meta.meta_source == "none" {
+        return None;
+    }
+    Some(WrappedGameHint {
+        path: child.to_string_lossy().into_owned(),
+        title: meta.title,
+        title_id: meta.title_id,
+    })
+}

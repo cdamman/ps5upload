@@ -46,15 +46,18 @@
  *   "error:badpath"          — path rejected by safety check
  * and closes the connection.
  *
- * Boot timing + init retry (the fix for the FW-10.40 "helper dies ~4s
+ * Boot timing + serialized init retry (the fix for the FW-10.40 "helper dies ~4s
  * after the first install is rejected" symptom, issue #152):
  * kstuff spawns last in the payload chain and applies kernel patches
  * that sceAppInstUtilInitialize depends on. This daemon sleeps 25 s at
  * startup (500 ms steps) to let those patches land, then self-escalates
  * to SYSTEM_AUTHID, then runs sceAppInstUtilInitialize on a detached
- * thread with a 10 s timeout. If startup init failed (IPMI backend not
- * ready yet), every incoming install request retries init once before
- * attempting the install. Calling InstallByPackage COLD (no init)
+ * thread with a 10 s timeout. The TCP listener is bound before that wait so
+ * the desktop can observe that the daemon was launched; install connections
+ * queue until initialization is ready. If startup init failed (IPMI backend
+ * not ready yet), an incoming request may retry sequentially. A timed-out
+ * attempt remains the only initializer in flight. Calling InstallByPackage
+ * COLD (no init)
  * leaves IPMI state half-wedged and Sony's watchdog kills the helper a
  * few seconds later — exactly the symptom users report.
  */
@@ -83,6 +86,7 @@
 
 #include "authid.h"
 #include "sceAppInstUtil.h"
+#include "timed_init.h"
 
 /* Authid constants (PS5_JB_AUTHID, PS5_SHELLCORE_AUTHID) and firmware
  * detection (ps5_detect_firmware_major) now come from authid.h, shared
@@ -170,36 +174,16 @@ static void notify(const char *fmt, ...) {
     sceKernelSendNotificationRequest(0, &req, sizeof req, 0);
 }
 
-/* ── timed sceAppInstUtilInitialize (ported from elf-arsenal's DPI v1) ── */
-static volatile int g_init_done = 0;
-static volatile int g_init_rc   = -1;
+/* ── timed sceAppInstUtilInitialize ───────────────────────────────────── */
+static ps5_timed_init_state_t g_init_state = PS5_TIMED_INIT_STATE_INITIALIZER;
 
-static void *init_thread(void *arg) {
-    (void)arg;
-    g_init_rc   = sceAppInstUtilInitialize();
-    g_init_done = 1;
-    return NULL;
-}
-
-/* Runs sceAppInstUtilInitialize on a detached thread with a timeout.
- * Returns the init rc on success, or -0xDEAD on timeout so callers can
- * distinguish "init failed with Sony error X" from "init hung". */
-#define INIT_TIMEOUT_SENTINEL (-0xDEAD)
+/* Runs sceAppInstUtilInitialize on a detached worker with a bounded wait.
+ * If it times out, the worker remains the sole in-flight initializer and later
+ * callers wait on it instead of launching an overlapping Sony IPC init. */
+#define INIT_TIMEOUT_SENTINEL PS5_TIMED_INIT_TIMEOUT
 static int timed_init(void) {
-    pthread_t tid;
-    g_init_done = 0;
-    g_init_rc   = -1;
-    if (pthread_create(&tid, NULL, init_thread, NULL) != 0)
-        return -1;
-    pthread_detach(tid);
-
-    for (int i = 0; i < INIT_TIMEOUT * 10; i++) {
-        if (g_init_done)
-            return g_init_rc;
-        struct timespec ts = {0, 100000000};  /* 100 ms */
-        nanosleep(&ts, NULL);
-    }
-    return INIT_TIMEOUT_SENTINEL;
+    return ps5_timed_init_wait(&g_init_state, sceAppInstUtilInitialize,
+                               INIT_TIMEOUT * 1000U);
 }
 
 /* ── path safety + rewrite ───────────────────────────────────────────── */
@@ -246,6 +230,38 @@ int main(void) {
     SceAppInstallPkgInfo pkg_info;
     MetaInfo metainfo;
 
+    /* Bind before the 25-second kernel-patch wait. dpi_ensure probes :9040 for
+     * only a bounded window; binding afterwards made every freshly deployed
+     * bundled daemon look dead even though it was merely sleeping. Connections
+     * accepted by the kernel queue here and are handled after init below. */
+    server_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (server_fd < 0) {
+        notify("ezRemote DPI create socket failed");
+        return -1;
+    }
+
+    int reuse = 1;
+    setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
+
+    memset(&address, 0, sizeof(address));
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_port = htons(PORT);
+
+    if (bind(server_fd, (const struct sockaddr *)&address, sizeof(address)) < 0) {
+        /* Another DPI (ours or the scene's) already owns the port — that's
+         * fine, the install path can use it. Exit cleanly. */
+        notify("ezRemote DPI: port %d already in use", PORT);
+        close(server_fd);
+        return 0;
+    }
+
+    if (listen(server_fd, 8) < 0) {
+        notify("ezRemote DPI listen failed");
+        close(server_fd);
+        return 0;
+    }
+
     /* Boot-timing wait: let kstuff apply kernel patches before we touch
      * AppInstUtil. Without this, on FW where kstuff loads after us,
      * sceAppInstUtilInitialize hits unpatched kernel paths and either
@@ -287,34 +303,6 @@ int main(void) {
             init_rc == 0 ? " (ok)" :
             (init_rc == INIT_TIMEOUT_SENTINEL ? " (timeout — fallback mode)" :
              " (fallback mode)"));
-
-    server_fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (server_fd < 0) {
-        notify("ezRemote DPI create socket failed");
-        return -1;
-    }
-
-    int reuse = 1;
-    setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
-
-    memset(&address, 0, sizeof(address));
-    address.sin_family = AF_INET;
-    address.sin_addr.s_addr = INADDR_ANY;
-    address.sin_port = htons(PORT);
-
-    if (bind(server_fd, (const struct sockaddr *)&address, sizeof(address)) < 0) {
-        /* Another DPI (ours or the scene's) already owns the port — that's
-         * fine, the install path can use it. Exit cleanly. */
-        notify("ezRemote DPI: port %d already in use", PORT);
-        close(server_fd);
-        return 0;
-    }
-
-    if (listen(server_fd, 3) < 0) {
-        notify("ezRemote DPI listen failed");
-        close(server_fd);
-        return 0;
-    }
 
     notify("ezRemote DPI listening on port %d", PORT);
 

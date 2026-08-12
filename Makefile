@@ -706,6 +706,18 @@ test-payload: payload
 		$(PAYLOAD_DIR)/tests/ftp_format_selftest.c
 	@/tmp/ps5upload-ftp-format-selftest
 	@echo "✓ FTP PASV/EPSV/LIST replies match the shapes clients parse"
+	@echo "Running FTP lifecycle self-test (host build)..."
+	@cc -O2 -Wall -Wextra -Werror -pthread -I$(PAYLOAD_DIR)/include \
+		-o /tmp/ps5upload-ftp-lifecycle-selftest \
+		$(PAYLOAD_DIR)/tests/ftp_lifecycle_selftest.c
+	@/tmp/ps5upload-ftp-lifecycle-selftest
+	@echo "✓ FTP stop/start drains sessions without stale listeners or fd reuse"
+	@echo "Running timed initializer serialization self-test (host build)..."
+	@cc -O2 -Wall -Wextra -Werror -pthread -I$(PAYLOAD_DIR)/include \
+		-o /tmp/ps5upload-timed-init-selftest \
+		$(PAYLOAD_DIR)/tests/timed_init_selftest.c
+	@/tmp/ps5upload-timed-init-selftest
+	@echo "✓ timed-out Sony initialization cannot overlap a retry"
 	@echo "Running param.json SDK-rewrite self-test (host build)..."
 	@cc -O2 -Wall -Wextra -Werror -o /tmp/ps5upload-sdk-param-selftest \
 		$(PAYLOAD_DIR)/tests/sdk_param_selftest.c
@@ -716,6 +728,12 @@ test-payload: payload
 		$(PAYLOAD_DIR)/tests/elf_param_selftest.c
 	@/tmp/ps5upload-elf-param-selftest
 	@echo "✓ SDK patcher targets param segments, not stray magic bytes"
+	@echo "Running SDK Changer filesystem-safety self-test (host build)..."
+	@cc -O2 -Wall -Wextra -Werror -I$(PAYLOAD_DIR)/include \
+		-o /tmp/ps5upload-sdk-changer-file-selftest \
+		$(PAYLOAD_DIR)/tests/sdk_changer_file_selftest.c
+	@/tmp/ps5upload-sdk-changer-file-selftest
+	@echo "✓ SDK Changer patches only tracked sources and restores durable backups"
 
 test-client: setup-client
 	@echo "Testing client build..."
