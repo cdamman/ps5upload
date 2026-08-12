@@ -12065,14 +12065,33 @@ static int shell_send_json_result(runtime_state_t *state, int client_fd,
     size_t out_len = stdout_text ? strlen(stdout_text) : 0;
     size_t cwd_len = cwd_text ? strlen(cwd_text) : 1;
     size_t sid_len = session_id ? strlen(session_id) : 0;
-    char *resp = malloc(out_len + cwd_len + sid_len + 680);
+
+    /* Size for the ESCAPED length, not the raw length.
+     *
+     * This used to allocate raw length + 680 slack, which silently
+     * truncated any output with more than a few hundred escapes: `\n`
+     * costs two bytes and a control byte costs six, so `df` on a console
+     * with ~1300 mounts overflowed the slack on newlines alone and
+     * produced JSON that ended mid-string. One measuring pass is cheaper
+     * than guessing. */
+    size_t esc_len = 0;
+    for (size_t i = 0; i < out_len; i++) {
+        unsigned char c = (unsigned char)stdout_text[i];
+        if (c == '\\' || c == '"' || c == '\n' || c == '\r' || c == '\t')
+            esc_len += 2;
+        else if (c < 0x20)
+            esc_len += 6;
+        else
+            esc_len += 1;
+    }
+    char *resp = malloc(esc_len + cwd_len * 6 + sid_len * 6 + 680);
     if (!resp) {
         const char *err = "{\"err\":\"oom\"}";
         return send_frame(client_fd, FTX2_FRAME_SHELL_EXEC_ACK, 0,
                           trace_id, err, strlen(err));
     }
     int n = 0;
-    size_t cap = out_len + cwd_len + sid_len + 680;
+    size_t cap = esc_len + cwd_len * 6 + sid_len * 6 + 680;
     n += snprintf(resp + n, cap - (size_t)n,
                   "{\"exit_code\":%d,\"timed_out\":%s,\"stdout\":\"",
                   exit_code, timed_out ? "true" : "false");
@@ -14121,6 +14140,1185 @@ static int is_transfer_frame_type(uint16_t t) {
  * the transfer port, pass a per-connection `conn_tx_ctx_t` so the
  * accept-loop wrapper can mark an unfinished tx as interrupted when the
  * socket closes without seeing COMMIT/ABORT. */
+static int handle_begin_tx_frame(runtime_state_t *state, int client_fd,
+                                 ftx2_header_t hdr, conn_tx_ctx_t *tx_ctx) {
+    /* Hard cap on the BEGIN_TX manifest size. PPSA01342 (the
+     * largest small-file workload we validate against) has 223k
+     * files at ~150 bytes per manifest entry → ~33 MB; the cap
+     * leaves an order-of-magnitude headroom for any real upload
+     * while refusing absurd values (e.g., crafted body_len of
+     * several GB) that would otherwise either succeed at malloc
+     * and OOM the payload, or fail malloc and tie up a worker
+     * thread draining bytes from a malicious LAN client until
+     * recv_exact times out. Above this cap we close the connection
+     * (via -1 return) since accepting further frames after a
+     * misaligned drain isn't safe. */
+    #define BEGIN_TX_BODY_MAX ((uint64_t)256 * 1024 * 1024)
+    char resp[2048];
+    char *begin_body = NULL;
+    uint64_t begin_body_len = hdr.body_len;
+    const char *bextra = NULL;
+    uint64_t bextra_len = 0;
+    ftx2_tx_meta_t bmeta;
+    runtime_tx_entry_t *entry = NULL;
+    int ret;
+    int len;
+
+    if (begin_body_len > BEGIN_TX_BODY_MAX) {
+        (void)send_frame(client_fd, FTX2_FRAME_ERROR, 0, hdr.trace_id,
+                         "begin_tx_body_too_large", 23);
+        return -1;
+    }
+
+    if (begin_body_len > 0) {
+        begin_body = (char *)malloc((size_t)begin_body_len + 1);
+        if (!begin_body) {
+            /* drain and report OOM */
+            uint64_t rem = begin_body_len;
+            char discard[256];
+            while (rem > 0) {
+                size_t take = rem > sizeof(discard) ? sizeof(discard) : (size_t)rem;
+                if (recv_exact(client_fd, discard, take) != 0) return -1;
+                rem -= (uint64_t)take;
+            }
+            return send_frame(client_fd, FTX2_FRAME_ERROR, 0, hdr.trace_id,
+                              "out_of_memory", 13);
+        }
+        if (recv_exact(client_fd, begin_body, (size_t)begin_body_len) != 0) {
+            free(begin_body);
+            return -1;
+        }
+        begin_body[begin_body_len] = '\0';
+    }
+
+    if (parse_tx_meta(begin_body ? begin_body : "", begin_body_len,
+                      &bmeta, &bextra, &bextra_len) != 0) {
+        free(begin_body);
+        return send_frame(client_fd, FTX2_FRAME_ERROR, 0, hdr.trace_id,
+                          "invalid_tx_meta", 15);
+    }
+    /* Resolve the tx entry against the journal, picking one of three
+     * outcomes per (has-existing-entry) × (client-wants-resume):
+     *
+     *   existing + resume-flag:  RESUME — adopt, preserve shards_received,
+     *                            tmp file, and manifest heap. (The entry
+     *                            state may be either "interrupted" (clean
+     *                            drop, payload saw it) or "active" (TCP
+     *                            drop, payload's recv returned -1 and we
+     *                            marked it interrupted in the connection
+     *                            cleanup OR we didn't get a chance to yet
+     *                            — both imply the client's partial data is
+     *                            still on disk.)
+     *
+     *   existing + no-resume:    RESTART — client explicitly asked for a
+     *                            fresh tx. Drop tmp, reset counters. This
+     *                            catches "I cancelled and want to start
+     *                            over" where the client intentionally
+     *                            reuses the tx_id.
+     *
+     *   no existing:             FRESH — normal new tx allocation.
+     *
+     * `is_resume` drives whether later code in this handler re-runs
+     * destructive side-effects: unlinking kind=1 tmp files and
+     * re-parsing the kind=2 manifest index. Both must be skipped on
+     * resume — they'd destroy the very state we're trying to adopt. */
+    int is_resume = 0;
+    int want_resume = (bmeta.flags & FTX2_TX_FLAG_RESUME) != 0;
+    /* New in P3: client opts in to APPLY_PROGRESS frames during the
+     * multi-file commit apply loop. The flag is captured into the
+     * tx entry below (both FRESH and RESUME paths) so the apply
+     * loop can check entry->apply_progress_enabled when deciding
+     * whether to emit. Opt-in keeps old clients safe — they don't
+     * set the flag, so we stay silent and they see the legacy
+     * single-CommitTxAck behaviour. */
+    int want_apply_progress =
+        (bmeta.flags & FTX2_TX_FLAG_APPLY_PROGRESS_REQUESTED) != 0;
+    pthread_mutex_lock(&state->state_mtx);
+    {
+        runtime_tx_entry_t *existing = runtime_find_tx_entry(state, bmeta.tx_id);
+        if (existing && want_resume) {
+            /* Adopt. If state is "interrupted" we're coming back from
+             * a paused tx — the mark-interrupted path decremented
+             * `active_transactions` on pause, so bump it back now
+             * so the matching commit/abort decrement balances. If
+             * state is already "active" (TCP drop raced the first
+             * reconnect before mark-interrupted could fire), the
+             * counter already reflects this tx — don't double-count. */
+            int was_interrupted = strcmp(existing->state, "interrupted") == 0;
+            snprintf(existing->state, sizeof(existing->state), "active");
+            if (was_interrupted) {
+                state->active_transactions += 1;
+            }
+            entry = existing;
+            is_resume = 1;
+        } else if (existing && !want_resume) {
+            /* Explicit restart with same tx_id — common when the user
+             * cancels an upload and re-clicks Override. Drop partial
+             * state and reuse the slot. Counter accounting mirrors
+             * the want_resume branch: if the prior state was
+             * "interrupted" we're re-activating, so bump. If it was
+             * still "active" the counter already reflects this tx
+             * (TCP drop raced, mark-interrupted didn't fire). */
+            int was_interrupted = strcmp(existing->state, "interrupted") == 0;
+            entry = existing;
+            runtime_release_tx_resources(entry); /* unlinks tmp */
+            entry->shards_received = 0;
+            entry->bytes_received  = 0;
+            entry->total_shards    = 0;
+            entry->total_bytes     = 0;
+            entry->file_count      = 0;
+            entry->direct_mode     = 0;
+            entry->multi_file      = 0;
+            entry->tmp_path[0]     = '\0';
+            entry->dest_root[0]    = '\0';
+            snprintf(entry->state, sizeof(entry->state), "active");
+            if (was_interrupted) {
+                state->active_transactions += 1;
+            }
+            is_resume = 0;
+        } else {
+            /* Fresh allocation. */
+            state->active_transactions += 1;
+            state->last_tx_seq += 1;
+            entry = runtime_alloc_tx_entry(state, bmeta.tx_id, state->last_tx_seq);
+            is_resume = 0;
+        }
+    }
+    pthread_mutex_unlock(&state->state_mtx);
+    if (!entry) {
+        /* Roll back the optimistic active_transactions increment we
+         * did before calling runtime_alloc_tx_entry. Without this,
+         * every tx_table_full rejection permanently inflates the
+         * counter, corrupting STATUS_ACK and the crash-recovery
+         * journal's "active_transactions=" field. */
+        pthread_mutex_lock(&state->state_mtx);
+        if (state->active_transactions > 0) state->active_transactions -= 1;
+        pthread_mutex_unlock(&state->state_mtx);
+        free(begin_body);
+        return send_frame(client_fd, FTX2_FRAME_ERROR, 0, hdr.trace_id,
+                          "tx_table_full", 13);
+    }
+    /* Skip manifest/metadata extraction on resume — the entry already
+     * carries the correct values from the original BEGIN_TX (either
+     * still in memory, or reloaded from the journal on payload start).
+     * Re-extracting would be idempotent if the client re-sends the
+     * exact same body, but it would overwrite our dest_root/total_shards
+     * with whatever the client decides to send, and there's no upside. */
+    if (!is_resume && bextra && bextra_len > 0) {
+        extract_json_string_field(bextra, "dest_root",
+                                  entry->dest_root, sizeof(entry->dest_root));
+        /* Reject manifests whose dest_root would let a LAN client
+         * write outside the allowlisted writable roots
+         * (/data, /user, /mnt/ext_, /mnt/usb_, /mnt/ps5upload/_).
+         * Without this, a crafted BEGIN_TX with dest_root of
+         * "/system_ex/..." or "/system_data/priv/..." passes
+         * straight into the open()+write() path further down with
+         * no further validation. The directory traversal check is
+         * inside is_path_allowed (component-scoped, rejects "..").
+         */
+        if (entry->dest_root[0] && !is_path_allowed(entry->dest_root)) {
+            /* runtime_abort_tx_fatal handles the state.active_transactions
+             * decrement, marks state="aborted", flushes the journal
+             * record, and releases tmp/manifest resources — the
+             * complete cleanup path. The earlier draft just unlocked
+             * the per-slot mutex via runtime_release_tx_entry, which
+             * left in_use=1 and active_transactions over-counted —
+             * the slot would leak until the periodic janitor sweep
+             * (or never, since journal flush hadn't yet run). */
+            runtime_abort_tx_fatal(state, entry);
+            free(begin_body);
+            return send_frame(client_fd, FTX2_FRAME_ERROR, 0,
+                              hdr.trace_id,
+                              "dest_root_not_allowed", 21);
+        }
+        entry->total_shards = extract_json_uint64_field(bextra, "total_shards");
+        entry->total_bytes  = extract_json_uint64_field(bextra, "total_bytes");
+        entry->file_count   = extract_json_uint64_field(bextra, "file_count");
+        if (entry->file_count == 0) entry->file_count = 1;
+        /* Authoritative single-vs-multi-file decision: the BEGIN_TX kind,
+         * NOT file_count. kind==2 is a multi-file (folder) transaction
+         * even when it carries exactly one file — see runtime_tx_entry_t
+         * ::multi_file. The engine packs lone small files, so this MUST
+         * be set for the packed-shard path to accept them. */
+        entry->multi_file   = (bmeta.kind == 2);
+        (void)runtime_write_manifest(entry, bextra, (size_t)bextra_len);
+    }
+    /* P3: stamp the per-tx apply-progress opt-in from BEGIN_TX flags
+     * onto the entry. Set on every BEGIN_TX (including resume — the
+     * client can change its mind across attempts; an old client
+     * resuming a new-client tx would clear the flag, expectedly).
+     * Only meaningful for multi_file txs since single-file commits
+     * are fast and don't need progress reporting. */
+    entry->apply_progress_enabled = want_apply_progress;
+    /* Enable direct-write path:
+     *   - single-file (kind=1, file_count<=1): stream straight to
+     *     <dest>.ps5up2-tmp, rename at commit.
+     *   - multi-file (kind=2, files[] populated): stream each shard to
+     *     <file_path>.ps5up2-tmp using the manifest to route shard_seq
+     *     to its file. Rename each tmp at commit.
+     *
+     * Shards arrive in sequence within a single connection so per-file
+     * append ordering is guaranteed.
+     *
+     * On resume: direct_mode / tmp_path / manifest_blob / manifest_index
+     * are already set from the original BEGIN_TX, so both branches
+     * short-circuit. The unlink in the kind=1 branch and the manifest
+     * rebuild in the kind=2 branch are the bugs the `is_resume` guard
+     * is here to prevent — both would destroy the partial state that
+     * shards_received is about to tell the client to skip past.
+     */
+    if (is_resume) {
+        /* In-memory resume (TCP drop, payload still running): the entry
+         * already carries manifest_index + direct_mode, so the restore
+         * blocks below are no-ops and we go straight to reconcile.
+         *
+         * Resume AFTER a payload restart (power loss / takeover): the
+         * startup load restored only scalar fields — manifest_index is
+         * NULL and direct_mode is 0. Without restoring them, a multi-
+         * file tx would fall to the spool commit path with its shards
+         * missing (they're in tmps from the original direct run) and
+         * fail; a single-file tx would append at the wrong offset.
+         * Rebuild the direct-mode state from the ON-DISK manifest (the
+         * same builder the fresh path uses) so the resumed transfer
+         * continues on the verified direct path. */
+        if (entry->multi_file && !entry->manifest_index) {
+            char *mbuf = NULL;
+            size_t mlen = 0;
+            int from_begin = 0;
+            /* 2.25.x: PREFER the manifest carried in THIS resume BeginTx
+             * over the stale on-disk journal copy. Since per-file durable
+             * promote landed, the engine reconciles before every resume and
+             * EXCLUDES the files that already promoted to their final path,
+             * so the BeginTx manifest is REDUCED (fewer files, shards
+             * renumbered 1..N). Rebuilding from the journal's ORIGINAL
+             * full manifest would route the reduced stream by the old
+             * numbering — "no manifest file owns shard <n>" → fatal abort,
+             * the exact same-tx-id resume failure the promote change
+             * otherwise introduces. Adopt the engine's current manifest
+             * (authoritative — it already accounts for what's durable),
+             * refresh the scalar totals from it, and re-persist the journal
+             * so a further restart stays consistent. The resume cursor is a
+             * COUNT against the OLD numbering and is meaningless here, but
+             * reconcile_resume_cursor (called just below) re-derives it from
+             * on-disk durable state: every file in a freshly-reduced
+             * manifest is non-durable, so it clamps the cursor to 0 and the
+             * whole reduced set is re-requested cleanly. Fall back to the
+             * journal copy only when this BeginTx carried no manifest (an
+             * older client that doesn't resend it on resume). */
+            if (bextra && bextra_len > 0) {
+                uint64_t fc = extract_json_uint64_field(bextra, "file_count");
+                uint64_t ts = extract_json_uint64_field(bextra, "total_shards");
+                uint64_t tb = extract_json_uint64_field(bextra, "total_bytes");
+                mbuf = (char *)malloc((size_t)bextra_len + 1);
+                if (mbuf) {
+                    memcpy(mbuf, bextra, (size_t)bextra_len);
+                    mbuf[bextra_len] = '\0';
+                    mlen = (size_t)bextra_len;
+                    from_begin = 1;
+                    if (fc > 0) entry->file_count = fc;
+                    entry->total_shards = ts;
+                    entry->total_bytes  = tb;
+                }
+            }
+            if (!mbuf && runtime_read_manifest_alloc(entry, &mbuf, &mlen) != 0) {
+                mbuf = NULL;
+            }
+            if (mbuf) {
+                manifest_index_entry_t *ridx = NULL;
+                uint64_t ridx_count = 0;
+                if (build_manifest_index(mbuf, mlen, entry->file_count,
+                                         &ridx, &ridx_count) == 0) {
+                    entry->manifest_blob        = mbuf;
+                    entry->manifest_blob_len    = mlen;
+                    entry->manifest_index       = ridx;
+                    entry->manifest_index_count = ridx_count;
+                    entry->direct_mode          = 1;
+                    if (from_begin) {
+                        /* Persist the adopted (reduced) manifest so a
+                         * SECOND restart rebuilds from it, not the
+                         * original. */
+                        (void)runtime_write_manifest(entry, mbuf, mlen);
+                        /* CRITICAL (2.25.1): reset the cursor to 0 and
+                         * re-send the whole reduced manifest from scratch.
+                         * The engine reconciled before this resume, so
+                         * every file here is one it wants RE-SENT (durably-
+                         * promoted files were excluded). The journaled
+                         * shards_received is a COUNT against the OLD full-
+                         * manifest numbering — meaningless against the
+                         * renumbered reduced set. Worse: each per-file tmp
+                         * was posix_fallocate()'d to its FULL size on its
+                         * first shard, so a half-written in-flight file
+                         * stat()s at exactly its manifest size, and
+                         * reconcile_resume_cursor's "tmp at exact size =
+                         * durable" test FALSELY marks it complete and skips
+                         * it → the in-flight file lands CORRUPT (confirmed
+                         * on hardware: a mid-file crash + resume produced a
+                         * 0%-matching big.bin). Resetting to 0 makes the
+                         * engine re-send all reduced-manifest shards; each
+                         * file's first shard unlinks + re-truncates its
+                         * tmp, so the write is clean. This exactly mirrors
+                         * the single-file resume path below. Cost: re-send
+                         * the one or two not-yet-complete files from their
+                         * start (completed files are already promoted to
+                         * their final path and excluded). */
+                        entry->shards_received = 0;
+                        entry->bytes_received  = 0;
+                    }
+                } else {
+                    free(mbuf);
+                }
+            }
+        } else if (!entry->multi_file && !entry->direct_mode &&
+                   entry->dest_root[0]) {
+            /* Single-file resume after a restart. We can't precisely map
+             * on-disk bytes back to a shard boundary without the shard
+             * size, so the safe move is a full re-send: restore direct
+             * mode + tmp path, drop the partial tmp, reset the cursor.
+             * Correct and self-healing; cost is re-uploading one file. */
+            entry->direct_mode = 1;
+            snprintf(entry->tmp_path, sizeof(entry->tmp_path),
+                     "%s.ps5up2-tmp", entry->dest_root);
+            (void)unlink(entry->tmp_path);
+            entry->shards_received = 0;
+            entry->bytes_received  = 0;
+        }
+        /* Reconcile the multi-file cursor against what's durably on disk
+         * (see reconcile_resume_cursor). A no-op when everything up to
+         * the journaled cursor is present (the in-memory case); on a
+         * restart it pulls the cursor back to the last fully-written
+         * file so the gap gets re-sent instead of skipped. */
+        if (entry->multi_file) {
+            reconcile_resume_cursor(entry);
+        }
+    } else if (bmeta.kind == 1 && entry->file_count <= 1 && entry->dest_root[0]) {
+        entry->direct_mode = 1;
+        snprintf(entry->tmp_path, sizeof(entry->tmp_path),
+                 "%s.ps5up2-tmp", entry->dest_root);
+        if (ensure_parent_dir(entry->dest_root) != 0) {
+            fprintf(stderr, "[payload2] direct: ensure_parent_dir failed: %s\n",
+                    entry->dest_root);
+            entry->direct_mode = 0;
+        } else {
+            /* Fresh tx: unlink any leftover tmp. Not reached on resume. */
+            (void)unlink(entry->tmp_path);
+        }
+    } else if (bmeta.kind == 2 && entry->file_count > 0 &&
+               bextra && bextra_len > 0 &&
+               strstr(bextra, "\"files\":[")) {
+        /* Multi-file direct mode: parse the manifest once into a heap
+         * index so per-shard routing is O(log N), not O(N) per shard.
+         * If blob exceeds the hard cap or the parse fails, we refuse
+         * the transaction outright — the old code silently truncated a
+         * multi-KiB manifest into an 8 KiB stack buffer per shard, which
+         * corrupted any transfer with more than ~60 files. */
+        if (bextra_len > PS5UPLOAD2_MAX_MANIFEST_BLOB) {
+            runtime_abort_tx_fatal(state, entry);
+            free(begin_body);
+            return send_frame(client_fd, FTX2_FRAME_ERROR, 0, hdr.trace_id,
+                              "manifest_too_large", 18);
+        }
+        {
+            char *blob = (char *)malloc((size_t)bextra_len + 1);
+            manifest_index_entry_t *idx = NULL;
+            uint64_t idx_count = 0;
+            if (!blob) {
+                runtime_abort_tx_fatal(state, entry);
+                free(begin_body);
+                return send_frame(client_fd, FTX2_FRAME_ERROR, 0, hdr.trace_id,
+                                  "out_of_memory", 13);
+            }
+            memcpy(blob, bextra, (size_t)bextra_len);
+            blob[bextra_len] = '\0';
+            if (build_manifest_index(blob, (size_t)bextra_len,
+                                     entry->file_count, &idx, &idx_count) != 0) {
+                free(blob);
+                runtime_abort_tx_fatal(state, entry);
+                free(begin_body);
+                return send_frame(client_fd, FTX2_FRAME_ERROR, 0, hdr.trace_id,
+                                  "manifest_invalid", 16);
+            }
+            entry->manifest_blob         = blob;
+            entry->manifest_blob_len     = (size_t)bextra_len;
+            entry->manifest_index        = idx;
+            entry->manifest_index_count  = idx_count;
+            entry->direct_mode = 1;
+            /* Unlink any stale per-file .ps5up2-tmp files left by a
+             * prior aborted/failed upload of the same destination.
+             * The single-file path at line 7270 already does this for
+             * its single tmp; multi-file mode was missing the
+             * equivalent sweep, which produced a hard-to-spot silent
+             * corruption pattern:
+             *
+             *   1. Prior upload of game G fails partway, some
+             *      <file>.ps5up2-tmp files remain on disk.
+             *   2. User retries upload of game G. Engine's pack
+             *      decision for some files differs from last time
+             *      (because pack threshold or size near boundary),
+             *      OR the file is now packed where it was non-packed.
+             *   3. Pack worker writes correct content to file_path
+             *      directly. No new tmp created for that file.
+             *   4. COMMIT rename loop iterates manifest entries,
+             *      sees the STALE <file>.ps5up2-tmp from step 1,
+             *      rename(stale_tmp, file_path) succeeds — and
+             *      OVERWRITES the just-written-correct packed content
+             *      with the stale tmp. Client sees commit success,
+             *      destination has stale content, game won't launch.
+             *
+             * Sweeping at fresh BEGIN_TX time eliminates the
+             * stale-tmp source. The is_resume branch above
+             * intentionally skips this sweep — a true resume needs
+             * the partial tmps preserved. */
+            {
+                const manifest_index_entry_t *idx_entries =
+                    (const manifest_index_entry_t *)idx;
+                for (uint64_t i = 0; i < idx_count; i++) {
+                    char file_path[512];
+                    char stale_tmp[512 + 16];
+                    size_t plen = idx_entries[i].path_len;
+                    uint32_t poff = idx_entries[i].path_offset;
+                    if (plen == 0 || plen >= sizeof(file_path)) continue;
+                    /* Defense-in-depth bounds check matching
+                     * lookup_manifest_index — build_manifest_index
+                     * already validates these, but the cost is one
+                     * comparison and it makes this loop safe under
+                     * any future manifest-builder change. */
+                    if ((uint64_t)poff + (uint64_t)plen > bextra_len) {
+                        continue;
+                    }
+                    if (json_copy_unescaped_string(blob + poff,
+                                                   blob + poff + plen,
+                                                   file_path,
+                                                   sizeof(file_path)) != 0) {
+                        continue;
+                    }
+                    snprintf(stale_tmp, sizeof(stale_tmp),
+                             "%s.ps5up2-tmp", file_path);
+                    (void)unlink(stale_tmp);
+                }
+            }
+        }
+    }
+    (void)runtime_save_tx_state(state);
+    (void)runtime_append_tx_event(state, "begin_tx");
+    (void)runtime_flush_tx_record(state, entry);
+    free(begin_body);
+    pthread_mutex_lock(&state->state_mtx);
+    state->command_count += 1;
+    pthread_mutex_unlock(&state->state_mtx);
+
+    len = snprintf(resp, sizeof(resp),
+                   "{\"accepted\":true,\"tx_id\":\"%s\",\"tx_seq\":%llu,"
+                   "\"active_transactions\":%llu,"
+                   "\"last_acked_shard\":%llu}",
+                   entry->tx_id_hex,
+                   (unsigned long long)entry->tx_seq,
+                   (unsigned long long)state->active_transactions,
+                   (unsigned long long)entry->shards_received);
+    if (len < 0) return -1;
+    /* Remember this tx on the connection so a socket close before
+     * COMMIT/ABORT marks it "interrupted" rather than leaving an
+     * "active" orphan in the journal. */
+    if (tx_ctx) {
+        memcpy(tx_ctx->tx_id, entry->tx_id, 16);
+        tx_ctx->has_tx = 1;
+    }
+    ret = send_frame(client_fd, FTX2_FRAME_BEGIN_TX_ACK, 0, hdr.trace_id,
+                     resp, (uint64_t)len);
+    return ret;
+}
+
+static int handle_status_frame(runtime_state_t *state, int client_fd,
+                               ftx2_header_t hdr, char *body,
+                               size_t body_cap) {
+    /* Snapshot cross-thread fields under the mutex so a concurrent
+     * transfer-side BEGIN/COMMIT/ABORT can't produce a mid-flight
+     * read of active_transactions or last_tx_seq. Keep the lock
+     * window to memory copies only — never hold across send_frame. */
+    uint64_t snap_instance_id, snap_started_at, snap_command_count;
+    uint64_t snap_active_tx, snap_last_seq, snap_recovered;
+    int snap_shutdown, snap_startup_reason, snap_takeover_req, snap_port;
+    int len;
+    char kernel_version_raw[256];
+    char kernel_version_esc[512];
+    read_ps5_kernel_version(kernel_version_raw, sizeof(kernel_version_raw));
+    json_escape_into(kernel_version_raw, kernel_version_esc, sizeof(kernel_version_esc));
+    pthread_mutex_lock(&state->state_mtx);
+    snap_instance_id    = state->instance_id;
+    snap_port           = state->runtime_port;
+    snap_shutdown       = state->shutdown_requested;
+    snap_startup_reason = state->startup_reason;
+    snap_takeover_req   = state->takeover_requested;
+    snap_started_at     = state->started_at_unix;
+    snap_command_count  = state->command_count;
+    snap_active_tx      = state->active_transactions;
+    snap_last_seq       = state->last_tx_seq;
+    snap_recovered      = state->recovered_transactions;
+    pthread_mutex_unlock(&state->state_mtx);
+    /* Surface ucred elevation result so the client UI can warn
+     * "load kstuff first" when elevation == false without
+     * having to call a Sony API that might wedge. The pid -1
+     * value used in main()'s call means "current process";
+     * 0 from the kernel = elevation succeeded.
+     * `g_ucred_elevation_rc` is defined in main.c. */
+    extern volatile int g_ucred_elevation_rc;
+    const int ucred_elevated = (g_ucred_elevation_rc == 0) ? 1 : 0;
+    /* Fan threshold + reapply interval for the client UI. Both are
+     * read from atomics in hw_info.c so this is lock-free. */
+    int fan_pinned = hw_fan_pinned_threshold();
+    int fan_reapply = hw_fan_reapply_interval();
+    len = snprintf(body, body_cap,
+                   "{\"version\":\"%s\","
+                   "\"ps5_kernel\":\"%s\","
+                   "\"instance_id\":%llu,\"runtime_port\":%d,"
+                   "\"shutdown\":%d,\"startup_reason\":%d,"
+                   "\"takeover_requested\":%d,\"started_at_unix\":%llu,"
+                   "\"command_count\":%llu,\"active_transactions\":%llu,"
+                   "\"last_tx_seq\":%llu,\"recovered_transactions\":%llu,"
+                   "\"ucred_elevated\":%s,"
+                   /* Multi-stream capability: how many parallel transfer
+                    * connections this payload will service concurrently.
+                    * Absent on old payloads → engine treats it as 1. */
+                   "\"max_transfer_streams\":%d,"
+                   /* Fan state: pinned threshold (0 = not set) and the
+                    * reapply interval in seconds. Lets the client display
+                    * current settings without a separate round-trip. */
+                   "\"fan_threshold\":%d,"
+                   "\"fan_reapply_sec\":%d}",
+                   PS5UPLOAD2_VERSION,
+                   kernel_version_esc,
+                   (unsigned long long)snap_instance_id,
+                   snap_port,
+                   snap_shutdown,
+                   snap_startup_reason,
+                   snap_takeover_req,
+                   (unsigned long long)snap_started_at,
+                   (unsigned long long)snap_command_count,
+                   (unsigned long long)snap_active_tx,
+                   (unsigned long long)snap_last_seq,
+                   (unsigned long long)snap_recovered,
+                   ucred_elevated ? "true" : "false",
+                   PS5UPLOAD2_TRANSFER_STREAMS_ADVERTISED,
+                   fan_pinned,
+                   fan_reapply);
+    /* Truncation-safe: if the fields ever grow past `body`, clamp
+     * rather than emit a body_len that drives send_frame to read
+     * past the stack buffer. The JSON is still valid-on-arrival
+     * only when len < body_cap; the engine will fail the
+     * serde_json::from_slice on a truncated body and return 502
+     * to the UI, which is the right failure mode. */
+    if (len < 0) return -1;
+    if ((size_t)len >= body_cap) len = (int)(body_cap - 1);
+    return send_frame(client_fd, FTX2_FRAME_STATUS_ACK, 0, hdr.trace_id,
+                      body, (uint64_t)len);
+}
+
+static int handle_query_tx_frame(runtime_state_t *state, int client_fd,
+                               ftx2_header_t hdr, char *body,
+                               size_t body_cap,
+                               const char *request_body) {
+    ftx2_tx_meta_t meta;
+    const char *extra = NULL;
+    uint64_t extra_len = 0;
+
+    char record[1024];
+    int len;
+    int requested_specific = 0;
+    int have_snapshot = 0;
+    uint64_t snap_active = 0;
+    uint64_t snap_last = 0;
+    runtime_tx_entry_t snap_entry;
+    memset(&snap_entry, 0, sizeof(snap_entry));
+
+    /* Snapshot the state we need under the lock, then release the
+     * lock before doing I/O. The transfer side takes this mutex on
+     * every SHARD ACK — holding it across `runtime_read_tx_record`
+     * (which does fopen+fread on a UFS-backed file that can stall
+     * tens of milliseconds under pressure) was dropping shards
+     * mid-flight because the writer thread blocked on the lock
+     * past its recv timeout. */
+    pthread_mutex_lock(&state->state_mtx);
+    {
+        runtime_tx_entry_t *entry = NULL;
+        snap_active = state->active_transactions;
+        snap_last   = state->last_tx_seq;
+        if (parse_tx_meta(request_body, hdr.body_len, &meta, &extra, &extra_len) == 0) {
+            requested_specific = 1;
+            entry = runtime_find_tx_entry(state, meta.tx_id);
+        }
+        if (!entry && !requested_specific && snap_last > 0) {
+            int i = 0;
+            for (i = 0; i < PS5UPLOAD2_MAX_TX; i++) {
+                if (state->tx_entries[i].in_use &&
+                    state->tx_entries[i].tx_seq == snap_last) {
+                    entry = &state->tx_entries[i];
+                    break;
+                }
+            }
+        }
+        if (entry) {
+            snap_entry = *entry;   /* copy-by-value while locked */
+            have_snapshot = 1;
+        }
+    }
+    pthread_mutex_unlock(&state->state_mtx);
+
+    if (requested_specific && !have_snapshot) {
+        return send_frame(client_fd, FTX2_FRAME_ERROR, 0, hdr.trace_id,
+                          "tx_not_found", 12);
+    }
+
+    /* File read now happens lock-free. If the entry was evicted
+     * between snapshot + read we get a stale or missing record;
+     * that's surfaced as `last_tx_record: null` which is what the
+     * pre-existing code already did for that case. */
+    if (have_snapshot && runtime_read_tx_record(&snap_entry, record, 1024) == 0) {
+        len = snprintf(body, body_cap,
+                       "{\"active_transactions\":%llu,\"last_tx_seq\":%llu,"
+                       "\"tx_id\":\"%s\",\"state\":\"%s\","
+                       "\"shards_received\":%llu,\"bytes_received\":%llu,"
+                       "\"last_tx_record\":%s}",
+                       (unsigned long long)snap_active,
+                       (unsigned long long)snap_last,
+                       snap_entry.tx_id_hex,
+                       snap_entry.state,
+                       (unsigned long long)snap_entry.shards_received,
+                       (unsigned long long)snap_entry.bytes_received,
+                       record);
+    } else {
+        len = snprintf(body, body_cap,
+                       "{\"active_transactions\":%llu,\"last_tx_seq\":%llu,"
+                       "\"last_tx_record\":null}",
+                       (unsigned long long)snap_active,
+                       (unsigned long long)snap_last);
+    }
+    if (len < 0) return -1;
+    if ((size_t)len >= body_cap) len = (int)(body_cap - 1);
+    return send_frame(client_fd, FTX2_FRAME_QUERY_TX_ACK, 0, hdr.trace_id,
+                      body, (uint64_t)len);
+}
+
+static int handle_commit_tx_frame(runtime_state_t *state, int client_fd,
+                               ftx2_header_t hdr, char *body,
+                               size_t body_cap,
+                               const char *request_body,
+                               conn_tx_ctx_t *tx_ctx) {
+    ftx2_tx_meta_t meta;
+    const char *extra = NULL;
+    uint64_t extra_len = 0;
+
+    int len;
+    int rc;
+    runtime_tx_entry_t *entry = NULL;
+    if (parse_tx_meta(request_body, hdr.body_len, &meta, &extra, &extra_len) != 0) {
+        return send_frame(client_fd, FTX2_FRAME_ERROR, 0, hdr.trace_id,
+                          "invalid_tx_meta", 15);
+    }
+    /* Acquire exclusive: a concurrent SHARD on the transfer port
+     * must finish before we tear down the manifest/writer state.
+     * Released via the `commit_done:` cleanup. */
+    entry = runtime_acquire_tx_entry(state, meta.tx_id);
+    if (!entry) {
+        return send_frame(client_fd, FTX2_FRAME_ERROR, 0, hdr.trace_id,
+                          "tx_not_found", 12);
+    }
+    if (strcmp(entry->state, "active") != 0) {
+        rc = send_frame(client_fd, FTX2_FRAME_ERROR, 0, hdr.trace_id,
+                        "tx_not_active", 13);
+        goto commit_done;
+    }
+    /* Verify all expected shards arrived (skip check if total_shards unknown). */
+    if (entry->total_shards > 0 &&
+        entry->shards_received < entry->total_shards) {
+        len = snprintf(body, body_cap,
+                       "{\"error\":\"shards_incomplete\","
+                       "\"shards_received\":%llu,\"total_shards\":%llu}",
+                       (unsigned long long)entry->shards_received,
+                       (unsigned long long)entry->total_shards);
+        if (len < 0) { rc = -1; goto commit_done; }
+        rc = send_frame(client_fd, FTX2_FRAME_ERROR, 0, hdr.trace_id,
+                        body, (uint64_t)len);
+        goto commit_done;
+    }
+    pthread_mutex_lock(&state->state_mtx);
+    if (state->active_transactions > 0) state->active_transactions -= 1;
+    pthread_mutex_unlock(&state->state_mtx);
+    /* We hold the per-slot mutex, so we can mutate entry->state
+     * directly. */
+    snprintf(entry->state, sizeof(entry->state), "%s", "committed");
+    (void)runtime_flush_tx_record(state, entry);
+    (void)runtime_save_tx_state(state);
+    (void)runtime_append_tx_event(state, "commit_tx");
+    /* Apply: direct-write tx just renames its tmp file(s); spool tx copies
+     * shards into the destination as before.
+     *
+     * If apply fails (writer reported a disk I/O error mid-stream, or any
+     * rename failed), we DO NOT silently report COMMIT_TX_ACK. The
+     * pre-2.2.28 code logged a WARN and proceeded with the rename anyway,
+     * which destroyed the prior good dest_root and replaced it with a
+     * partial/corrupt file while telling the client "success". On
+     * apply failure we now emit FTX2_FRAME_ERROR with a structured body,
+     * mark the journal state "apply_failed", preserve the tmp file(s) for
+     * user inspection, and return early — the destination at dest_root
+     * is left untouched. */
+    int apply_failed = 0;
+    const char *apply_failure_reason = NULL;
+    char apply_failure_detail[256] = {0};
+    uint64_t failed_renames = 0;
+    {
+        uint64_t ta0 = now_us();
+        if (entry->direct_mode && !entry->multi_file) {
+            /* Drain the persistent writer + close the fd before rename.
+             * direct_writer_finish also clears direct_fd / direct_writer,
+             * so the upcoming runtime_release_tx_resources call will not
+             * unlink our freshly-renamed dest_root. */
+            int finish_rc = direct_writer_finish(entry);
+            if (finish_rc != 0) {
+                /* Writer thread reported a write_full() failure during
+                 * streaming. The tmp file at entry->tmp_path is
+                 * partial/corrupt; refuse the rename and surface the
+                 * error to the client. */
+                apply_failed = 1;
+                apply_failure_reason = "direct_writer_io_error";
+                snprintf(apply_failure_detail, sizeof(apply_failure_detail),
+                         "writer thread reported a disk write error mid-stream; "
+                         "destination preserved, partial at %s",
+                         entry->tmp_path);
+                fprintf(stderr,
+                        "[payload2] direct writer reported I/O error for tx %s — "
+                        "refusing rename, destination unchanged\n",
+                        entry->tx_id_hex);
+            } else {
+                /* Commit-time integrity check. The shard-count gate
+                 * above proves we RECEIVED total_shards shards, but the
+                 * resume cursor (last_acked_shard) is also a COUNT, and
+                 * during streaming neither the tmp data nor the journal
+                 * is fsync'd — so a kill mid-write (PS5 rest-mode, power
+                 * loss, takeover) can leave the journaled cursor ahead
+                 * of the bytes actually on disk. A later resume then
+                 * skips those shards and we'd rename a tmp that's SHORT
+                 * of the manifest size: a file that reports "done" but
+                 * is missing interior bytes (worst on USB/exFAT, where
+                 * page-cache loss is likely). Verify the tmp is exactly
+                 * the planned size before publishing it; on a mismatch
+                 * refuse the rename and surface a retryable error so the
+                 * host shows a failure instead of a false success.
+                 * (total_bytes == 0 is the empty-file case handled in
+                 * the shard path — skip it. stat() failure is left to
+                 * the rename below, which then reports its own error.) */
+                struct stat st_done;
+                if (entry->total_bytes > 0 &&
+                    stat(entry->tmp_path, &st_done) == 0 &&
+                    (uint64_t)st_done.st_size != entry->total_bytes) {
+                    apply_failed = 1;
+                    apply_failure_reason = "size_mismatch";
+                    snprintf(apply_failure_detail, sizeof(apply_failure_detail),
+                             "destination would be %lld bytes but manifest expects %llu "
+                             "(transfer incomplete — resume cursor outran durable data?); "
+                             "destination preserved, partial at %s",
+                             (long long)st_done.st_size,
+                             (unsigned long long)entry->total_bytes,
+                             entry->tmp_path);
+                    fprintf(stderr,
+                            "[payload2] commit size mismatch tx %s: tmp=%lld expected=%llu — "
+                            "refusing rename, destination unchanged\n",
+                            entry->tx_id_hex, (long long)st_done.st_size,
+                            (unsigned long long)entry->total_bytes);
+                } else {
+                    (void)unlink(entry->dest_root);
+                    if (rename(entry->tmp_path, entry->dest_root) != 0) {
+                        apply_failed = 1;
+                        apply_failure_reason = "direct_rename_failed";
+                        snprintf(apply_failure_detail, sizeof(apply_failure_detail),
+                                 "rename %s -> %s failed: %s",
+                                 entry->tmp_path, entry->dest_root, strerror(errno));
+                        fprintf(stderr, "[payload2] %s (errno=%d)\n",
+                                apply_failure_detail, errno);
+                    } else {
+                        /* Clear tmp_path so the upcoming release_tx_resources
+                         * doesn't re-unlink a path that no longer exists. */
+                        entry->tmp_path[0] = '\0';
+                        printf("[payload2] direct apply rename -> %s\n", entry->dest_root);
+                    }
+                }
+            }
+        } else if (entry->direct_mode && entry->multi_file) {
+            uint64_t fi = 0;
+            const manifest_index_entry_t *idx =
+                (const manifest_index_entry_t *)entry->manifest_index;
+            if (!idx || !entry->manifest_blob) {
+                apply_failed = 1;
+                apply_failure_reason = "manifest_missing_at_commit";
+                snprintf(apply_failure_detail, sizeof(apply_failure_detail),
+                         "manifest index/blob unavailable at commit time");
+                fprintf(stderr, "[payload2] direct multi commit: missing manifest index for tx %s\n",
+                        entry->tx_id_hex);
+            } else {
+                for (fi = 0; fi < entry->manifest_index_count; fi++) {
+                    char file_path[512];
+                    char tmp_path[512 + 16];
+                    size_t plen = idx[fi].path_len;
+                    if (plen == 0 || plen >= sizeof(file_path)) continue;
+                    if (json_copy_unescaped_string(entry->manifest_blob + idx[fi].path_offset,
+                                                   entry->manifest_blob + idx[fi].path_offset + plen,
+                                                   file_path,
+                                                   sizeof(file_path)) != 0) {
+                        continue;
+                    }
+                    snprintf(tmp_path, sizeof(tmp_path), "%s.ps5up2-tmp", file_path);
+                    /* Two legitimate layouts here:
+                     *   - non-packed record:  data at tmp_path, rename -> file_path
+                     *   - packed record:      data already at file_path, tmp absent
+                     * `rename(tmp, dest)` atomically replaces dest on POSIX, so
+                     * there is no need for the old defensive `unlink(file_path)`
+                     * that this branch used to do — and removing it is what
+                     * keeps packed-record content from being wiped. ENOENT on
+                     * the rename means "packed path already landed the file at
+                     * the destination" which is success, not failure.
+                     *
+                     * Defense-in-depth pre-check (added 2.2.35): a stale
+                     * tmp from a prior aborted run can survive into the
+                     * fresh tx if the BEGIN_TX sweep was skipped (resume
+                     * path) or missed the tmp due to manifest-vs-disk
+                     * path encoding drift. The bug signature is:
+                     *   - file_path exists at the manifest's expected
+                     *     size (pack worker delivered it correctly OR a
+                     *     prior successful run did), AND
+                     *   - tmp_path exists but is *smaller* than expected
+                     *     (a partial write from a prior aborted run).
+                     * In that exact shape, renaming would clobber good
+                     * content with stale partial bytes; unlinking the
+                     * tmp preserves the correct file.
+                     *
+                     * The asymmetric size check avoids false positives:
+                     *   - User replacing a same-size file → new tmp_path
+                     *     holds full new content (size == expected),
+                     *     condition does NOT trigger, rename runs.
+                     *   - Legitimate resume → by COMMIT all shards
+                     *     acked, tmp is at full size; condition does
+                     *     NOT trigger.
+                     * Only the bug case (full file at dest + partial
+                     * stale tmp) hits this guard. */
+                    struct stat st_file;
+                    struct stat st_tmp;
+                    int have_file = (stat(file_path, &st_file) == 0);
+                    int have_tmp  = (stat(tmp_path,  &st_tmp)  == 0);
+                    if (have_file && have_tmp &&
+                        idx[fi].size > 0 &&
+                        (uint64_t)st_file.st_size == idx[fi].size &&
+                        (uint64_t)st_tmp.st_size  <  idx[fi].size) {
+                        fprintf(stderr,
+                                "[payload2] commit: %s already at expected size %llu, tmp partial (%llu) — unlinking stale tmp\n",
+                                file_path,
+                                (unsigned long long)idx[fi].size,
+                                (unsigned long long)st_tmp.st_size);
+                        (void)unlink(tmp_path);
+                        continue;
+                    }
+                    if (rename(tmp_path, file_path) != 0 && errno != ENOENT) {
+                        fprintf(stderr, "[payload2] direct multi rename %s -> %s errno=%d\n",
+                                tmp_path, file_path, errno);
+                        failed_renames += 1;
+                    }
+                }
+                if (failed_renames > 0) {
+                    apply_failed = 1;
+                    apply_failure_reason = "direct_multi_rename_failed";
+                    snprintf(apply_failure_detail, sizeof(apply_failure_detail),
+                             "%llu of %llu file rename(s) failed; partials preserved as .ps5up2-tmp",
+                             (unsigned long long)failed_renames,
+                             (unsigned long long)entry->manifest_index_count);
+                } else {
+                    /* Commit-time integrity check (multi-file analogue
+                     * of the single-file size check above). All renames
+                     * succeeded, but the resume cursor is a shard COUNT
+                     * and streaming writes aren't fsync'd, so a kill
+                     * mid-write (rest-mode / power loss) followed by a
+                     * resume can leave a file SHORT of its manifest size
+                     * while the count-based gate still passes — a game
+                     * that lands looking complete but is silently
+                     * corrupt (the AquaHox USB/exFAT case). Re-stat each
+                     * file against the manifest size and fail loudly on
+                     * any mismatch so the host retries instead of
+                     * trusting a false "done". A bare stat on a
+                     * just-written file hits the inode cache, so this is
+                     * cheap even for a 200k-file game. (size == 0 files
+                     * ride inside packed shards and are skipped — same
+                     * as the stale-tmp guard above.) */
+                    uint64_t bad = 0;
+                    char bad_name[256] = {0};
+                    uint64_t bad_have = 0;
+                    uint64_t bad_want = 0;
+                    for (fi = 0; fi < entry->manifest_index_count; fi++) {
+                        char vpath[512];
+                        size_t vlen = idx[fi].path_len;
+                        if (vlen == 0 || vlen >= sizeof(vpath)) continue;
+                        if (idx[fi].size == 0) continue;
+                        if (json_copy_unescaped_string(
+                                entry->manifest_blob + idx[fi].path_offset,
+                                entry->manifest_blob + idx[fi].path_offset + vlen,
+                                vpath, sizeof(vpath)) != 0) {
+                            continue;
+                        }
+                        struct stat vst;
+                        int have = (stat(vpath, &vst) == 0);
+                        uint64_t got = have ? (uint64_t)vst.st_size : 0;
+                        if (!have || got != idx[fi].size) {
+                            if (bad == 0) {
+                                snprintf(bad_name, sizeof(bad_name), "%s", vpath);
+                                bad_have = got;
+                                bad_want = idx[fi].size;
+                            }
+                            bad += 1;
+                        }
+                    }
+                    if (bad > 0) {
+                        apply_failed = 1;
+                        apply_failure_reason = "size_mismatch";
+                        snprintf(apply_failure_detail, sizeof(apply_failure_detail),
+                                 "%llu file(s) wrong size after commit "
+                                 "(e.g. %s: have %llu, want %llu) — transfer incomplete "
+                                 "(resume cursor outran durable data?)",
+                                 (unsigned long long)bad, bad_name,
+                                 (unsigned long long)bad_have,
+                                 (unsigned long long)bad_want);
+                        fprintf(stderr,
+                                "[payload2] commit multi size mismatch tx %s: %llu bad file(s)\n",
+                                entry->tx_id_hex, (unsigned long long)bad);
+                    } else {
+                        printf("[payload2] direct multi apply: %llu files renamed + verified\n",
+                               (unsigned long long)entry->file_count);
+                    }
+                }
+            }
+        } else if (runtime_apply_spool(entry, client_fd, hdr.trace_id) == 0) {
+            (void)runtime_cleanup_spool(entry);
+        } else {
+            apply_failed = 1;
+            apply_failure_reason = "spool_apply_failed";
+            snprintf(apply_failure_detail, sizeof(apply_failure_detail),
+                     "spool-to-dest apply failed; spool preserved at %s/spool_%s",
+                     PS5UPLOAD2_SPOOL_DIR, entry->tx_id_hex);
+            fprintf(stderr, "[payload2] %s — tx %s dest=%s\n",
+                    apply_failure_detail, entry->tx_id_hex, entry->dest_root);
+        }
+        entry->apply_us += (now_us() - ta0);
+    }
+
+    /* Apply-failure exit path. Overwrite the journal state to reflect
+     * what actually happened on disk, append a distinct event, and
+     * surface a structured FTX2_FRAME_ERROR. We deliberately DO NOT
+     * call runtime_release_tx_resources(entry) here — keeping the
+     * heap state (manifest_blob/index, writer handle if any) lets a
+     * subsequent QUERY_TX or RESUME pick up where we left off, and
+     * skipping the unlink of tmp_path preserves the bytes we wrote
+     * for inspection or manual recovery. */
+    if (apply_failed) {
+        snprintf(entry->state, sizeof(entry->state), "apply_failed");
+        (void)runtime_flush_tx_record(state, entry);
+        (void)runtime_save_tx_state(state);
+        (void)runtime_append_tx_event(state, "commit_tx_apply_failed");
+        /* JSON-escape the detail before interpolating: it embeds
+         * strerror(errno) and PS5 paths. Normal PS5 paths don't
+         * contain `"` or `\`, but a hostile or buggy `entry->
+         * tmp_path` could, and an unescaped backslash or quote
+         * would produce malformed JSON the engine's serde_json
+         * rejects, masking the original error with a parse error.
+         * apply_failure_reason is a static-string code from this
+         * function (e.g. "direct_writer_io_error") so it's
+         * safe-ASCII; tx_id_hex is hex; only detail needs escape. */
+        char detail_esc[512];
+        json_escape_into(apply_failure_detail, detail_esc, sizeof(detail_esc));
+        len = snprintf(body, body_cap,
+                       "{\"error\":\"%s\",\"tx_id\":\"%s\","
+                       "\"failed_renames\":%llu,"
+                       "\"detail\":\"%s\"}",
+                       apply_failure_reason ? apply_failure_reason : "apply_failed",
+                       entry->tx_id_hex,
+                       (unsigned long long)failed_renames,
+                       detail_esc);
+        if (len < 0) { rc = -1; goto commit_done; }
+        if ((size_t)len >= body_cap) len = (int)body_cap - 1;
+        /* Commit attempt failed terminally — clear the connection's
+         * has-open-tx flag so a subsequent socket close doesn't
+         * mark this slot as "interrupted" (overwriting our
+         * apply_failed state). */
+        if (tx_ctx && tx_ctx->has_tx &&
+            memcmp(tx_ctx->tx_id, meta.tx_id, 16) == 0) {
+            tx_ctx->has_tx = 0;
+        }
+        rc = send_frame(client_fd, FTX2_FRAME_ERROR, 0, hdr.trace_id,
+                        body, (uint64_t)len);
+        goto commit_done;
+    }
+    /* Manifest blob + index are no longer needed — release the heap
+     * immediately rather than waiting for the slot to be evicted. */
+    runtime_release_tx_resources(entry);
+    fprintf(stderr, "[payload2] tx %s timing(us): recv=%llu write=%llu verify=%llu apply=%llu "
+                    "bytes=%llu shards=%llu\n",
+            entry->tx_id_hex,
+            (unsigned long long)entry->recv_us,
+            (unsigned long long)entry->write_us,
+            (unsigned long long)entry->verify_us,
+            (unsigned long long)entry->apply_us,
+            (unsigned long long)entry->bytes_received,
+            (unsigned long long)entry->shards_received);
+    char dest_root_esc[1024];
+    json_escape_into(entry->dest_root, dest_root_esc, sizeof(dest_root_esc));
+    len = snprintf(body, body_cap,
+                   "{\"committed\":true,\"tx_id\":\"%s\",\"tx_seq\":%llu,"
+                   "\"shards_received\":%llu,\"bytes_received\":%llu,"
+                   "\"dest_root\":\"%s\",\"active_transactions\":%llu,"
+                   "\"timing_us\":{\"recv\":%llu,\"write_wait\":%llu,"
+                   "\"verify\":%llu,\"apply\":%llu,"
+                   "\"open\":%llu,\"join\":%llu,\"close\":%llu,"
+                   "\"hash\":%llu,\"shard_fn\":%llu,"
+                   "\"pack_records\":%llu,\"pack_unlink\":%llu,"
+                   "\"pack_open\":%llu,\"pack_ftruncate\":%llu,"
+                   "\"pack_write\":%llu,\"pack_close\":%llu,"
+                   "\"pack_open_retries\":%llu,\"pack_write_retries\":%llu},"
+                   "\"sock_rcvbuf\":%d,\"listener_rcvbuf_asked\":%d,"
+                   "\"listener_rcvbuf_actual\":%d,\"listener_sndbuf_actual\":%d,"
+                   "\"max_rcvbuf_probed\":%d}",
+                   entry->tx_id_hex,
+                   (unsigned long long)entry->tx_seq,
+                   (unsigned long long)entry->shards_received,
+                   (unsigned long long)entry->bytes_received,
+                   dest_root_esc,
+                   (unsigned long long)state->active_transactions,
+                   (unsigned long long)entry->recv_us,
+                   (unsigned long long)entry->write_us,
+                   (unsigned long long)entry->verify_us,
+                   (unsigned long long)entry->apply_us,
+                   (unsigned long long)entry->open_us,
+                   (unsigned long long)entry->join_us,
+                   (unsigned long long)entry->close_us,
+                   (unsigned long long)entry->hash_us,
+                   (unsigned long long)entry->shard_func_us,
+                   (unsigned long long)entry->pack_records,
+                   (unsigned long long)entry->pack_unlink_us,
+                   (unsigned long long)entry->pack_open_us,
+                   (unsigned long long)entry->pack_ftruncate_us,
+                   (unsigned long long)entry->pack_write_us,
+                   (unsigned long long)entry->pack_close_us,
+                   (unsigned long long)entry->pack_open_retries,
+                   (unsigned long long)entry->pack_write_retries,
+                   state->last_client_rcvbuf,
+                   state->listener_rcvbuf_asked,
+                   state->listener_rcvbuf_actual,
+                   state->listener_sndbuf_actual,
+                   state->max_rcvbuf_probed);
+    if (len < 0) { rc = -1; goto commit_done; }
+    /* Commit took the tx to a terminal state; clear the connection's
+     * "has open tx" marker so a subsequent socket close doesn't
+     * mis-mark it as interrupted. */
+    if (tx_ctx && tx_ctx->has_tx &&
+        memcmp(tx_ctx->tx_id, meta.tx_id, 16) == 0) {
+        tx_ctx->has_tx = 0;
+    }
+    /* User-visible PS5 toast on successful upload (2.16.1+). Fires a
+     * top-right Sony notification on the TV/monitor itself so the user
+     * gets confirmation even when the desktop ps5upload window is
+     * hidden behind the PS5 system chrome. dlsym in pop_notification
+     * silently no-ops on firmwares where the symbol isn't loaded, so
+     * this never breaks the commit path. */
+    {
+        const char *base = strrchr(entry->dest_root, '/');
+        base = base ? base + 1 : entry->dest_root;
+        char toast[200];
+        double mib = (double)entry->bytes_received / (1024.0 * 1024.0);
+        const char *unit = "MiB";
+        double val = mib;
+        if (mib >= 1024.0) { val = mib / 1024.0; unit = "GiB"; }
+        if (entry->file_count > 1) {
+            snprintf(toast, sizeof(toast),
+                     "PS5Upload: %s done (%.1f %s, %llu files)",
+                     base, val, unit,
+                     (unsigned long long)entry->file_count);
+        } else {
+            snprintf(toast, sizeof(toast),
+                     "PS5Upload: %s done (%.1f %s)",
+                     base, val, unit);
+        }
+        pop_notification(toast);
+    }
+    rc = send_frame(client_fd, FTX2_FRAME_COMMIT_TX_ACK, 0, hdr.trace_id,
+                    body, (uint64_t)len);
+commit_done:
+    runtime_release_tx_entry(state, entry);
+    return rc;
+}
+
+static int handle_abort_tx_frame(runtime_state_t *state, int client_fd,
+                               ftx2_header_t hdr, char *body,
+                               size_t body_cap,
+                               const char *request_body,
+                               conn_tx_ctx_t *tx_ctx) {
+    ftx2_tx_meta_t meta;
+    const char *extra = NULL;
+    uint64_t extra_len = 0;
+
+    int len;
+    int rc;
+    runtime_tx_entry_t *entry = NULL;
+    if (parse_tx_meta(request_body, hdr.body_len, &meta, &extra, &extra_len) == 0) {
+        /* Acquire exclusive: same rationale as COMMIT_TX. A
+         * concurrent SHARD must finish before we tear the entry
+         * down. Released via the `abort_done:` cleanup. */
+        entry = runtime_acquire_tx_entry(state, meta.tx_id);
+    }
+    if (!entry) {
+        return send_frame(client_fd, FTX2_FRAME_ERROR, 0, hdr.trace_id,
+                          "tx_not_found", 12);
+    }
+    /* Guard against double-finalize. Without this, a replayed
+     * ABORT_TX or a confused client that issues both COMMIT and
+     * ABORT for the same tx_id will re-flush a terminal entry
+     * with state="aborted" — silently overwriting a "committed"
+     * record in the journal.
+     *
+     * NB: state "interrupted" (set when a connection dropped
+     * mid-tx without seeing COMMIT/ABORT) MUST stay abortable,
+     * otherwise the canonical "drop happened, user clicks
+     * Cancel on the dangling tx" flow breaks. Only refuse on
+     * already-terminal states (aborted or committed).
+     *
+     * The entry stays acquired, so the `abort_done:` cleanup
+     * still runs. */
+    if (strcmp(entry->state, "aborted") == 0 ||
+        strcmp(entry->state, "committed") == 0) {
+        rc = send_frame(client_fd, FTX2_FRAME_ERROR, 0, hdr.trace_id,
+                        "tx_already_terminal", 19);
+        goto abort_done;
+    }
+    pthread_mutex_lock(&state->state_mtx);
+    if (state->active_transactions > 0) state->active_transactions -= 1;
+    uint64_t active_now = state->active_transactions;
+    pthread_mutex_unlock(&state->state_mtx);
+    snprintf(entry->state, sizeof(entry->state), "%s", "aborted");
+    (void)runtime_flush_tx_record(state, entry);
+    (void)runtime_save_tx_state(state);
+    (void)runtime_append_tx_event(state, "abort_tx");
+    runtime_release_tx_resources(entry);
+    len = snprintf(body, body_cap,
+                   "{\"aborted\":true,\"tx_id\":\"%s\","
+                   "\"active_transactions\":%llu}",
+                   entry->tx_id_hex,
+                   (unsigned long long)active_now);
+    if (len < 0) { rc = -1; goto abort_done; }
+    /* Abort took the tx terminal — see the matching clear in COMMIT_TX
+     * for why we do this. */
+    if (tx_ctx && tx_ctx->has_tx &&
+        memcmp(tx_ctx->tx_id, meta.tx_id, 16) == 0) {
+        tx_ctx->has_tx = 0;
+    }
+    rc = send_frame(client_fd, FTX2_FRAME_ABORT_TX_ACK, 0, hdr.trace_id,
+                    body, (uint64_t)len);
+abort_done:
+    runtime_release_tx_entry(state, entry);
+    return rc;
+}
+
+
 static int handle_binary_frame(runtime_state_t *state, int client_fd,
                                int is_transfer_port,
                                conn_tx_ctx_t *tx_ctx) {
@@ -14128,9 +15326,6 @@ static int handle_binary_frame(runtime_state_t *state, int client_fd,
     char body[2048]; /* large enough for QUERY_TX: outer JSON (~100B) + embedded record (~512B) */
     char request_body[1024];
     ftx2_header_t hdr;
-    ftx2_tx_meta_t meta;
-    const char *extra = NULL;
-    uint64_t extra_len = 0;
 
     if (!state) return -1;
     if (recv_exact(client_fd, hdr_bytes, sizeof(hdr_bytes)) != 0) return -1;
@@ -14181,489 +15376,7 @@ static int handle_binary_frame(runtime_state_t *state, int client_fd,
      * Heap-allocate the body so large directories don't hit the stack guard.
      */
     if (hdr.frame_type == FTX2_FRAME_BEGIN_TX) {
-        /* Hard cap on the BEGIN_TX manifest size. PPSA01342 (the
-         * largest small-file workload we validate against) has 223k
-         * files at ~150 bytes per manifest entry → ~33 MB; the cap
-         * leaves an order-of-magnitude headroom for any real upload
-         * while refusing absurd values (e.g., crafted body_len of
-         * several GB) that would otherwise either succeed at malloc
-         * and OOM the payload, or fail malloc and tie up a worker
-         * thread draining bytes from a malicious LAN client until
-         * recv_exact times out. Above this cap we close the connection
-         * (via -1 return) since accepting further frames after a
-         * misaligned drain isn't safe. */
-        #define BEGIN_TX_BODY_MAX ((uint64_t)256 * 1024 * 1024)
-        char resp[2048];
-        char *begin_body = NULL;
-        uint64_t begin_body_len = hdr.body_len;
-        const char *bextra = NULL;
-        uint64_t bextra_len = 0;
-        ftx2_tx_meta_t bmeta;
-        runtime_tx_entry_t *entry = NULL;
-        int ret;
-        int len;
-
-        if (begin_body_len > BEGIN_TX_BODY_MAX) {
-            (void)send_frame(client_fd, FTX2_FRAME_ERROR, 0, hdr.trace_id,
-                             "begin_tx_body_too_large", 23);
-            return -1;
-        }
-
-        if (begin_body_len > 0) {
-            begin_body = (char *)malloc((size_t)begin_body_len + 1);
-            if (!begin_body) {
-                /* drain and report OOM */
-                uint64_t rem = begin_body_len;
-                char discard[256];
-                while (rem > 0) {
-                    size_t take = rem > sizeof(discard) ? sizeof(discard) : (size_t)rem;
-                    if (recv_exact(client_fd, discard, take) != 0) return -1;
-                    rem -= (uint64_t)take;
-                }
-                return send_frame(client_fd, FTX2_FRAME_ERROR, 0, hdr.trace_id,
-                                  "out_of_memory", 13);
-            }
-            if (recv_exact(client_fd, begin_body, (size_t)begin_body_len) != 0) {
-                free(begin_body);
-                return -1;
-            }
-            begin_body[begin_body_len] = '\0';
-        }
-
-        if (parse_tx_meta(begin_body ? begin_body : "", begin_body_len,
-                          &bmeta, &bextra, &bextra_len) != 0) {
-            free(begin_body);
-            return send_frame(client_fd, FTX2_FRAME_ERROR, 0, hdr.trace_id,
-                              "invalid_tx_meta", 15);
-        }
-        /* Resolve the tx entry against the journal, picking one of three
-         * outcomes per (has-existing-entry) × (client-wants-resume):
-         *
-         *   existing + resume-flag:  RESUME — adopt, preserve shards_received,
-         *                            tmp file, and manifest heap. (The entry
-         *                            state may be either "interrupted" (clean
-         *                            drop, payload saw it) or "active" (TCP
-         *                            drop, payload's recv returned -1 and we
-         *                            marked it interrupted in the connection
-         *                            cleanup OR we didn't get a chance to yet
-         *                            — both imply the client's partial data is
-         *                            still on disk.)
-         *
-         *   existing + no-resume:    RESTART — client explicitly asked for a
-         *                            fresh tx. Drop tmp, reset counters. This
-         *                            catches "I cancelled and want to start
-         *                            over" where the client intentionally
-         *                            reuses the tx_id.
-         *
-         *   no existing:             FRESH — normal new tx allocation.
-         *
-         * `is_resume` drives whether later code in this handler re-runs
-         * destructive side-effects: unlinking kind=1 tmp files and
-         * re-parsing the kind=2 manifest index. Both must be skipped on
-         * resume — they'd destroy the very state we're trying to adopt. */
-        int is_resume = 0;
-        int want_resume = (bmeta.flags & FTX2_TX_FLAG_RESUME) != 0;
-        /* New in P3: client opts in to APPLY_PROGRESS frames during the
-         * multi-file commit apply loop. The flag is captured into the
-         * tx entry below (both FRESH and RESUME paths) so the apply
-         * loop can check entry->apply_progress_enabled when deciding
-         * whether to emit. Opt-in keeps old clients safe — they don't
-         * set the flag, so we stay silent and they see the legacy
-         * single-CommitTxAck behaviour. */
-        int want_apply_progress =
-            (bmeta.flags & FTX2_TX_FLAG_APPLY_PROGRESS_REQUESTED) != 0;
-        pthread_mutex_lock(&state->state_mtx);
-        {
-            runtime_tx_entry_t *existing = runtime_find_tx_entry(state, bmeta.tx_id);
-            if (existing && want_resume) {
-                /* Adopt. If state is "interrupted" we're coming back from
-                 * a paused tx — the mark-interrupted path decremented
-                 * `active_transactions` on pause, so bump it back now
-                 * so the matching commit/abort decrement balances. If
-                 * state is already "active" (TCP drop raced the first
-                 * reconnect before mark-interrupted could fire), the
-                 * counter already reflects this tx — don't double-count. */
-                int was_interrupted = strcmp(existing->state, "interrupted") == 0;
-                snprintf(existing->state, sizeof(existing->state), "active");
-                if (was_interrupted) {
-                    state->active_transactions += 1;
-                }
-                entry = existing;
-                is_resume = 1;
-            } else if (existing && !want_resume) {
-                /* Explicit restart with same tx_id — common when the user
-                 * cancels an upload and re-clicks Override. Drop partial
-                 * state and reuse the slot. Counter accounting mirrors
-                 * the want_resume branch: if the prior state was
-                 * "interrupted" we're re-activating, so bump. If it was
-                 * still "active" the counter already reflects this tx
-                 * (TCP drop raced, mark-interrupted didn't fire). */
-                int was_interrupted = strcmp(existing->state, "interrupted") == 0;
-                entry = existing;
-                runtime_release_tx_resources(entry); /* unlinks tmp */
-                entry->shards_received = 0;
-                entry->bytes_received  = 0;
-                entry->total_shards    = 0;
-                entry->total_bytes     = 0;
-                entry->file_count      = 0;
-                entry->direct_mode     = 0;
-                entry->multi_file      = 0;
-                entry->tmp_path[0]     = '\0';
-                entry->dest_root[0]    = '\0';
-                snprintf(entry->state, sizeof(entry->state), "active");
-                if (was_interrupted) {
-                    state->active_transactions += 1;
-                }
-                is_resume = 0;
-            } else {
-                /* Fresh allocation. */
-                state->active_transactions += 1;
-                state->last_tx_seq += 1;
-                entry = runtime_alloc_tx_entry(state, bmeta.tx_id, state->last_tx_seq);
-                is_resume = 0;
-            }
-        }
-        pthread_mutex_unlock(&state->state_mtx);
-        if (!entry) {
-            /* Roll back the optimistic active_transactions increment we
-             * did before calling runtime_alloc_tx_entry. Without this,
-             * every tx_table_full rejection permanently inflates the
-             * counter, corrupting STATUS_ACK and the crash-recovery
-             * journal's "active_transactions=" field. */
-            pthread_mutex_lock(&state->state_mtx);
-            if (state->active_transactions > 0) state->active_transactions -= 1;
-            pthread_mutex_unlock(&state->state_mtx);
-            free(begin_body);
-            return send_frame(client_fd, FTX2_FRAME_ERROR, 0, hdr.trace_id,
-                              "tx_table_full", 13);
-        }
-        /* Skip manifest/metadata extraction on resume — the entry already
-         * carries the correct values from the original BEGIN_TX (either
-         * still in memory, or reloaded from the journal on payload start).
-         * Re-extracting would be idempotent if the client re-sends the
-         * exact same body, but it would overwrite our dest_root/total_shards
-         * with whatever the client decides to send, and there's no upside. */
-        if (!is_resume && bextra && bextra_len > 0) {
-            extract_json_string_field(bextra, "dest_root",
-                                      entry->dest_root, sizeof(entry->dest_root));
-            /* Reject manifests whose dest_root would let a LAN client
-             * write outside the allowlisted writable roots
-             * (/data, /user, /mnt/ext_, /mnt/usb_, /mnt/ps5upload/_).
-             * Without this, a crafted BEGIN_TX with dest_root of
-             * "/system_ex/..." or "/system_data/priv/..." passes
-             * straight into the open()+write() path further down with
-             * no further validation. The directory traversal check is
-             * inside is_path_allowed (component-scoped, rejects "..").
-             */
-            if (entry->dest_root[0] && !is_path_allowed(entry->dest_root)) {
-                /* runtime_abort_tx_fatal handles the state.active_transactions
-                 * decrement, marks state="aborted", flushes the journal
-                 * record, and releases tmp/manifest resources — the
-                 * complete cleanup path. The earlier draft just unlocked
-                 * the per-slot mutex via runtime_release_tx_entry, which
-                 * left in_use=1 and active_transactions over-counted —
-                 * the slot would leak until the periodic janitor sweep
-                 * (or never, since journal flush hadn't yet run). */
-                runtime_abort_tx_fatal(state, entry);
-                free(begin_body);
-                return send_frame(client_fd, FTX2_FRAME_ERROR, 0,
-                                  hdr.trace_id,
-                                  "dest_root_not_allowed", 21);
-            }
-            entry->total_shards = extract_json_uint64_field(bextra, "total_shards");
-            entry->total_bytes  = extract_json_uint64_field(bextra, "total_bytes");
-            entry->file_count   = extract_json_uint64_field(bextra, "file_count");
-            if (entry->file_count == 0) entry->file_count = 1;
-            /* Authoritative single-vs-multi-file decision: the BEGIN_TX kind,
-             * NOT file_count. kind==2 is a multi-file (folder) transaction
-             * even when it carries exactly one file — see runtime_tx_entry_t
-             * ::multi_file. The engine packs lone small files, so this MUST
-             * be set for the packed-shard path to accept them. */
-            entry->multi_file   = (bmeta.kind == 2);
-            (void)runtime_write_manifest(entry, bextra, (size_t)bextra_len);
-        }
-        /* P3: stamp the per-tx apply-progress opt-in from BEGIN_TX flags
-         * onto the entry. Set on every BEGIN_TX (including resume — the
-         * client can change its mind across attempts; an old client
-         * resuming a new-client tx would clear the flag, expectedly).
-         * Only meaningful for multi_file txs since single-file commits
-         * are fast and don't need progress reporting. */
-        entry->apply_progress_enabled = want_apply_progress;
-        /* Enable direct-write path:
-         *   - single-file (kind=1, file_count<=1): stream straight to
-         *     <dest>.ps5up2-tmp, rename at commit.
-         *   - multi-file (kind=2, files[] populated): stream each shard to
-         *     <file_path>.ps5up2-tmp using the manifest to route shard_seq
-         *     to its file. Rename each tmp at commit.
-         *
-         * Shards arrive in sequence within a single connection so per-file
-         * append ordering is guaranteed.
-         *
-         * On resume: direct_mode / tmp_path / manifest_blob / manifest_index
-         * are already set from the original BEGIN_TX, so both branches
-         * short-circuit. The unlink in the kind=1 branch and the manifest
-         * rebuild in the kind=2 branch are the bugs the `is_resume` guard
-         * is here to prevent — both would destroy the partial state that
-         * shards_received is about to tell the client to skip past.
-         */
-        if (is_resume) {
-            /* In-memory resume (TCP drop, payload still running): the entry
-             * already carries manifest_index + direct_mode, so the restore
-             * blocks below are no-ops and we go straight to reconcile.
-             *
-             * Resume AFTER a payload restart (power loss / takeover): the
-             * startup load restored only scalar fields — manifest_index is
-             * NULL and direct_mode is 0. Without restoring them, a multi-
-             * file tx would fall to the spool commit path with its shards
-             * missing (they're in tmps from the original direct run) and
-             * fail; a single-file tx would append at the wrong offset.
-             * Rebuild the direct-mode state from the ON-DISK manifest (the
-             * same builder the fresh path uses) so the resumed transfer
-             * continues on the verified direct path. */
-            if (entry->multi_file && !entry->manifest_index) {
-                char *mbuf = NULL;
-                size_t mlen = 0;
-                int from_begin = 0;
-                /* 2.25.x: PREFER the manifest carried in THIS resume BeginTx
-                 * over the stale on-disk journal copy. Since per-file durable
-                 * promote landed, the engine reconciles before every resume and
-                 * EXCLUDES the files that already promoted to their final path,
-                 * so the BeginTx manifest is REDUCED (fewer files, shards
-                 * renumbered 1..N). Rebuilding from the journal's ORIGINAL
-                 * full manifest would route the reduced stream by the old
-                 * numbering — "no manifest file owns shard <n>" → fatal abort,
-                 * the exact same-tx-id resume failure the promote change
-                 * otherwise introduces. Adopt the engine's current manifest
-                 * (authoritative — it already accounts for what's durable),
-                 * refresh the scalar totals from it, and re-persist the journal
-                 * so a further restart stays consistent. The resume cursor is a
-                 * COUNT against the OLD numbering and is meaningless here, but
-                 * reconcile_resume_cursor (called just below) re-derives it from
-                 * on-disk durable state: every file in a freshly-reduced
-                 * manifest is non-durable, so it clamps the cursor to 0 and the
-                 * whole reduced set is re-requested cleanly. Fall back to the
-                 * journal copy only when this BeginTx carried no manifest (an
-                 * older client that doesn't resend it on resume). */
-                if (bextra && bextra_len > 0) {
-                    uint64_t fc = extract_json_uint64_field(bextra, "file_count");
-                    uint64_t ts = extract_json_uint64_field(bextra, "total_shards");
-                    uint64_t tb = extract_json_uint64_field(bextra, "total_bytes");
-                    mbuf = (char *)malloc((size_t)bextra_len + 1);
-                    if (mbuf) {
-                        memcpy(mbuf, bextra, (size_t)bextra_len);
-                        mbuf[bextra_len] = '\0';
-                        mlen = (size_t)bextra_len;
-                        from_begin = 1;
-                        if (fc > 0) entry->file_count = fc;
-                        entry->total_shards = ts;
-                        entry->total_bytes  = tb;
-                    }
-                }
-                if (!mbuf && runtime_read_manifest_alloc(entry, &mbuf, &mlen) != 0) {
-                    mbuf = NULL;
-                }
-                if (mbuf) {
-                    manifest_index_entry_t *ridx = NULL;
-                    uint64_t ridx_count = 0;
-                    if (build_manifest_index(mbuf, mlen, entry->file_count,
-                                             &ridx, &ridx_count) == 0) {
-                        entry->manifest_blob        = mbuf;
-                        entry->manifest_blob_len    = mlen;
-                        entry->manifest_index       = ridx;
-                        entry->manifest_index_count = ridx_count;
-                        entry->direct_mode          = 1;
-                        if (from_begin) {
-                            /* Persist the adopted (reduced) manifest so a
-                             * SECOND restart rebuilds from it, not the
-                             * original. */
-                            (void)runtime_write_manifest(entry, mbuf, mlen);
-                            /* CRITICAL (2.25.1): reset the cursor to 0 and
-                             * re-send the whole reduced manifest from scratch.
-                             * The engine reconciled before this resume, so
-                             * every file here is one it wants RE-SENT (durably-
-                             * promoted files were excluded). The journaled
-                             * shards_received is a COUNT against the OLD full-
-                             * manifest numbering — meaningless against the
-                             * renumbered reduced set. Worse: each per-file tmp
-                             * was posix_fallocate()'d to its FULL size on its
-                             * first shard, so a half-written in-flight file
-                             * stat()s at exactly its manifest size, and
-                             * reconcile_resume_cursor's "tmp at exact size =
-                             * durable" test FALSELY marks it complete and skips
-                             * it → the in-flight file lands CORRUPT (confirmed
-                             * on hardware: a mid-file crash + resume produced a
-                             * 0%-matching big.bin). Resetting to 0 makes the
-                             * engine re-send all reduced-manifest shards; each
-                             * file's first shard unlinks + re-truncates its
-                             * tmp, so the write is clean. This exactly mirrors
-                             * the single-file resume path below. Cost: re-send
-                             * the one or two not-yet-complete files from their
-                             * start (completed files are already promoted to
-                             * their final path and excluded). */
-                            entry->shards_received = 0;
-                            entry->bytes_received  = 0;
-                        }
-                    } else {
-                        free(mbuf);
-                    }
-                }
-            } else if (!entry->multi_file && !entry->direct_mode &&
-                       entry->dest_root[0]) {
-                /* Single-file resume after a restart. We can't precisely map
-                 * on-disk bytes back to a shard boundary without the shard
-                 * size, so the safe move is a full re-send: restore direct
-                 * mode + tmp path, drop the partial tmp, reset the cursor.
-                 * Correct and self-healing; cost is re-uploading one file. */
-                entry->direct_mode = 1;
-                snprintf(entry->tmp_path, sizeof(entry->tmp_path),
-                         "%s.ps5up2-tmp", entry->dest_root);
-                (void)unlink(entry->tmp_path);
-                entry->shards_received = 0;
-                entry->bytes_received  = 0;
-            }
-            /* Reconcile the multi-file cursor against what's durably on disk
-             * (see reconcile_resume_cursor). A no-op when everything up to
-             * the journaled cursor is present (the in-memory case); on a
-             * restart it pulls the cursor back to the last fully-written
-             * file so the gap gets re-sent instead of skipped. */
-            if (entry->multi_file) {
-                reconcile_resume_cursor(entry);
-            }
-        } else if (bmeta.kind == 1 && entry->file_count <= 1 && entry->dest_root[0]) {
-            entry->direct_mode = 1;
-            snprintf(entry->tmp_path, sizeof(entry->tmp_path),
-                     "%s.ps5up2-tmp", entry->dest_root);
-            if (ensure_parent_dir(entry->dest_root) != 0) {
-                fprintf(stderr, "[payload2] direct: ensure_parent_dir failed: %s\n",
-                        entry->dest_root);
-                entry->direct_mode = 0;
-            } else {
-                /* Fresh tx: unlink any leftover tmp. Not reached on resume. */
-                (void)unlink(entry->tmp_path);
-            }
-        } else if (bmeta.kind == 2 && entry->file_count > 0 &&
-                   bextra && bextra_len > 0 &&
-                   strstr(bextra, "\"files\":[")) {
-            /* Multi-file direct mode: parse the manifest once into a heap
-             * index so per-shard routing is O(log N), not O(N) per shard.
-             * If blob exceeds the hard cap or the parse fails, we refuse
-             * the transaction outright — the old code silently truncated a
-             * multi-KiB manifest into an 8 KiB stack buffer per shard, which
-             * corrupted any transfer with more than ~60 files. */
-            if (bextra_len > PS5UPLOAD2_MAX_MANIFEST_BLOB) {
-                runtime_abort_tx_fatal(state, entry);
-                free(begin_body);
-                return send_frame(client_fd, FTX2_FRAME_ERROR, 0, hdr.trace_id,
-                                  "manifest_too_large", 18);
-            }
-            {
-                char *blob = (char *)malloc((size_t)bextra_len + 1);
-                manifest_index_entry_t *idx = NULL;
-                uint64_t idx_count = 0;
-                if (!blob) {
-                    runtime_abort_tx_fatal(state, entry);
-                    free(begin_body);
-                    return send_frame(client_fd, FTX2_FRAME_ERROR, 0, hdr.trace_id,
-                                      "out_of_memory", 13);
-                }
-                memcpy(blob, bextra, (size_t)bextra_len);
-                blob[bextra_len] = '\0';
-                if (build_manifest_index(blob, (size_t)bextra_len,
-                                         entry->file_count, &idx, &idx_count) != 0) {
-                    free(blob);
-                    runtime_abort_tx_fatal(state, entry);
-                    free(begin_body);
-                    return send_frame(client_fd, FTX2_FRAME_ERROR, 0, hdr.trace_id,
-                                      "manifest_invalid", 16);
-                }
-                entry->manifest_blob         = blob;
-                entry->manifest_blob_len     = (size_t)bextra_len;
-                entry->manifest_index        = idx;
-                entry->manifest_index_count  = idx_count;
-                entry->direct_mode = 1;
-                /* Unlink any stale per-file .ps5up2-tmp files left by a
-                 * prior aborted/failed upload of the same destination.
-                 * The single-file path at line 7270 already does this for
-                 * its single tmp; multi-file mode was missing the
-                 * equivalent sweep, which produced a hard-to-spot silent
-                 * corruption pattern:
-                 *
-                 *   1. Prior upload of game G fails partway, some
-                 *      <file>.ps5up2-tmp files remain on disk.
-                 *   2. User retries upload of game G. Engine's pack
-                 *      decision for some files differs from last time
-                 *      (because pack threshold or size near boundary),
-                 *      OR the file is now packed where it was non-packed.
-                 *   3. Pack worker writes correct content to file_path
-                 *      directly. No new tmp created for that file.
-                 *   4. COMMIT rename loop iterates manifest entries,
-                 *      sees the STALE <file>.ps5up2-tmp from step 1,
-                 *      rename(stale_tmp, file_path) succeeds — and
-                 *      OVERWRITES the just-written-correct packed content
-                 *      with the stale tmp. Client sees commit success,
-                 *      destination has stale content, game won't launch.
-                 *
-                 * Sweeping at fresh BEGIN_TX time eliminates the
-                 * stale-tmp source. The is_resume branch above
-                 * intentionally skips this sweep — a true resume needs
-                 * the partial tmps preserved. */
-                {
-                    const manifest_index_entry_t *idx_entries =
-                        (const manifest_index_entry_t *)idx;
-                    for (uint64_t i = 0; i < idx_count; i++) {
-                        char file_path[512];
-                        char stale_tmp[512 + 16];
-                        size_t plen = idx_entries[i].path_len;
-                        uint32_t poff = idx_entries[i].path_offset;
-                        if (plen == 0 || plen >= sizeof(file_path)) continue;
-                        /* Defense-in-depth bounds check matching
-                         * lookup_manifest_index — build_manifest_index
-                         * already validates these, but the cost is one
-                         * comparison and it makes this loop safe under
-                         * any future manifest-builder change. */
-                        if ((uint64_t)poff + (uint64_t)plen > bextra_len) {
-                            continue;
-                        }
-                        if (json_copy_unescaped_string(blob + poff,
-                                                       blob + poff + plen,
-                                                       file_path,
-                                                       sizeof(file_path)) != 0) {
-                            continue;
-                        }
-                        snprintf(stale_tmp, sizeof(stale_tmp),
-                                 "%s.ps5up2-tmp", file_path);
-                        (void)unlink(stale_tmp);
-                    }
-                }
-            }
-        }
-        (void)runtime_save_tx_state(state);
-        (void)runtime_append_tx_event(state, "begin_tx");
-        (void)runtime_flush_tx_record(state, entry);
-        free(begin_body);
-        pthread_mutex_lock(&state->state_mtx);
-        state->command_count += 1;
-        pthread_mutex_unlock(&state->state_mtx);
-
-        len = snprintf(resp, sizeof(resp),
-                       "{\"accepted\":true,\"tx_id\":\"%s\",\"tx_seq\":%llu,"
-                       "\"active_transactions\":%llu,"
-                       "\"last_acked_shard\":%llu}",
-                       entry->tx_id_hex,
-                       (unsigned long long)entry->tx_seq,
-                       (unsigned long long)state->active_transactions,
-                       (unsigned long long)entry->shards_received);
-        if (len < 0) return -1;
-        /* Remember this tx on the connection so a socket close before
-         * COMMIT/ABORT marks it "interrupted" rather than leaving an
-         * "active" orphan in the journal. */
-        if (tx_ctx) {
-            memcpy(tx_ctx->tx_id, entry->tx_id, 16);
-            tx_ctx->has_tx = 1;
-        }
-        ret = send_frame(client_fd, FTX2_FRAME_BEGIN_TX_ACK, 0, hdr.trace_id,
-                         resp, (uint64_t)len);
-        return ret;
+        return handle_begin_tx_frame(state, client_fd, hdr, tx_ctx);
     }
 
     if (hdr.frame_type == FTX2_FRAME_FS_WRITE_BYTES ||
@@ -14773,672 +15486,22 @@ static int handle_binary_frame(runtime_state_t *state, int client_fd,
 
     /* ── STATUS ── */
     if (hdr.frame_type == FTX2_FRAME_STATUS) {
-        /* Snapshot cross-thread fields under the mutex so a concurrent
-         * transfer-side BEGIN/COMMIT/ABORT can't produce a mid-flight
-         * read of active_transactions or last_tx_seq. Keep the lock
-         * window to memory copies only — never hold across send_frame. */
-        uint64_t snap_instance_id, snap_started_at, snap_command_count;
-        uint64_t snap_active_tx, snap_last_seq, snap_recovered;
-        int snap_shutdown, snap_startup_reason, snap_takeover_req, snap_port;
-        int len;
-        char kernel_version_raw[256];
-        char kernel_version_esc[512];
-        read_ps5_kernel_version(kernel_version_raw, sizeof(kernel_version_raw));
-        json_escape_into(kernel_version_raw, kernel_version_esc, sizeof(kernel_version_esc));
-        pthread_mutex_lock(&state->state_mtx);
-        snap_instance_id    = state->instance_id;
-        snap_port           = state->runtime_port;
-        snap_shutdown       = state->shutdown_requested;
-        snap_startup_reason = state->startup_reason;
-        snap_takeover_req   = state->takeover_requested;
-        snap_started_at     = state->started_at_unix;
-        snap_command_count  = state->command_count;
-        snap_active_tx      = state->active_transactions;
-        snap_last_seq       = state->last_tx_seq;
-        snap_recovered      = state->recovered_transactions;
-        pthread_mutex_unlock(&state->state_mtx);
-        /* Surface ucred elevation result so the client UI can warn
-         * "load kstuff first" when elevation == false without
-         * having to call a Sony API that might wedge. The pid -1
-         * value used in main()'s call means "current process";
-         * 0 from the kernel = elevation succeeded.
-         * `g_ucred_elevation_rc` is defined in main.c. */
-        extern volatile int g_ucred_elevation_rc;
-        const int ucred_elevated = (g_ucred_elevation_rc == 0) ? 1 : 0;
-        /* Fan threshold + reapply interval for the client UI. Both are
-         * read from atomics in hw_info.c so this is lock-free. */
-        int fan_pinned = hw_fan_pinned_threshold();
-        int fan_reapply = hw_fan_reapply_interval();
-        len = snprintf(body, sizeof(body),
-                       "{\"version\":\"%s\","
-                       "\"ps5_kernel\":\"%s\","
-                       "\"instance_id\":%llu,\"runtime_port\":%d,"
-                       "\"shutdown\":%d,\"startup_reason\":%d,"
-                       "\"takeover_requested\":%d,\"started_at_unix\":%llu,"
-                       "\"command_count\":%llu,\"active_transactions\":%llu,"
-                       "\"last_tx_seq\":%llu,\"recovered_transactions\":%llu,"
-                       "\"ucred_elevated\":%s,"
-                       /* Multi-stream capability: how many parallel transfer
-                        * connections this payload will service concurrently.
-                        * Absent on old payloads → engine treats it as 1. */
-                       "\"max_transfer_streams\":%d,"
-                       /* Fan state: pinned threshold (0 = not set) and the
-                        * reapply interval in seconds. Lets the client display
-                        * current settings without a separate round-trip. */
-                       "\"fan_threshold\":%d,"
-                       "\"fan_reapply_sec\":%d}",
-                       PS5UPLOAD2_VERSION,
-                       kernel_version_esc,
-                       (unsigned long long)snap_instance_id,
-                       snap_port,
-                       snap_shutdown,
-                       snap_startup_reason,
-                       snap_takeover_req,
-                       (unsigned long long)snap_started_at,
-                       (unsigned long long)snap_command_count,
-                       (unsigned long long)snap_active_tx,
-                       (unsigned long long)snap_last_seq,
-                       (unsigned long long)snap_recovered,
-                       ucred_elevated ? "true" : "false",
-                       PS5UPLOAD2_TRANSFER_STREAMS_ADVERTISED,
-                       fan_pinned,
-                       fan_reapply);
-        /* Truncation-safe: if the fields ever grow past `body`, clamp
-         * rather than emit a body_len that drives send_frame to read
-         * past the stack buffer. The JSON is still valid-on-arrival
-         * only when len < sizeof(body); the engine will fail the
-         * serde_json::from_slice on a truncated body and return 502
-         * to the UI, which is the right failure mode. */
-        if (len < 0) return -1;
-        if ((size_t)len >= sizeof(body)) len = (int)(sizeof(body) - 1);
-        return send_frame(client_fd, FTX2_FRAME_STATUS_ACK, 0, hdr.trace_id,
-                          body, (uint64_t)len);
+        return handle_status_frame(state, client_fd, hdr, body, sizeof(body));
     }
 
     /* ── QUERY_TX ── */
     if (hdr.frame_type == FTX2_FRAME_QUERY_TX) {
-        char record[1024];
-        int len;
-        int requested_specific = 0;
-        int have_snapshot = 0;
-        uint64_t snap_active = 0;
-        uint64_t snap_last = 0;
-        runtime_tx_entry_t snap_entry;
-        memset(&snap_entry, 0, sizeof(snap_entry));
-
-        /* Snapshot the state we need under the lock, then release the
-         * lock before doing I/O. The transfer side takes this mutex on
-         * every SHARD ACK — holding it across `runtime_read_tx_record`
-         * (which does fopen+fread on a UFS-backed file that can stall
-         * tens of milliseconds under pressure) was dropping shards
-         * mid-flight because the writer thread blocked on the lock
-         * past its recv timeout. */
-        pthread_mutex_lock(&state->state_mtx);
-        {
-            runtime_tx_entry_t *entry = NULL;
-            snap_active = state->active_transactions;
-            snap_last   = state->last_tx_seq;
-            if (parse_tx_meta(request_body, hdr.body_len, &meta, &extra, &extra_len) == 0) {
-                requested_specific = 1;
-                entry = runtime_find_tx_entry(state, meta.tx_id);
-            }
-            if (!entry && !requested_specific && snap_last > 0) {
-                int i = 0;
-                for (i = 0; i < PS5UPLOAD2_MAX_TX; i++) {
-                    if (state->tx_entries[i].in_use &&
-                        state->tx_entries[i].tx_seq == snap_last) {
-                        entry = &state->tx_entries[i];
-                        break;
-                    }
-                }
-            }
-            if (entry) {
-                snap_entry = *entry;   /* copy-by-value while locked */
-                have_snapshot = 1;
-            }
-        }
-        pthread_mutex_unlock(&state->state_mtx);
-
-        if (requested_specific && !have_snapshot) {
-            return send_frame(client_fd, FTX2_FRAME_ERROR, 0, hdr.trace_id,
-                              "tx_not_found", 12);
-        }
-
-        /* File read now happens lock-free. If the entry was evicted
-         * between snapshot + read we get a stale or missing record;
-         * that's surfaced as `last_tx_record: null` which is what the
-         * pre-existing code already did for that case. */
-        if (have_snapshot && runtime_read_tx_record(&snap_entry, record, 1024) == 0) {
-            len = snprintf(body, sizeof(body),
-                           "{\"active_transactions\":%llu,\"last_tx_seq\":%llu,"
-                           "\"tx_id\":\"%s\",\"state\":\"%s\","
-                           "\"shards_received\":%llu,\"bytes_received\":%llu,"
-                           "\"last_tx_record\":%s}",
-                           (unsigned long long)snap_active,
-                           (unsigned long long)snap_last,
-                           snap_entry.tx_id_hex,
-                           snap_entry.state,
-                           (unsigned long long)snap_entry.shards_received,
-                           (unsigned long long)snap_entry.bytes_received,
-                           record);
-        } else {
-            len = snprintf(body, sizeof(body),
-                           "{\"active_transactions\":%llu,\"last_tx_seq\":%llu,"
-                           "\"last_tx_record\":null}",
-                           (unsigned long long)snap_active,
-                           (unsigned long long)snap_last);
-        }
-        if (len < 0) return -1;
-        if ((size_t)len >= sizeof(body)) len = (int)(sizeof(body) - 1);
-        return send_frame(client_fd, FTX2_FRAME_QUERY_TX_ACK, 0, hdr.trace_id,
-                          body, (uint64_t)len);
+        return handle_query_tx_frame(state, client_fd, hdr, body, sizeof(body), request_body);
     }
 
     /* ── COMMIT_TX ── */
     if (hdr.frame_type == FTX2_FRAME_COMMIT_TX) {
-        int len;
-        int rc;
-        runtime_tx_entry_t *entry = NULL;
-        if (parse_tx_meta(request_body, hdr.body_len, &meta, &extra, &extra_len) != 0) {
-            return send_frame(client_fd, FTX2_FRAME_ERROR, 0, hdr.trace_id,
-                              "invalid_tx_meta", 15);
-        }
-        /* Acquire exclusive: a concurrent SHARD on the transfer port
-         * must finish before we tear down the manifest/writer state.
-         * Released via the `commit_done:` cleanup. */
-        entry = runtime_acquire_tx_entry(state, meta.tx_id);
-        if (!entry) {
-            return send_frame(client_fd, FTX2_FRAME_ERROR, 0, hdr.trace_id,
-                              "tx_not_found", 12);
-        }
-        if (strcmp(entry->state, "active") != 0) {
-            rc = send_frame(client_fd, FTX2_FRAME_ERROR, 0, hdr.trace_id,
-                            "tx_not_active", 13);
-            goto commit_done;
-        }
-        /* Verify all expected shards arrived (skip check if total_shards unknown). */
-        if (entry->total_shards > 0 &&
-            entry->shards_received < entry->total_shards) {
-            len = snprintf(body, sizeof(body),
-                           "{\"error\":\"shards_incomplete\","
-                           "\"shards_received\":%llu,\"total_shards\":%llu}",
-                           (unsigned long long)entry->shards_received,
-                           (unsigned long long)entry->total_shards);
-            if (len < 0) { rc = -1; goto commit_done; }
-            rc = send_frame(client_fd, FTX2_FRAME_ERROR, 0, hdr.trace_id,
-                            body, (uint64_t)len);
-            goto commit_done;
-        }
-        pthread_mutex_lock(&state->state_mtx);
-        if (state->active_transactions > 0) state->active_transactions -= 1;
-        pthread_mutex_unlock(&state->state_mtx);
-        /* We hold the per-slot mutex, so we can mutate entry->state
-         * directly. */
-        snprintf(entry->state, sizeof(entry->state), "%s", "committed");
-        (void)runtime_flush_tx_record(state, entry);
-        (void)runtime_save_tx_state(state);
-        (void)runtime_append_tx_event(state, "commit_tx");
-        /* Apply: direct-write tx just renames its tmp file(s); spool tx copies
-         * shards into the destination as before.
-         *
-         * If apply fails (writer reported a disk I/O error mid-stream, or any
-         * rename failed), we DO NOT silently report COMMIT_TX_ACK. The
-         * pre-2.2.28 code logged a WARN and proceeded with the rename anyway,
-         * which destroyed the prior good dest_root and replaced it with a
-         * partial/corrupt file while telling the client "success". On
-         * apply failure we now emit FTX2_FRAME_ERROR with a structured body,
-         * mark the journal state "apply_failed", preserve the tmp file(s) for
-         * user inspection, and return early — the destination at dest_root
-         * is left untouched. */
-        int apply_failed = 0;
-        const char *apply_failure_reason = NULL;
-        char apply_failure_detail[256] = {0};
-        uint64_t failed_renames = 0;
-        {
-            uint64_t ta0 = now_us();
-            if (entry->direct_mode && !entry->multi_file) {
-                /* Drain the persistent writer + close the fd before rename.
-                 * direct_writer_finish also clears direct_fd / direct_writer,
-                 * so the upcoming runtime_release_tx_resources call will not
-                 * unlink our freshly-renamed dest_root. */
-                int finish_rc = direct_writer_finish(entry);
-                if (finish_rc != 0) {
-                    /* Writer thread reported a write_full() failure during
-                     * streaming. The tmp file at entry->tmp_path is
-                     * partial/corrupt; refuse the rename and surface the
-                     * error to the client. */
-                    apply_failed = 1;
-                    apply_failure_reason = "direct_writer_io_error";
-                    snprintf(apply_failure_detail, sizeof(apply_failure_detail),
-                             "writer thread reported a disk write error mid-stream; "
-                             "destination preserved, partial at %s",
-                             entry->tmp_path);
-                    fprintf(stderr,
-                            "[payload2] direct writer reported I/O error for tx %s — "
-                            "refusing rename, destination unchanged\n",
-                            entry->tx_id_hex);
-                } else {
-                    /* Commit-time integrity check. The shard-count gate
-                     * above proves we RECEIVED total_shards shards, but the
-                     * resume cursor (last_acked_shard) is also a COUNT, and
-                     * during streaming neither the tmp data nor the journal
-                     * is fsync'd — so a kill mid-write (PS5 rest-mode, power
-                     * loss, takeover) can leave the journaled cursor ahead
-                     * of the bytes actually on disk. A later resume then
-                     * skips those shards and we'd rename a tmp that's SHORT
-                     * of the manifest size: a file that reports "done" but
-                     * is missing interior bytes (worst on USB/exFAT, where
-                     * page-cache loss is likely). Verify the tmp is exactly
-                     * the planned size before publishing it; on a mismatch
-                     * refuse the rename and surface a retryable error so the
-                     * host shows a failure instead of a false success.
-                     * (total_bytes == 0 is the empty-file case handled in
-                     * the shard path — skip it. stat() failure is left to
-                     * the rename below, which then reports its own error.) */
-                    struct stat st_done;
-                    if (entry->total_bytes > 0 &&
-                        stat(entry->tmp_path, &st_done) == 0 &&
-                        (uint64_t)st_done.st_size != entry->total_bytes) {
-                        apply_failed = 1;
-                        apply_failure_reason = "size_mismatch";
-                        snprintf(apply_failure_detail, sizeof(apply_failure_detail),
-                                 "destination would be %lld bytes but manifest expects %llu "
-                                 "(transfer incomplete — resume cursor outran durable data?); "
-                                 "destination preserved, partial at %s",
-                                 (long long)st_done.st_size,
-                                 (unsigned long long)entry->total_bytes,
-                                 entry->tmp_path);
-                        fprintf(stderr,
-                                "[payload2] commit size mismatch tx %s: tmp=%lld expected=%llu — "
-                                "refusing rename, destination unchanged\n",
-                                entry->tx_id_hex, (long long)st_done.st_size,
-                                (unsigned long long)entry->total_bytes);
-                    } else {
-                        (void)unlink(entry->dest_root);
-                        if (rename(entry->tmp_path, entry->dest_root) != 0) {
-                            apply_failed = 1;
-                            apply_failure_reason = "direct_rename_failed";
-                            snprintf(apply_failure_detail, sizeof(apply_failure_detail),
-                                     "rename %s -> %s failed: %s",
-                                     entry->tmp_path, entry->dest_root, strerror(errno));
-                            fprintf(stderr, "[payload2] %s (errno=%d)\n",
-                                    apply_failure_detail, errno);
-                        } else {
-                            /* Clear tmp_path so the upcoming release_tx_resources
-                             * doesn't re-unlink a path that no longer exists. */
-                            entry->tmp_path[0] = '\0';
-                            printf("[payload2] direct apply rename -> %s\n", entry->dest_root);
-                        }
-                    }
-                }
-            } else if (entry->direct_mode && entry->multi_file) {
-                uint64_t fi = 0;
-                const manifest_index_entry_t *idx =
-                    (const manifest_index_entry_t *)entry->manifest_index;
-                if (!idx || !entry->manifest_blob) {
-                    apply_failed = 1;
-                    apply_failure_reason = "manifest_missing_at_commit";
-                    snprintf(apply_failure_detail, sizeof(apply_failure_detail),
-                             "manifest index/blob unavailable at commit time");
-                    fprintf(stderr, "[payload2] direct multi commit: missing manifest index for tx %s\n",
-                            entry->tx_id_hex);
-                } else {
-                    for (fi = 0; fi < entry->manifest_index_count; fi++) {
-                        char file_path[512];
-                        char tmp_path[512 + 16];
-                        size_t plen = idx[fi].path_len;
-                        if (plen == 0 || plen >= sizeof(file_path)) continue;
-                        if (json_copy_unescaped_string(entry->manifest_blob + idx[fi].path_offset,
-                                                       entry->manifest_blob + idx[fi].path_offset + plen,
-                                                       file_path,
-                                                       sizeof(file_path)) != 0) {
-                            continue;
-                        }
-                        snprintf(tmp_path, sizeof(tmp_path), "%s.ps5up2-tmp", file_path);
-                        /* Two legitimate layouts here:
-                         *   - non-packed record:  data at tmp_path, rename -> file_path
-                         *   - packed record:      data already at file_path, tmp absent
-                         * `rename(tmp, dest)` atomically replaces dest on POSIX, so
-                         * there is no need for the old defensive `unlink(file_path)`
-                         * that this branch used to do — and removing it is what
-                         * keeps packed-record content from being wiped. ENOENT on
-                         * the rename means "packed path already landed the file at
-                         * the destination" which is success, not failure.
-                         *
-                         * Defense-in-depth pre-check (added 2.2.35): a stale
-                         * tmp from a prior aborted run can survive into the
-                         * fresh tx if the BEGIN_TX sweep was skipped (resume
-                         * path) or missed the tmp due to manifest-vs-disk
-                         * path encoding drift. The bug signature is:
-                         *   - file_path exists at the manifest's expected
-                         *     size (pack worker delivered it correctly OR a
-                         *     prior successful run did), AND
-                         *   - tmp_path exists but is *smaller* than expected
-                         *     (a partial write from a prior aborted run).
-                         * In that exact shape, renaming would clobber good
-                         * content with stale partial bytes; unlinking the
-                         * tmp preserves the correct file.
-                         *
-                         * The asymmetric size check avoids false positives:
-                         *   - User replacing a same-size file → new tmp_path
-                         *     holds full new content (size == expected),
-                         *     condition does NOT trigger, rename runs.
-                         *   - Legitimate resume → by COMMIT all shards
-                         *     acked, tmp is at full size; condition does
-                         *     NOT trigger.
-                         * Only the bug case (full file at dest + partial
-                         * stale tmp) hits this guard. */
-                        struct stat st_file;
-                        struct stat st_tmp;
-                        int have_file = (stat(file_path, &st_file) == 0);
-                        int have_tmp  = (stat(tmp_path,  &st_tmp)  == 0);
-                        if (have_file && have_tmp &&
-                            idx[fi].size > 0 &&
-                            (uint64_t)st_file.st_size == idx[fi].size &&
-                            (uint64_t)st_tmp.st_size  <  idx[fi].size) {
-                            fprintf(stderr,
-                                    "[payload2] commit: %s already at expected size %llu, tmp partial (%llu) — unlinking stale tmp\n",
-                                    file_path,
-                                    (unsigned long long)idx[fi].size,
-                                    (unsigned long long)st_tmp.st_size);
-                            (void)unlink(tmp_path);
-                            continue;
-                        }
-                        if (rename(tmp_path, file_path) != 0 && errno != ENOENT) {
-                            fprintf(stderr, "[payload2] direct multi rename %s -> %s errno=%d\n",
-                                    tmp_path, file_path, errno);
-                            failed_renames += 1;
-                        }
-                    }
-                    if (failed_renames > 0) {
-                        apply_failed = 1;
-                        apply_failure_reason = "direct_multi_rename_failed";
-                        snprintf(apply_failure_detail, sizeof(apply_failure_detail),
-                                 "%llu of %llu file rename(s) failed; partials preserved as .ps5up2-tmp",
-                                 (unsigned long long)failed_renames,
-                                 (unsigned long long)entry->manifest_index_count);
-                    } else {
-                        /* Commit-time integrity check (multi-file analogue
-                         * of the single-file size check above). All renames
-                         * succeeded, but the resume cursor is a shard COUNT
-                         * and streaming writes aren't fsync'd, so a kill
-                         * mid-write (rest-mode / power loss) followed by a
-                         * resume can leave a file SHORT of its manifest size
-                         * while the count-based gate still passes — a game
-                         * that lands looking complete but is silently
-                         * corrupt (the AquaHox USB/exFAT case). Re-stat each
-                         * file against the manifest size and fail loudly on
-                         * any mismatch so the host retries instead of
-                         * trusting a false "done". A bare stat on a
-                         * just-written file hits the inode cache, so this is
-                         * cheap even for a 200k-file game. (size == 0 files
-                         * ride inside packed shards and are skipped — same
-                         * as the stale-tmp guard above.) */
-                        uint64_t bad = 0;
-                        char bad_name[256] = {0};
-                        uint64_t bad_have = 0;
-                        uint64_t bad_want = 0;
-                        for (fi = 0; fi < entry->manifest_index_count; fi++) {
-                            char vpath[512];
-                            size_t vlen = idx[fi].path_len;
-                            if (vlen == 0 || vlen >= sizeof(vpath)) continue;
-                            if (idx[fi].size == 0) continue;
-                            if (json_copy_unescaped_string(
-                                    entry->manifest_blob + idx[fi].path_offset,
-                                    entry->manifest_blob + idx[fi].path_offset + vlen,
-                                    vpath, sizeof(vpath)) != 0) {
-                                continue;
-                            }
-                            struct stat vst;
-                            int have = (stat(vpath, &vst) == 0);
-                            uint64_t got = have ? (uint64_t)vst.st_size : 0;
-                            if (!have || got != idx[fi].size) {
-                                if (bad == 0) {
-                                    snprintf(bad_name, sizeof(bad_name), "%s", vpath);
-                                    bad_have = got;
-                                    bad_want = idx[fi].size;
-                                }
-                                bad += 1;
-                            }
-                        }
-                        if (bad > 0) {
-                            apply_failed = 1;
-                            apply_failure_reason = "size_mismatch";
-                            snprintf(apply_failure_detail, sizeof(apply_failure_detail),
-                                     "%llu file(s) wrong size after commit "
-                                     "(e.g. %s: have %llu, want %llu) — transfer incomplete "
-                                     "(resume cursor outran durable data?)",
-                                     (unsigned long long)bad, bad_name,
-                                     (unsigned long long)bad_have,
-                                     (unsigned long long)bad_want);
-                            fprintf(stderr,
-                                    "[payload2] commit multi size mismatch tx %s: %llu bad file(s)\n",
-                                    entry->tx_id_hex, (unsigned long long)bad);
-                        } else {
-                            printf("[payload2] direct multi apply: %llu files renamed + verified\n",
-                                   (unsigned long long)entry->file_count);
-                        }
-                    }
-                }
-            } else if (runtime_apply_spool(entry, client_fd, hdr.trace_id) == 0) {
-                (void)runtime_cleanup_spool(entry);
-            } else {
-                apply_failed = 1;
-                apply_failure_reason = "spool_apply_failed";
-                snprintf(apply_failure_detail, sizeof(apply_failure_detail),
-                         "spool-to-dest apply failed; spool preserved at %s/spool_%s",
-                         PS5UPLOAD2_SPOOL_DIR, entry->tx_id_hex);
-                fprintf(stderr, "[payload2] %s — tx %s dest=%s\n",
-                        apply_failure_detail, entry->tx_id_hex, entry->dest_root);
-            }
-            entry->apply_us += (now_us() - ta0);
-        }
-
-        /* Apply-failure exit path. Overwrite the journal state to reflect
-         * what actually happened on disk, append a distinct event, and
-         * surface a structured FTX2_FRAME_ERROR. We deliberately DO NOT
-         * call runtime_release_tx_resources(entry) here — keeping the
-         * heap state (manifest_blob/index, writer handle if any) lets a
-         * subsequent QUERY_TX or RESUME pick up where we left off, and
-         * skipping the unlink of tmp_path preserves the bytes we wrote
-         * for inspection or manual recovery. */
-        if (apply_failed) {
-            snprintf(entry->state, sizeof(entry->state), "apply_failed");
-            (void)runtime_flush_tx_record(state, entry);
-            (void)runtime_save_tx_state(state);
-            (void)runtime_append_tx_event(state, "commit_tx_apply_failed");
-            /* JSON-escape the detail before interpolating: it embeds
-             * strerror(errno) and PS5 paths. Normal PS5 paths don't
-             * contain `"` or `\`, but a hostile or buggy `entry->
-             * tmp_path` could, and an unescaped backslash or quote
-             * would produce malformed JSON the engine's serde_json
-             * rejects, masking the original error with a parse error.
-             * apply_failure_reason is a static-string code from this
-             * function (e.g. "direct_writer_io_error") so it's
-             * safe-ASCII; tx_id_hex is hex; only detail needs escape. */
-            char detail_esc[512];
-            json_escape_into(apply_failure_detail, detail_esc, sizeof(detail_esc));
-            len = snprintf(body, sizeof(body),
-                           "{\"error\":\"%s\",\"tx_id\":\"%s\","
-                           "\"failed_renames\":%llu,"
-                           "\"detail\":\"%s\"}",
-                           apply_failure_reason ? apply_failure_reason : "apply_failed",
-                           entry->tx_id_hex,
-                           (unsigned long long)failed_renames,
-                           detail_esc);
-            if (len < 0) { rc = -1; goto commit_done; }
-            if ((size_t)len >= sizeof(body)) len = (int)sizeof(body) - 1;
-            /* Commit attempt failed terminally — clear the connection's
-             * has-open-tx flag so a subsequent socket close doesn't
-             * mark this slot as "interrupted" (overwriting our
-             * apply_failed state). */
-            if (tx_ctx && tx_ctx->has_tx &&
-                memcmp(tx_ctx->tx_id, meta.tx_id, 16) == 0) {
-                tx_ctx->has_tx = 0;
-            }
-            rc = send_frame(client_fd, FTX2_FRAME_ERROR, 0, hdr.trace_id,
-                            body, (uint64_t)len);
-            goto commit_done;
-        }
-        /* Manifest blob + index are no longer needed — release the heap
-         * immediately rather than waiting for the slot to be evicted. */
-        runtime_release_tx_resources(entry);
-        fprintf(stderr, "[payload2] tx %s timing(us): recv=%llu write=%llu verify=%llu apply=%llu "
-                        "bytes=%llu shards=%llu\n",
-                entry->tx_id_hex,
-                (unsigned long long)entry->recv_us,
-                (unsigned long long)entry->write_us,
-                (unsigned long long)entry->verify_us,
-                (unsigned long long)entry->apply_us,
-                (unsigned long long)entry->bytes_received,
-                (unsigned long long)entry->shards_received);
-        char dest_root_esc[1024];
-        json_escape_into(entry->dest_root, dest_root_esc, sizeof(dest_root_esc));
-        len = snprintf(body, sizeof(body),
-                       "{\"committed\":true,\"tx_id\":\"%s\",\"tx_seq\":%llu,"
-                       "\"shards_received\":%llu,\"bytes_received\":%llu,"
-                       "\"dest_root\":\"%s\",\"active_transactions\":%llu,"
-                       "\"timing_us\":{\"recv\":%llu,\"write_wait\":%llu,"
-                       "\"verify\":%llu,\"apply\":%llu,"
-                       "\"open\":%llu,\"join\":%llu,\"close\":%llu,"
-                       "\"hash\":%llu,\"shard_fn\":%llu,"
-                       "\"pack_records\":%llu,\"pack_unlink\":%llu,"
-                       "\"pack_open\":%llu,\"pack_ftruncate\":%llu,"
-                       "\"pack_write\":%llu,\"pack_close\":%llu,"
-                       "\"pack_open_retries\":%llu,\"pack_write_retries\":%llu},"
-                       "\"sock_rcvbuf\":%d,\"listener_rcvbuf_asked\":%d,"
-                       "\"listener_rcvbuf_actual\":%d,\"listener_sndbuf_actual\":%d,"
-                       "\"max_rcvbuf_probed\":%d}",
-                       entry->tx_id_hex,
-                       (unsigned long long)entry->tx_seq,
-                       (unsigned long long)entry->shards_received,
-                       (unsigned long long)entry->bytes_received,
-                       dest_root_esc,
-                       (unsigned long long)state->active_transactions,
-                       (unsigned long long)entry->recv_us,
-                       (unsigned long long)entry->write_us,
-                       (unsigned long long)entry->verify_us,
-                       (unsigned long long)entry->apply_us,
-                       (unsigned long long)entry->open_us,
-                       (unsigned long long)entry->join_us,
-                       (unsigned long long)entry->close_us,
-                       (unsigned long long)entry->hash_us,
-                       (unsigned long long)entry->shard_func_us,
-                       (unsigned long long)entry->pack_records,
-                       (unsigned long long)entry->pack_unlink_us,
-                       (unsigned long long)entry->pack_open_us,
-                       (unsigned long long)entry->pack_ftruncate_us,
-                       (unsigned long long)entry->pack_write_us,
-                       (unsigned long long)entry->pack_close_us,
-                       (unsigned long long)entry->pack_open_retries,
-                       (unsigned long long)entry->pack_write_retries,
-                       state->last_client_rcvbuf,
-                       state->listener_rcvbuf_asked,
-                       state->listener_rcvbuf_actual,
-                       state->listener_sndbuf_actual,
-                       state->max_rcvbuf_probed);
-        if (len < 0) { rc = -1; goto commit_done; }
-        /* Commit took the tx to a terminal state; clear the connection's
-         * "has open tx" marker so a subsequent socket close doesn't
-         * mis-mark it as interrupted. */
-        if (tx_ctx && tx_ctx->has_tx &&
-            memcmp(tx_ctx->tx_id, meta.tx_id, 16) == 0) {
-            tx_ctx->has_tx = 0;
-        }
-        /* User-visible PS5 toast on successful upload (2.16.1+). Fires a
-         * top-right Sony notification on the TV/monitor itself so the user
-         * gets confirmation even when the desktop ps5upload window is
-         * hidden behind the PS5 system chrome. dlsym in pop_notification
-         * silently no-ops on firmwares where the symbol isn't loaded, so
-         * this never breaks the commit path. */
-        {
-            const char *base = strrchr(entry->dest_root, '/');
-            base = base ? base + 1 : entry->dest_root;
-            char toast[200];
-            double mib = (double)entry->bytes_received / (1024.0 * 1024.0);
-            const char *unit = "MiB";
-            double val = mib;
-            if (mib >= 1024.0) { val = mib / 1024.0; unit = "GiB"; }
-            if (entry->file_count > 1) {
-                snprintf(toast, sizeof(toast),
-                         "PS5Upload: %s done (%.1f %s, %llu files)",
-                         base, val, unit,
-                         (unsigned long long)entry->file_count);
-            } else {
-                snprintf(toast, sizeof(toast),
-                         "PS5Upload: %s done (%.1f %s)",
-                         base, val, unit);
-            }
-            pop_notification(toast);
-        }
-        rc = send_frame(client_fd, FTX2_FRAME_COMMIT_TX_ACK, 0, hdr.trace_id,
-                        body, (uint64_t)len);
-commit_done:
-        runtime_release_tx_entry(state, entry);
-        return rc;
+        return handle_commit_tx_frame(state, client_fd, hdr, body, sizeof(body), request_body, tx_ctx);
     }
 
     /* ── ABORT_TX ── */
     if (hdr.frame_type == FTX2_FRAME_ABORT_TX) {
-        int len;
-        int rc;
-        runtime_tx_entry_t *entry = NULL;
-        if (parse_tx_meta(request_body, hdr.body_len, &meta, &extra, &extra_len) == 0) {
-            /* Acquire exclusive: same rationale as COMMIT_TX. A
-             * concurrent SHARD must finish before we tear the entry
-             * down. Released via the `abort_done:` cleanup. */
-            entry = runtime_acquire_tx_entry(state, meta.tx_id);
-        }
-        if (!entry) {
-            return send_frame(client_fd, FTX2_FRAME_ERROR, 0, hdr.trace_id,
-                              "tx_not_found", 12);
-        }
-        /* Guard against double-finalize. Without this, a replayed
-         * ABORT_TX or a confused client that issues both COMMIT and
-         * ABORT for the same tx_id will re-flush a terminal entry
-         * with state="aborted" — silently overwriting a "committed"
-         * record in the journal.
-         *
-         * NB: state "interrupted" (set when a connection dropped
-         * mid-tx without seeing COMMIT/ABORT) MUST stay abortable,
-         * otherwise the canonical "drop happened, user clicks
-         * Cancel on the dangling tx" flow breaks. Only refuse on
-         * already-terminal states (aborted or committed).
-         *
-         * The entry stays acquired, so the `abort_done:` cleanup
-         * still runs. */
-        if (strcmp(entry->state, "aborted") == 0 ||
-            strcmp(entry->state, "committed") == 0) {
-            rc = send_frame(client_fd, FTX2_FRAME_ERROR, 0, hdr.trace_id,
-                            "tx_already_terminal", 19);
-            goto abort_done;
-        }
-        pthread_mutex_lock(&state->state_mtx);
-        if (state->active_transactions > 0) state->active_transactions -= 1;
-        uint64_t active_now = state->active_transactions;
-        pthread_mutex_unlock(&state->state_mtx);
-        snprintf(entry->state, sizeof(entry->state), "%s", "aborted");
-        (void)runtime_flush_tx_record(state, entry);
-        (void)runtime_save_tx_state(state);
-        (void)runtime_append_tx_event(state, "abort_tx");
-        runtime_release_tx_resources(entry);
-        len = snprintf(body, sizeof(body),
-                       "{\"aborted\":true,\"tx_id\":\"%s\","
-                       "\"active_transactions\":%llu}",
-                       entry->tx_id_hex,
-                       (unsigned long long)active_now);
-        if (len < 0) { rc = -1; goto abort_done; }
-        /* Abort took the tx terminal — see the matching clear in COMMIT_TX
-         * for why we do this. */
-        if (tx_ctx && tx_ctx->has_tx &&
-            memcmp(tx_ctx->tx_id, meta.tx_id, 16) == 0) {
-            tx_ctx->has_tx = 0;
-        }
-        rc = send_frame(client_fd, FTX2_FRAME_ABORT_TX_ACK, 0, hdr.trace_id,
-                        body, (uint64_t)len);
-abort_done:
-        runtime_release_tx_entry(state, entry);
-        return rc;
+        return handle_abort_tx_frame(state, client_fd, hdr, body, sizeof(body), request_body, tx_ctx);
     }
 
     /* ── TAKEOVER_REQUEST ── */
