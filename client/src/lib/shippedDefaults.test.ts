@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fwToSdkHex, PS5_FIRMWARES } from "./fwVersion";
+import { fwToSdkHex, PS5_FIRMWARES } from "./sdkVersionHex";
 
 /**
  * Screen sources, read through Vite rather than node:fs — the client

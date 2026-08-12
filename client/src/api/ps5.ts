@@ -440,6 +440,24 @@ function assertOk<T extends { ok?: boolean; error?: string | null }>(
   return resp;
 }
 
+/*
+ * A wrapper with no caller in this app is not automatically dead.
+ *
+ * The engine is a documented, scriptable HTTP API — the README points
+ * CLI and CI users straight at /api/* — and several wrappers here are the
+ * typed client for routes that exist for that audience rather than for a
+ * screen. As of 2026-08, seventeen are UI-unreferenced, and most back a
+ * live engine route with browserInvoke plumbing behind them
+ * (profile/activate, users/list, volumes, zip/inspect, …).
+ *
+ * Others are superseded rather than unused: zipInspect and sevenzInspect
+ * predate their *Stream variants and are kept for callers that do not
+ * want to plumb a Channel through.
+ *
+ * Before deleting one, check for an engine route and a browserInvoke
+ * case. If both exist, it is API surface, not debris.
+ */
+
 export async function sendPayload(
   ip: string,
   elfPath: string,

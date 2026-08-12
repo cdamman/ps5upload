@@ -167,6 +167,41 @@ question into a build failure.
 
 ---
 
+## Outcome (2026-08-12)
+
+All five items closed, two of them by deciding *not* to do the work:
+
+- **P5** landed (`8d90bd66`); the "17 dead API functions" turned out not to
+  be dead. Most back live engine routes with browserInvoke plumbing, and
+  the README advertises the engine as scriptable from CLI/CI, so they are
+  the typed client for a public API. Rationale recorded in `api/ps5.ts`
+  so the next audit does not delete it.
+- **P4** shipped as a lint rule (`b22b3f7d`) with three allowed outcomes —
+  guard, status endpoint, or an explicit `ok-checked-by-caller` marker.
+  The third came from checking callers: PowerControl and PeripheralPanel
+  handle refusals themselves, and forcing a throw would have replaced a
+  considered message with an exception.
+- **P2** shipped (`acdc6e62`, `e9a73f9e`), mutation-checked against the
+  two original bugs.
+- **P3** covered backup/saves/users (`f9c4fb01`); 24 -> 27 of 36 modules.
+- **P1** cut `runtime.c` 18,623 -> 16,381 by removing the built-in shell
+  (`8d1da717`) and the five inline transaction arms (`6780fe84`), taking
+  `handle_binary_frame` from 1,691 to 556 lines.
+
+**P1 stops here deliberately.** Moving the transaction handlers into
+their own file would require exporting `runtime_acquire_tx_entry`,
+`runtime_alloc_tx_entry` and `runtime_find_tx_entry` — the transaction
+table's slot-locking and eviction internals — across a translation-unit
+boundary. Handlers belong next to the table they lock. The defect was
+never the line count; it was a 1,981-line function hiding a duplicate
+reader, and that is gone.
+
+Two bugs were found by verifying rather than by reading: extracting the
+transaction arms broke `CommitTx` (`request_body` is dispatcher-filled
+input, not scratch), caught by the hardware smoke; and `df` returned
+truncated JSON and killed the payload, which a worktree build of the
+parent commit proved pre-existing.
+
 ## Suggested order
 
 1. **Land the uncommitted work** (P5) — everything else builds on it.

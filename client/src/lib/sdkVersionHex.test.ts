@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fwToSdkHex, sdkHexToFw, PS5_FIRMWARES } from "./fwVersion";
+import { fwToSdkHex, sdkHexToFw, PS5_FIRMWARES } from "./sdkVersionHex";
 
 /**
  * PS5 firmware versions are stored BCD-style: the decimal digits are used

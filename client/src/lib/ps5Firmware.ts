@@ -1,4 +1,9 @@
 /**
+ * The running console's firmware version, read from its kernel string.
+ *
+ * Distinct from sdkVersionHex.ts, which converts a version to the BCD
+ * word a title records in param.json.
+ *
  * Extract the user-visible PS5 firmware version ("9.60", "5.00", …) from
  * the kernel build string surfaced via the STATUS_ACK's `ps5_kernel`
  * field. The payload pulls that string from `sysctl kern.version`, and

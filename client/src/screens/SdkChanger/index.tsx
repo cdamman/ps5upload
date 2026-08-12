@@ -6,7 +6,7 @@ import { useConnectionStore } from "../../state/connection";
 import { transferAddr } from "../../lib/addr";
 import { humanizePs5Error } from "../../lib/humanizeError";
 import { sdkScan, sdkPatch, sdkRestore, type SdkTitle } from "../../api/ps5";
-import { PS5_FIRMWARES, fwToSdkHex, sdkHexToFw } from "../../lib/fwVersion";
+import { PS5_FIRMWARES, fwToSdkHex, sdkHexToFw } from "../../lib/sdkVersionHex";
 
 export default function SdkChangerScreen() {
   const tr = useTr();
