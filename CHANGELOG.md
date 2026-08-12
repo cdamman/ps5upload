@@ -4,6 +4,28 @@ What's new in ps5upload, written for humans.
 
 ---
 
+## 5.2.1
+
+**Fixes for things that could freeze or mislead you.**
+
+- The built-in FTP server no longer freezes the console. Stop now really
+  stops it, even mid-transfer.
+- `df` in the Shell screen returned broken output and took the payload
+  down with it. Fixed.
+- Folder upload works in the browser/self-hosted web UI again, not just
+  the desktop app.
+- Installed Apps shows real game names on consoles that were only showing
+  title IDs.
+- Package installs restore the main payload afterwards, so the console
+  does not appear to go offline.
+- The package installer no longer looks dead while it is still starting
+  up on firmware 10.40.
+- SDK Changer is safer with your game files and clearer about what it
+  changed — and it says when a title is encrypted and cannot be patched.
+- Sundry hardening around SMB staging and shell input.
+
+---
+
 ## 5.2.0
 
 **Clearer failures, working FTP, and NAS → PS5 upload.**
