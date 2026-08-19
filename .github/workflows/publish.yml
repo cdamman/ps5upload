@@ -178,11 +178,28 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-${{ matrix.arch }}-tauri-
 
+      # Bounded and retried on purpose. During the v5.3.3 publish this step
+      # stalled inside apt for 45 minutes, ate the whole job budget, and took
+      # the release down with it — every other platform had already built
+      # fine. A hung mirror should cost one short retry, not the release, so
+      # the step gets its own timeout well under the job's 45 and three
+      # attempts at each apt call.
       - name: Install Linux Tauri prerequisites
         if: matrix.platform == 'linux'
+        timeout-minutes: 12
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
+          set -euo pipefail
+          apt_retry() {
+            for attempt in 1 2 3; do
+              if sudo "$@"; then return 0; fi
+              echo "apt attempt $attempt failed; retrying in 15s" >&2
+              sleep 15
+            done
+            echo "apt failed after 3 attempts: $*" >&2
+            return 1
+          }
+          apt_retry apt-get update
+          apt_retry apt-get install -y \
             libgtk-3-dev \
             libwebkit2gtk-4.1-dev \
             libappindicator3-dev \
