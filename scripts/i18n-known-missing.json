@@ -1,6 +1,7 @@
 {
   "ar": {
     "missing": [
+      "err_rar_missing_volume",
       "fakelib_add",
       "fakelib_added",
       "fakelib_change_patch",
@@ -59,6 +60,7 @@
   },
   "bn": {
     "missing": [
+      "err_rar_missing_volume",
       "fakelib_add",
       "fakelib_added",
       "fakelib_change_patch",
@@ -118,6 +120,7 @@
   },
   "de": {
     "missing": [
+      "err_rar_missing_volume",
       "fakelib_add",
       "fakelib_added",
       "fakelib_change_patch",
@@ -182,6 +185,7 @@
   },
   "es": {
     "missing": [
+      "err_rar_missing_volume",
       "fakelib_add",
       "fakelib_added",
       "fakelib_change_patch",
@@ -244,6 +248,7 @@
   },
   "fr": {
     "missing": [
+      "err_rar_missing_volume",
       "fakelib_add",
       "fakelib_added",
       "fakelib_change_patch",
@@ -306,6 +311,7 @@
   },
   "hi": {
     "missing": [
+      "err_rar_missing_volume",
       "fakelib_add",
       "fakelib_added",
       "fakelib_change_patch",
@@ -365,6 +371,7 @@
   },
   "id": {
     "missing": [
+      "err_rar_missing_volume",
       "fakelib_add",
       "fakelib_added",
       "fakelib_change_patch",
@@ -429,6 +436,7 @@
   },
   "it": {
     "missing": [
+      "err_rar_missing_volume",
       "fakelib_add",
       "fakelib_added",
       "fakelib_change_patch",
@@ -493,6 +501,7 @@
   },
   "ja": {
     "missing": [
+      "err_rar_missing_volume",
       "fakelib_add",
       "fakelib_added",
       "fakelib_change_patch",
@@ -554,6 +563,7 @@
   },
   "ko": {
     "missing": [
+      "err_rar_missing_volume",
       "fakelib_add",
       "fakelib_added",
       "fakelib_change_patch",
@@ -613,6 +623,7 @@
   },
   "pl": {
     "missing": [
+      "err_rar_missing_volume",
       "fakelib_add",
       "fakelib_added",
       "fakelib_change_patch",
@@ -673,6 +684,7 @@
   },
   "pt-BR": {
     "missing": [
+      "err_rar_missing_volume",
       "fakelib_add",
       "fakelib_added",
       "fakelib_change_patch",
@@ -737,6 +749,7 @@
   },
   "ru": {
     "missing": [
+      "err_rar_missing_volume",
       "fakelib_add",
       "fakelib_added",
       "fakelib_change_patch",
@@ -798,6 +811,7 @@
   },
   "th": {
     "missing": [
+      "err_rar_missing_volume",
       "fakelib_add",
       "fakelib_added",
       "fakelib_change_patch",
@@ -859,6 +873,7 @@
   },
   "tr": {
     "missing": [
+      "err_rar_missing_volume",
       "fakelib_add",
       "fakelib_added",
       "fakelib_change_patch",
@@ -919,6 +934,7 @@
   },
   "vi": {
     "missing": [
+      "err_rar_missing_volume",
       "fakelib_add",
       "fakelib_added",
       "fakelib_change_patch",
@@ -980,6 +996,7 @@
   },
   "zh-CN": {
     "missing": [
+      "err_rar_missing_volume",
       "fakelib_add",
       "fakelib_added",
       "fakelib_change_patch",
@@ -1039,6 +1056,7 @@
   },
   "zh-TW": {
     "missing": [
+      "err_rar_missing_volume",
       "fakelib_add",
       "fakelib_added",
       "fakelib_change_patch",

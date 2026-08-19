@@ -136,6 +136,14 @@ export function humanizePs5Error(
   if (/rar_password_wrong/i.test(raw)) {
     return te("err_rar_password_wrong");
   }
+  // A specific missing volume beats the generic "check your set" advice —
+  // users hit that message having already put every part in one folder.
+  {
+    const m = /rar_missing_volume:\s*(\S+)/i.exec(raw);
+    if (m) {
+      return te("err_rar_missing_volume", { file: m[1] });
+    }
+  }
   if (/RAR is not supported on this build/i.test(raw)) {
     // Android (and any build without the desktop-only unrar dep). The UI
     // should feature-gate before calling, but if a request slips through the

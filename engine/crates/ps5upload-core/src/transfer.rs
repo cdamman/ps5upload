@@ -3908,6 +3908,98 @@ mod rar_support {
         }
     }
 
+    /// Same, but first check whether a volume of the set is simply absent.
+    ///
+    /// UnRAR reports a missing sibling as a generic open failure, which the
+    /// UI turned into "select the FIRST part and keep every volume in one
+    /// folder" — useless to someone who had done both. Checking the set
+    /// ourselves lets us name the file that is actually missing.
+    fn map_rar_open_err(path: &str, ctx: &str, e: UnrarError) -> anyhow::Error {
+        if !matches!(e.code, RarCode::MissingPassword | RarCode::BadPassword) {
+            let on_disk = |p: &str| std::path::Path::new(p).exists();
+            if let Some(missing) = missing_volume(path, &on_disk) {
+                return anyhow::anyhow!("rar_missing_volume: {missing}");
+            }
+        }
+        map_rar_err(ctx, e)
+    }
+
+    /// Name the first missing volume of a multi-part set, if one is missing.
+    ///
+    /// UnRAR opens siblings itself and, when one is absent, fails with a
+    /// generic open error. The UI then showed "select the FIRST part and
+    /// make sure every volume is in the same folder" — advice a user who
+    /// had already done both could not act on (reported with a screenshot
+    /// showing exactly that). Naming the missing file turns it into
+    /// something they can fix.
+    ///
+    /// Handles both schemes in the wild:
+    ///   name.part1.rar / name.part2.rar …  (any digit width, 1-based)
+    ///   name.rar / name.r00 / name.r01 …   (older split scheme)
+    ///
+    /// `exists` is injected so the scan is testable without a filesystem.
+    pub(crate) fn missing_volume(path: &str, exists: &dyn Fn(&str) -> bool) -> Option<String> {
+        let (dir, file) = match path.rfind(['/', '\\']) {
+            Some(i) => (&path[..=i], &path[i + 1..]),
+            None => ("", path),
+        };
+        let lower = file.to_ascii_lowercase();
+
+        // .partN.rar — walk forward until a volume is absent, and only
+        // report a gap if a LATER volume exists (otherwise we are simply
+        // past the end of the set).
+        if let Some(pos) = lower.rfind(".part") {
+            let rest = &lower[pos + 5..];
+            if let Some(dot) = rest.find(".rar") {
+                let digits = &rest[..dot];
+                if !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit()) {
+                    let width = digits.len();
+                    let start: u32 = digits.parse().ok()?;
+                    let stem = &file[..pos];
+                    let name_of = |n: u32| format!("{stem}.part{n:0width$}.rar", width = width);
+                    let mut n = start;
+                    loop {
+                        n += 1;
+                        let cand = name_of(n);
+                        if exists(&format!("{dir}{cand}")) {
+                            continue;
+                        }
+                        // Absent: a gap only matters if the set continues.
+                        for ahead in 1..=3 {
+                            if exists(&format!("{dir}{}", name_of(n + ahead))) {
+                                return Some(cand);
+                            }
+                        }
+                        return None;
+                    }
+                }
+            }
+        }
+
+        // name.rar + name.r00, r01 … — same idea on the older scheme.
+        if lower.ends_with(".rar") {
+            let stem = &file[..file.len() - 4];
+            let name_of = |n: u32| format!("{stem}.r{n:02}");
+            if exists(&format!("{dir}{}", name_of(0))) {
+                let mut n = 0u32;
+                loop {
+                    n += 1;
+                    let cand = name_of(n);
+                    if exists(&format!("{dir}{cand}")) {
+                        continue;
+                    }
+                    for ahead in 1..=3 {
+                        if exists(&format!("{dir}{}", name_of(n + ahead))) {
+                            return Some(cand);
+                        }
+                    }
+                    return None;
+                }
+            }
+        }
+        None
+    }
+
     /// Sanitise a RAR entry path with the same zip-slip rules as 7z (RAR, like
     /// 7z, can use '\\' separators on Windows-created archives).
     fn sanitize_rar_entry(name: &Path) -> Option<String> {
@@ -3941,7 +4033,9 @@ mod rar_support {
             .len();
         let mut file_count = 0u64;
         let mut total_uncompressed = 0u64;
-        for entry in list_headers(&path_str, password).map_err(|e| map_rar_err("open rar", e))? {
+        for entry in list_headers(&path_str, password)
+            .map_err(|e| map_rar_open_err(&path_str, "open rar", e))?
+        {
             let e = entry.map_err(|e| map_rar_err("read rar header", e))?;
             if e.is_directory() {
                 continue;
@@ -3971,7 +4065,9 @@ mod rar_support {
         let path_str = archive_path.to_string_lossy().into_owned();
         let mut total = 0u64;
         let mut files: Vec<(String, u64)> = Vec::new();
-        for entry in list_headers(&path_str, password).map_err(|e| map_rar_err("open rar", e))? {
+        for entry in list_headers(&path_str, password)
+            .map_err(|e| map_rar_open_err(&path_str, "open rar", e))?
+        {
             let e = entry.map_err(|e| map_rar_err("read rar header", e))?;
             if e.is_directory() {
                 continue;
@@ -4007,7 +4103,7 @@ mod rar_support {
             Some(pw) => Archive::with_password(&path_str, pw).open_for_processing(),
             None => Archive::new(&path_str).open_for_processing(),
         }
-        .map_err(|e| map_rar_err("open rar", e))?;
+        .map_err(|e| map_rar_open_err(&path_str, "open rar", e))?;
 
         let mut extracted = 0u64;
         loop {
@@ -4721,5 +4817,94 @@ mod multistream_tests {
             a_stream1, b_stream0,
             "stream 1 of base_a must not collide with stream 0 of base_b"
         );
+    }
+}
+
+#[cfg(test)]
+mod rar_volume_tests {
+    use super::rar_support::missing_volume;
+    use std::collections::HashSet;
+
+    fn fs(files: &[&str]) -> impl Fn(&str) -> bool {
+        let set: HashSet<String> = files.iter().map(|s| s.to_string()).collect();
+        move |p: &str| set.contains(p)
+    }
+
+    /// The reported case: every volume present, first part selected. The
+    /// old message told the user to do what they had already done, so a
+    /// complete set must report nothing and let UnRAR speak.
+    #[test]
+    fn complete_set_reports_nothing() {
+        let have = fs(&[
+            "/g/game.part1.rar",
+            "/g/game.part2.rar",
+            "/g/game.part3.rar",
+        ]);
+        assert_eq!(missing_volume("/g/game.part1.rar", &have), None);
+    }
+
+    #[test]
+    fn names_the_volume_that_is_actually_missing() {
+        let have = fs(&["/g/game.part1.rar", "/g/game.part3.rar"]);
+        assert_eq!(
+            missing_volume("/g/game.part1.rar", &have).as_deref(),
+            Some("game.part2.rar")
+        );
+    }
+
+    /// Zero-padded widths must round-trip, or the name we print is wrong.
+    #[test]
+    fn preserves_the_padding_width() {
+        let have = fs(&["/g/game.part01.rar", "/g/game.part03.rar"]);
+        assert_eq!(
+            missing_volume("/g/game.part01.rar", &have).as_deref(),
+            Some("game.part02.rar")
+        );
+        let have3 = fs(&["/g/g.part001.rar", "/g/g.part003.rar"]);
+        assert_eq!(
+            missing_volume("/g/g.part001.rar", &have3).as_deref(),
+            Some("g.part002.rar")
+        );
+    }
+
+    /// A single-volume archive is not an incomplete set.
+    #[test]
+    fn single_volume_is_not_a_gap() {
+        let have = fs(&["/g/game.rar"]);
+        assert_eq!(missing_volume("/g/game.rar", &have), None);
+    }
+
+    /// Older split scheme: name.rar + name.r00, r01 …
+    #[test]
+    fn handles_the_legacy_rNN_scheme() {
+        let have = fs(&["/g/game.rar", "/g/game.r00", "/g/game.r02"]);
+        assert_eq!(
+            missing_volume("/g/game.rar", &have).as_deref(),
+            Some("game.r01")
+        );
+        let complete = fs(&["/g/game.rar", "/g/game.r00", "/g/game.r01"]);
+        assert_eq!(missing_volume("/g/game.rar", &complete), None);
+    }
+
+    /// Windows paths and no-directory paths must not break the split.
+    #[test]
+    fn handles_windows_and_bare_paths() {
+        let have = fs(&["C:\\dumps\\g.part1.rar", "C:\\dumps\\g.part3.rar"]);
+        assert_eq!(
+            missing_volume("C:\\dumps\\g.part1.rar", &have).as_deref(),
+            Some("g.part2.rar")
+        );
+        let bare = fs(&["g.part1.rar", "g.part3.rar"]);
+        assert_eq!(
+            missing_volume("g.part1.rar", &bare).as_deref(),
+            Some("g.part2.rar")
+        );
+    }
+
+    /// A gap at the very end is the end of the set, not a hole.
+    #[test]
+    fn trailing_absence_is_the_end_of_the_set() {
+        let have = fs(&["/g/game.part1.rar", "/g/game.part2.rar"]);
+        assert_eq!(missing_volume("/g/game.part1.rar", &have), None);
     }
 }

@@ -69,15 +69,25 @@ describe("humanizePs5Error", () => {
         ),
       ).toMatch(/outside the destination|refused for safety/i);
     });
+    /* The engine now checks the volume set itself, so a generic failure
+     * means the parts really are all present. Telling the user to "select
+     * the FIRST part and put every volume in one folder" was the old copy,
+     * and it was reported by a user who had done exactly that — the advice
+     * was unactionable, so the message must no longer give it. */
     it.each([
       "open rar: archive open error",
       "read rar header: bad data",
       "extract rar entry: corrupt",
       "skip rar entry: failed",
-    ])("maps generic unrar failure %s → multi-part guidance", (raw) => {
-      expect(humanizePs5Error(raw)).toMatch(
-        /FIRST part|multi-part|same folder/i,
-      );
+    ])("maps generic unrar failure %s → damaged/unsupported copy", (raw) => {
+      const msg = humanizePs5Error(raw);
+      expect(msg).toMatch(/damaged|doesn't support|re-download/i);
+      expect(msg).not.toMatch(/select the FIRST part/i);
+    });
+    it("names the specific volume that is missing", () => {
+      const msg = humanizePs5Error("rar_missing_volume: game.part2.rar");
+      expect(msg).toMatch(/game\.part2\.rar/);
+      expect(msg).toMatch(/incomplete|missing/i);
     });
     it("does not let the multi-part rule swallow unrelated text", () => {
       // 'rar' as a substring of other words must not trigger the open-failed

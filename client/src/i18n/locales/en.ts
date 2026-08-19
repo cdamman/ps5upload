@@ -1847,8 +1847,10 @@ err_rar_unsupported:
   "RAR archives aren't supported on this build (Android uploads .zip and .7z only). Extract the .rar on a computer first, or use the desktop app.",
 err_rar_unsafe_entry:
   "This RAR contains a file path that points outside the destination folder, so it was refused for safety. The archive may be malformed.",
+err_rar_missing_volume:
+  "This multi-part RAR is incomplete — {file} is missing from the folder. Download or copy that part in and try again.",
 err_rar_open_failed:
-  "Couldn't read this RAR archive. If it's a multi-part set, select the FIRST part (…part1.rar / …part01.rar / ….rar) and make sure every volume is in the same folder. If it's password-protected, enter the password.",
+  "Couldn't read this RAR archive. Every volume appears to be present, so the archive itself may be damaged or use a RAR feature this build doesn't support. Re-download it, or extract it on your computer and upload the folder instead. If it's password-protected, enter the password below.",
 err_npxs_mgmt_disconnect:
   "PS5 mgmt service stopped responding mid-install. This is the known NPXS-system-pkg failure mode: Sony accepts the register but `sceAppInstUtilInstallByPackage` isn't designed for system patches (Store updates, Settings, etc.). The PS5 typically recovers on its own in a minute or two, or after a reboot — but ps5upload can't install this pkg. Use Settings → Debug Settings → Game → Package Installer on the PS5 itself for system pkgs.",
 err_network_drop:

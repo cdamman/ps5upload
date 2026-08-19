@@ -1045,6 +1045,54 @@ If an update won't go through the app, install it from the PS5's own **Package
 Installer** (Settings → Debug Settings → Game → Package Installer) — your base game
 is safe either way. Always install the **base game first**, then the update.
 
+**Q: "Port 9021 is not open on <ip>" — but I loaded an ELF loader.**
+Port 9021 belongs to the **ELF loader**, which is a separate jailbreak
+component, not part of ps5upload. This message means nothing answered on
+that port — so the check is working, and the problem is upstream of us.
+
+Work through these in order:
+
+1. **Is 9021 the port your loader actually uses?** Loaders differ.
+   `elfldr` listens on 9021, but some all-in-one payloads (BD-JB disc
+   autoloaders, PPPwn chains, "goldhen-style" bundles) either use a
+   different port or expose no ELF loader at all. If yours listens
+   elsewhere, change the port in Settings → the app will use it.
+2. **Did the loader actually start?** Many autoloaders run a fixed list
+   of payloads and silently skip one that failed. Re-run the jailbreak
+   and watch for the loader's own on-screen notification.
+3. **Did the console sleep or reboot since you loaded it?** Everything
+   jailbreak-side is lost on reboot and usually on rest mode. Re-run the
+   exploit chain, then the loader.
+4. **Is it the right IP?** Check PS5 Settings → Network → Connection
+   Status. A stale DHCP lease is a common cause.
+5. **Can your computer reach the console at all?** On Wi-Fi, "AP
+   isolation" / "client isolation" on the router blocks device-to-device
+   traffic entirely. Wired Ethernet avoids this and is faster anyway.
+
+A useful check: if **Find PS5s on the network** locates the console but
+9021 still reads closed, the network is fine and the loader is the
+problem. If discovery finds nothing either, it is the network.
+
+**Q: A PS4 `.pkg` update won't install.**
+PS4 packages are recognised (the installer handles the `PS4GD` /
+`PS4AC` / `PS4DP` types) and are handed to **Sony's own installer** —
+ps5upload does not implement installation itself, it drives the DPI
+daemon. So a rejection is Sony's verdict, and the usual reasons are:
+
+- **The base game isn't installed.** An update patches something; with no
+  matching PS4 base title on the console there is nothing to patch.
+- **Version mismatch.** An update expects a specific base version. A 1.05
+  patch will not apply over a 1.02 base — you need the intermediate
+  updates, or a merged package.
+- **Different content id / region.** A patch is tied to its exact
+  content id; a US patch will not apply to a EU base.
+- **The jailbreak lacks live kernel patches.** Fake-signed packages need
+  kstuff / fpkg-enable active. Without them the installer refuses, and we
+  report that rather than claiming a false success.
+
+If the app reports an install failed but the game plays fine, that is a
+different thing — see the verification question above.
+
 **Q: A system (NPXS) pkg won't install. What do I do?**
 System app pkgs (NPXS-prefix content_id — Store updates, Settings
 patches, built-in apps) aren't what the DPI installer is built for and
