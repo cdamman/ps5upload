@@ -175,10 +175,14 @@ export function payloadCanMountImage(path: string): boolean {
   return p.endsWith(".exfat") || p.endsWith(".ffpkg") || p.endsWith(".ffpfs");
 }
 
-/** Archive format we can host-decompress + stream: `.zip` (deflate) or `.7z`
- *  (LZMA2, commonly a single `.exfat` image). `.rar` is intentionally out of
- *  scope — modern scene .rar is split + encrypted. Returns null for anything
- *  else. */
+/** Archive format we can host-decompress + stream: `.zip` (deflate), `.7z`
+ *  (LZMA2, commonly a single `.exfat` image), or `.rar` (including split and
+ *  password-protected sets). Returns null for anything else.
+ *
+ *  `.rar` was originally out of scope on the grounds that scene releases are
+ *  split + encrypted; UnRAR handles both, so it is supported now — but only
+ *  where the UnRAR code is compiled in, which is not Android (see engine
+ *  `caps.rar`). */
 export function archiveFormat(path: string): "zip" | "7z" | "rar" | null {
   const p = path.toLowerCase();
   if (p.endsWith(".zip")) return "zip";

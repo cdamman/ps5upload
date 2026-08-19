@@ -784,16 +784,43 @@ entries"** counter so you can tell the app is working — useful when
 the archive is on a slow USB drive that takes a moment to spin up.
 
 **Q: What about `.rar` / `.7z`?**
-Only `.zip` is supported. Modern scene `.rar` is usually split
-multi-part + encrypted (and no other PS5 homebrew tool handles it
-either), so unpack those on the PC and re-zip, or upload the extracted
-folder directly.
+Both work. `.zip`, `.7z` and `.rar` are all extracted on your computer
+and streamed to the console, so the result is the same as uploading the
+extracted folder.
 
-If you re-zip with a tool on your phone or with 7-Zip, pick the
-**standard "Deflate"** method (Windows's built-in "Send to →
-Compressed (zipped) folder" always does the right thing). Deflate64,
-LZMA, BZip2, Zstd and AES-encrypted zips are rejected with a clear
-message because the in-app decompressor only handles standard Deflate.
+- **`.7z`** — LZMA2, which is what almost every `.7z` uses.
+- **`.rar`** — including multi-part sets and password-protected archives.
+  Pick the **first** part (`name.part1.rar`, or the plain `.rar` for
+  old-style `.r00`/`.r01` sets) and keep every part in one folder; the
+  rest are pulled in automatically. If one is missing, the error names
+  it.
+- **`.rar` needs the desktop app.** It is not available in the Android
+  build or the self-hosted web UI, which will say so rather than fail
+  vaguely. `.zip` and `.7z` work everywhere.
+
+For `.zip` specifically, only the **standard "Deflate"** method is
+supported (Windows's "Send to → Compressed (zipped) folder" always does
+the right thing). Deflate64, LZMA, BZip2, Zstd and AES-encrypted zips are
+rejected with a clear message.
+
+**Q: A big `.rar` upload fills up my PC's disk. Can I avoid that?**
+Yes. By default a `.rar` is extracted in full before anything is sent, so
+a 100 GB game needs 100 GB free on your PC.
+
+Set this on the engine to send it in batches instead:
+
+```
+FTX2_ARCHIVE_STAGE_MB=4096
+```
+
+That keeps at most ~4 GB on your PC at a time — pick whatever number your
+free space allows. Unset (or `0`) restores the default.
+
+It is off by default for a reason: batched mode can only resume within
+the batch it was sending when a transfer drops, whereas the default can
+resume anywhere in the archive. A RAR archive can't be read backwards, so
+this is a genuine trade-off, not an oversight. If you have the disk space
+and a flaky connection, leave it off.
 
 **Q: Why does the Library sometimes show a game twice?**
 If the same title is present both as a folder on disk and inside a

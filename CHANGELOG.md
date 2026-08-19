@@ -4,31 +4,32 @@ What's new in ps5upload, written for humans.
 
 ---
 
-## Unreleased
+## 5.3.0
 
-- **The helper no longer kills the system UI when a sensor read times
-  out.** If reading a temperature took too long — most likely when a game
-  has had the console busy for hours — the recovery path went straight to
-  terminating the process it was reading through, which is the PS5's own
-  system UI. That means a black screen and pulling the power cord. It now
-  tries to put the process back the way it found it first, and only
-  escalates if that genuinely fails. This is a strong suspect for the
-  5.2.1 lockup reports on 12.40, though not yet confirmed on hardware.
-- **Renaming a file across two drives over FTP no longer crashes the
-  console.** On this kernel a cross-drive rename panics instead of
-  failing politely, so dragging a file from a USB drive to internal
-  storage in an FTP client could take the whole console down. It's now
-  refused with a clear message — copy, then delete, instead.
-- Multi-part RAR uploads now name the volume that's actually missing
-  (e.g. `game.part3.rar`) instead of giving generic advice. If every part
-  is present, the message says so rather than telling you to do what you
-  already did.
-- **RAR uploads can stop filling up your PC.** Set
-  `FTX2_ARCHIVE_STAGE_MB=4096` on the engine and a `.rar` is extracted and
-  sent in ~4 GB batches, instead of expanding the entire archive on your
-  PC first. Off by default: the old behaviour is the only one that can
-  resume anywhere in the archive, so it stays the default for slow or
-  flaky connections.
+**Two ways the console could crash, fixed — and RAR uploads that don't fill up your PC.**
+
+- **The helper no longer shuts down your console's system UI.** Reading a
+  temperature goes through the PS5's system UI, and if that took too long
+  — most likely when a game had been running for hours — the helper would
+  shut it down, leaving you with a black screen and pulling the power
+  cord. This is the most likely cause of the 5.2.1 lockup reports on
+  firmware 12.40. It has not been reproduced on hardware, so it is a
+  strong suspect rather than a confirmed fix.
+- **Renaming a file between two drives over FTP no longer crashes the
+  console.** On the PS5 this kind of rename takes the whole system down
+  instead of just failing. It is now refused with a clear message — copy
+  the file and delete the original instead.
+- **Multi-part RAR uploads tell you which part is missing**, by name,
+  instead of repeating advice you may have already followed.
+- **RAR uploads can use far less disk space on your PC.** A `.rar` used to
+  be extracted in full before anything was sent, so a 100 GB game needed
+  100 GB free. Setting `FTX2_ARCHIVE_STAGE_MB=4096` on the engine sends it
+  in ~4 GB batches instead. Off by default — the original way is still
+  better on a slow or unreliable connection, because only it can resume
+  anywhere in the archive.
+- **New FAQ answers**: moving a save between two consoles, "Port 9021 is
+  not open", PS4 update packages that won't install, and the new FTP
+  rename message.
 - Dependency updates.
 
 ---
