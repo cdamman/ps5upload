@@ -4038,37 +4038,13 @@ FTX2_ARCHIVE_STAGE_MB on the engine to extract and send it in batches."
     /// Open the archive's file list (with or without a password) as an iterator
     /// of headers. The returned `OpenArchive` owns its handle, so the borrowed
     /// `path` / `password` only need to live across this call.
-    /// KNOWN UPSTREAM BUG — multi-volume archives in DEBUG builds
-    ///
-    /// Anything that crosses a volume boundary (this listing, and extraction)
-    /// aborts in a debug build with:
-    ///
-    /// ```text
-    /// unsafe precondition(s) violated: ptr::copy_nonoverlapping
-    ///   unrar::open_archive::callback   (open_archive.rs:519)
-    ///   DllVolNotify                    (volume.cpp:274)
-    ///   MergeArchive                    <- switching to the next volume
-    /// ```
-    ///
-    /// It is not our bug and not a corrupt archive. On `UCM_CHANGEVOLUMEW`
-    /// the crate does `WideCString::from_ptr_truncate(p1, 2048)`, and that
-    /// helper copies all 2048 elements *before* truncating at the NUL — so it
-    /// reads 8 KB out of a `std::wstring` holding a ~60-character path. A
-    /// ~7.7 KB out-of-bounds heap read, on every volume transition.
-    ///
-    /// Release builds compile the precondition check out and work correctly
-    /// (verified on a real nine-volume, 127 GB archive), because the read is
-    /// a read: the string is still truncated at the true NUL, so the value is
-    /// right and only the over-read is unsound. The practical risk is a
-    /// segfault if the allocation happens to sit near an unmapped page.
-    ///
-    /// unrar 0.5.8 is the latest release; there is no upstream fix to take.
-    /// Fixing it locally would mean vendoring the crate, which is a call for
-    /// the maintainer to make, not a silent workaround.
-    ///
-    /// If you need to debug multi-volume RAR handling, build with `--release`
-    /// (or `--profile release`); a plain `cargo test` / `cargo run` will abort
-    /// before reaching your code.
+    /// Multi-volume note: upstream `unrar 0.5.8` reads ~8 KB out of a much
+    /// smaller buffer on every volume transition (a ~7.7 KB out-of-bounds
+    /// heap read), which aborts debug builds on any multi-part archive.
+    /// The crate is vendored at `third_party/unrar` with that fixed, wired
+    /// up through `[patch.crates-io]` — so this is safe to call on a
+    /// multi-part set. If you ever bump or un-vendor `unrar`, check the
+    /// `UCM_CHANGEVOLUMEW` arm first: see `third_party/unrar/README.md`.
     fn list_headers(
         path: &str,
         password: Option<&str>,

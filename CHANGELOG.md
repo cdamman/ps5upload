@@ -6,7 +6,14 @@ What's new in ps5upload, written for humans.
 
 ## 5.3.2
 
-**`.rar` uploads now show the game's real name.**
+**`.rar` uploads now show the game's real name — and a memory-safety bug in multi-part handling is fixed.**
+
+- **Fixed a memory-safety bug that affected every multi-part `.rar`.** The
+  library ps5upload uses to read RAR files misreads memory each time it
+  moves from one part to the next — reading about 8 KB out of a buffer far
+  smaller than that. In practice it usually got away with it, but it could
+  crash at any point during a multi-part upload. The library has no fixed
+  version available, so ps5upload now carries a corrected copy.
 
 - **A `.rar` upload finally identifies the game inside it.** It used to
   show no title at all and land in a folder named after the archive — so a

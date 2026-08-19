@@ -153,3 +153,12 @@ opt-level = "s"
 # future size crunch ever justifies stripping, scope it to specific
 # packages via [profile.release.package.X] with `strip = true`.
 panic = "abort"
+
+# Vendored `unrar` with a one-line bounds fix in the volume-change callback.
+# Upstream 0.5.8 reads ~8 KB out of a much smaller buffer on every volume
+# transition, which aborts debug builds on any multi-part .rar and is a
+# latent out-of-bounds read in release. 0.5.8 is the latest release, so
+# there is nothing upstream to take. See third_party/unrar/README.md and
+# docs/unrar-upstream-bug.md.
+[patch.crates-io]
+unrar = { path = "../../third_party/unrar" }

@@ -1,8 +1,12 @@
 # Upstream bug report (ready to file): unrar 0.5.8
 
 Not filed — this is a draft for a maintainer to send to
-<https://github.com/muja/unrar.rs/issues>. Kept in the repo so the
-analysis isn't lost and nobody has to re-derive it.
+<https://github.com/muja/unrar.rs/issues>.
+
+**ps5upload already carries the fix locally**: the crate is vendored at
+`third_party/unrar` and both workspaces redirect to it via
+`[patch.crates-io]`. This document is the report to send upstream so the
+vendoring can eventually be dropped.
 
 ---
 

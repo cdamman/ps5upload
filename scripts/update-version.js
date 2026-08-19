@@ -129,6 +129,15 @@ function patchRegex(relPath, regex, replacer, extractor) {
  * key: registry and git dependencies always carry one, path members
  * never do. That rule needs no list of crate names to keep in sync.
  */
+// Third-party crates we vendor and redirect to with `[patch.crates-io]`.
+//
+// They have no `source =` line in the lockfile (they resolve to a local
+// path), which otherwise makes them look like one of our own crates and
+// gets them "synced" to the ps5upload version — renaming unrar 0.5.8 to
+// 5.3.1 and drifting the lockfile on every release. They keep upstream's
+// version; only their vendored copy's own Cargo.toml governs it.
+const VENDORED_THIRD_PARTY = new Set(["unrar"]);
+
 function patchCargoLock(relPath) {
   const full = path.join(repoRoot, relPath);
   if (!fs.existsSync(full)) return null;
@@ -138,6 +147,8 @@ function patchCargoLock(relPath) {
   const patched = blocks.map((block) => {
     if (!block.startsWith("[[package]]")) return block;
     if (/^source = /m.test(block)) return block; // registry or git crate
+    const nameMatch = block.match(/^name = "([^"]+)"/m);
+    if (nameMatch && VENDORED_THIRD_PARTY.has(nameMatch[1])) return block;
     const m = block.match(/^version = "([^"]+)"/m);
     if (!m || m[1] === targetVersion) return block;
     stale++;

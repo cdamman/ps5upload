@@ -578,7 +578,7 @@ This software builds on the following open-source projects:
 * [anyhow](https://github.com/dtolnay/anyhow) — Error handling
 * [uuid](https://github.com/uuid-rs/uuid) — Job IDs
 * [zip](https://github.com/zip-rs/zip2) + [sevenz-rust2](https://crates.io/crates/sevenz-rust2) — pure-Rust `.zip` / `.7z` extraction
-* [unrar / unrar_sys](https://crates.io/crates/unrar) — `.rar` extraction on **desktop** (bundles the **UnRAR** source by Alexander Roshal; used to *extract only*, never to compress). See the required notice and the GPLv3 §7 linking exception in [`LICENSES/`](LICENSES/).
+* [unrar / unrar_sys](https://crates.io/crates/unrar) — `.rar` extraction on **desktop** (bundles the **UnRAR** source by Alexander Roshal; used to *extract only*, never to compress). See the required notice and the GPLv3 §7 linking exception in [`LICENSES/`](LICENSES/). The `unrar` wrapper (MIT OR Apache-2.0) is **vendored** at [`third_party/unrar`](third_party/unrar) carrying one local fix for an out-of-bounds read on multi-volume archives — upstream 0.5.8 has no fix; see that directory's README.
 
 **Payload (PS5):**
 * [PS5 Payload SDK](https://github.com/ps5-payload-dev/sdk) — Open-source SDK for PS5 payload development

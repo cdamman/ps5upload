@@ -209,30 +209,21 @@ npm run scripts:audit     # inventory
 A lab or debug script with no caller is intentional, not dead code. Only
 remove generated artifacts, or scripts whose replacement is documented.
 
-## Multi-volume `.rar` in debug builds
+## Multi-volume `.rar`
 
-A debug build aborts on any multi-part `.rar` — listing or extracting —
-with:
+Multi-part archives work in both debug and release builds.
 
-```
-unsafe precondition(s) violated: ptr::copy_nonoverlapping
-  unrar::open_archive::callback   (open_archive.rs:519)
-  DllVolNotify / MergeArchive     <- switching to the next volume
-```
+This needed a fix: upstream `unrar 0.5.8` reads ~8 KB out of a much
+smaller buffer every time it crosses a volume boundary, which aborted any
+debug build that touched a multi-part `.rar` and was a latent
+out-of-bounds read in release. `0.5.8` is the latest release, so the crate
+is vendored at `third_party/unrar` with the fix and both workspaces
+redirect to it via `[patch.crates-io]`.
 
-This is a bug in the `unrar` crate, not in ps5upload and not a corrupt
-archive. On a volume change it copies a fixed 2048 elements out of a
-`std::wstring` holding a much shorter path — a large out-of-bounds read.
-`unrar 0.5.8` is the latest release, so there is no upstream fix to pick
-up.
+See `third_party/unrar/README.md` for the patch and
+`docs/unrar-upstream-bug.md` for the report to send upstream. If you bump
+the crate, re-apply the hunk or drop the vendoring once upstream ships the
+fix.
 
-Release builds compile the check out and work correctly (verified against
-a real nine-volume, 127 GB archive). **To test multi-volume `.rar`
-handling, use `--release`:**
-
-```sh
-cd engine && cargo test --release -p ps5upload-tests
-```
-
-Single-volume archives are unaffected, which is why the shipped fixtures
-(all single-entry) never trip it.
+The shipped `.rar` fixtures are all single-volume, so they never exercise
+this — verifying it needs a real multi-part archive.
