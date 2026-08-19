@@ -1093,6 +1093,35 @@ daemon. So a rejection is Sony's verdict, and the usual reasons are:
 If the app reports an install failed but the game plays fine, that is a
 different thing — see the verification question above.
 
+**Q: Can I move a save from one PS5 to another?**
+
+Yes, and you don't need a USB stick for it. There's no one-click
+"send to my other console" button, but the two-step route works today:
+
+1. On the source console, open **Saves**, find the title, and press
+   **Download**. You get a `.zip` on your PC.
+2. Switch to the other console in the roster sidebar, find the same
+   title in **Saves**, press **Restore**, and pick that `.zip`.
+
+**Backup to USB** / **Restore from USB** does the same thing without the
+PC in the middle, if you'd rather carry a drive between the consoles.
+Either way there are "all titles" buttons at the top to move everything
+at once.
+
+Two things to know before you do it:
+
+- **The target console must already list a save for that title.** Restore
+  writes into an existing save's folder; it can't conjure a save slot out
+  of nothing. So install the game on the second console and launch it once
+  — far enough for it to create its own save — then restore over it.
+- **Restore wipes the current save first, and there's no rollback.** If
+  the upload is interrupted partway, that save can be left empty. If the
+  save on the target console matters, download it first.
+
+For PS4-format saves, the emulator may not notice the new data right
+away; close and reopen the game, or restart the console, if it doesn't
+show up.
+
 **Q: A system (NPXS) pkg won't install. What do I do?**
 System app pkgs (NPXS-prefix content_id — Store updates, Settings
 patches, built-in apps) aren't what the DPI installer is built for and

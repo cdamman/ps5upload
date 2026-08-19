@@ -4,6 +4,16 @@ What's new in ps5upload, written for humans.
 
 ---
 
+## Unreleased
+
+- Multi-part RAR uploads now name the volume that's actually missing
+  (e.g. `game.part3.rar`) instead of giving generic advice. If every part
+  is present, the message says so rather than telling you to do what you
+  already did.
+- Dependency updates.
+
+---
+
 ## 5.2.1
 
 **Fixes for things that could freeze or mislead you.**
