@@ -1,7 +1,11 @@
-# Root-level .dockerignore. Applies to builds whose context is the repo
-# root — i.e. `docker build -f engine/Dockerfile.webui` (the full-stack
-# web UI image). The engine-only Dockerfile uses engine/ as its context
-# and has its own engine/.dockerignore.
+# Root-level .dockerignore. Applies to every image build — both
+# engine/Dockerfile (engine only) and engine/Dockerfile.webui (full-stack
+# web UI). Both use the repo root as their context, because the cargo
+# workspaces patch `unrar` to the vendored copy at third_party/unrar and a
+# narrower context would put that path outside it.
+#
+# (engine/.dockerignore is now dead for CI builds; it only applies if
+# someone runs `docker build engine/` by hand.)
 #
 # Keeping the context small speeds up the `COPY client/ .` and `COPY
 # engine/ .` steps (the build context is sent to the Docker daemon in
@@ -27,6 +31,10 @@ client/node_modules/
 docs/
 *.md
 LICENSE*
+# ...but keep the vendored crate whole: its licences must travel with the
+# source we build from, and excluding them here would quietly drop the
+# attribution that MIT/Apache-2.0 requires.
+!third_party/**
 tests/
 coverage/
 client/coverage/

@@ -49,7 +49,7 @@ jobs:
 
       - uses: docker/build-push-action@v7
         with:
-          context: engine
+          context: .
           file: engine/Dockerfile
           platforms: linux/amd64
           push: false
@@ -156,7 +156,7 @@ jobs:
         id: push
         uses: docker/build-push-action@v7
         with:
-          context: engine
+          context: .
           file: engine/Dockerfile
           platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}

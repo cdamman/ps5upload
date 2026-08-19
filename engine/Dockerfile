@@ -38,12 +38,18 @@ FROM rust:alpine AS builder
 # g++ compiles unrar's bundled C++ against musl; musl target links static.
 RUN apk add --no-cache musl-dev g++ make
 
+# Built from the REPO ROOT, not engine/, because the workspace patches
+# `unrar` to the vendored copy at third_party/unrar (see that directory's
+# README). A build context of engine/ puts that path outside the context
+# and cargo fails with "unable to update /third_party/unrar".
 WORKDIR /build
-COPY . .
+COPY engine engine
+COPY third_party third_party
+WORKDIR /build/engine
 RUN cargo build --release -p ps5upload-engine
 
 FROM scratch
-COPY --from=builder /build/target/release/ps5upload-engine /ps5upload-engine
+COPY --from=builder /build/engine/target/release/ps5upload-engine /ps5upload-engine
 EXPOSE 19113
 # Run as an unprivileged user (65532 = nobody in distroless convention).
 # scratch has no /etc/passwd, so we use a raw numeric UID — the kernel
