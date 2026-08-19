@@ -208,3 +208,31 @@ npm run scripts:audit     # inventory
 
 A lab or debug script with no caller is intentional, not dead code. Only
 remove generated artifacts, or scripts whose replacement is documented.
+
+## Multi-volume `.rar` in debug builds
+
+A debug build aborts on any multi-part `.rar` — listing or extracting —
+with:
+
+```
+unsafe precondition(s) violated: ptr::copy_nonoverlapping
+  unrar::open_archive::callback   (open_archive.rs:519)
+  DllVolNotify / MergeArchive     <- switching to the next volume
+```
+
+This is a bug in the `unrar` crate, not in ps5upload and not a corrupt
+archive. On a volume change it copies a fixed 2048 elements out of a
+`std::wstring` holding a much shorter path — a large out-of-bounds read.
+`unrar 0.5.8` is the latest release, so there is no upstream fix to pick
+up.
+
+Release builds compile the check out and work correctly (verified against
+a real nine-volume, 127 GB archive). **To test multi-volume `.rar`
+handling, use `--release`:**
+
+```sh
+cd engine && cargo test --release -p ps5upload-tests
+```
+
+Single-volume archives are unaffected, which is why the shipped fixtures
+(all single-entry) never trip it.

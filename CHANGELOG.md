@@ -4,6 +4,21 @@ What's new in ps5upload, written for humans.
 
 ---
 
+## 5.3.2
+
+**`.rar` uploads now show the game's real name.**
+
+- **A `.rar` upload finally identifies the game inside it.** It used to
+  show no title at all and land in a folder named after the archive — so a
+  game arrived as `[DLPSGAME.COM]- 01.021 PPSA23226` instead of its actual
+  name. `.zip` uploads had always read the title properly; `.rar` simply
+  never looked. It now reads the same file `.zip` does, so you get the
+  title, title ID and content ID before the upload starts. Verified on a
+  real nine-part, 127 GB archive, where it resolves in about a tenth of a
+  second.
+
+---
+
 ## 5.3.1
 
 **A big `.rar` that fills your PC's disk now says so — before it wastes your time.**

@@ -4038,6 +4038,37 @@ FTX2_ARCHIVE_STAGE_MB on the engine to extract and send it in batches."
     /// Open the archive's file list (with or without a password) as an iterator
     /// of headers. The returned `OpenArchive` owns its handle, so the borrowed
     /// `path` / `password` only need to live across this call.
+    /// KNOWN UPSTREAM BUG — multi-volume archives in DEBUG builds
+    ///
+    /// Anything that crosses a volume boundary (this listing, and extraction)
+    /// aborts in a debug build with:
+    ///
+    /// ```text
+    /// unsafe precondition(s) violated: ptr::copy_nonoverlapping
+    ///   unrar::open_archive::callback   (open_archive.rs:519)
+    ///   DllVolNotify                    (volume.cpp:274)
+    ///   MergeArchive                    <- switching to the next volume
+    /// ```
+    ///
+    /// It is not our bug and not a corrupt archive. On `UCM_CHANGEVOLUMEW`
+    /// the crate does `WideCString::from_ptr_truncate(p1, 2048)`, and that
+    /// helper copies all 2048 elements *before* truncating at the NUL — so it
+    /// reads 8 KB out of a `std::wstring` holding a ~60-character path. A
+    /// ~7.7 KB out-of-bounds heap read, on every volume transition.
+    ///
+    /// Release builds compile the precondition check out and work correctly
+    /// (verified on a real nine-volume, 127 GB archive), because the read is
+    /// a read: the string is still truncated at the true NUL, so the value is
+    /// right and only the over-read is unsound. The practical risk is a
+    /// segfault if the allocation happens to sit near an unmapped page.
+    ///
+    /// unrar 0.5.8 is the latest release; there is no upstream fix to take.
+    /// Fixing it locally would mean vendoring the crate, which is a call for
+    /// the maintainer to make, not a silent workaround.
+    ///
+    /// If you need to debug multi-volume RAR handling, build with `--release`
+    /// (or `--profile release`); a plain `cargo test` / `cargo run` will abort
+    /// before reaching your code.
     fn list_headers(
         path: &str,
         password: Option<&str>,
@@ -4062,6 +4093,11 @@ FTX2_ARCHIVE_STAGE_MB on the engine to extract and send it in batches."
             .len();
         let mut file_count = 0u64;
         let mut total_uncompressed = 0u64;
+        // Shallowest "<root>/sce_sys/param.json" wins, so a dump wrapped in an
+        // extra folder (`[SITE]-PPSA12345/PPSA12345-app/sce_sys/…`) and a bare
+        // one (`sce_sys/…`) both resolve to the real game root. Same rule as
+        // the zip path.
+        let mut param_hit: Option<(usize, String)> = None; // (depth, game_root)
         for entry in list_headers(&path_str, password)
             .map_err(|e| map_rar_open_err(&path_str, "open rar", e))?
         {
@@ -4071,8 +4107,12 @@ FTX2_ARCHIVE_STAGE_MB on the engine to extract and send it in batches."
             }
             file_count += 1;
             total_uncompressed += e.unpacked_size;
+            if let Some(rel) = sanitize_rar_entry(&e.filename) {
+                param_hit = better_param_hit(param_hit, &rel);
+            }
         }
-        Ok(ZipInspect {
+
+        let mut inspect = ZipInspect {
             file_count,
             total_uncompressed,
             compressed_size,
@@ -4081,7 +4121,107 @@ FTX2_ARCHIVE_STAGE_MB on the engine to extract and send it in batches."
             content_id: None,
             application_category_type: None,
             game_root: None,
-        })
+        };
+
+        // Pull the title out of param.json. Without this a .rar upload showed
+        // no game name and landed in a folder named after the archive —
+        // `/data/homebrew/[DLPSGAME.COM]- 01.021 PPSA23226` in one real
+        // report — while the identical .zip resolved a clean title.
+        //
+        // Entirely best-effort: any failure leaves the size/count-only
+        // preview, exactly as before. This runs on user-supplied archives
+        // just to render the Upload card, so it must never be able to fail
+        // an upload that would otherwise work.
+        if let Some((_, game_root)) = param_hit {
+            if let Some(meta) = read_param_json(archive_path, password, &game_root) {
+                inspect.title = meta.title;
+                inspect.title_id = meta.title_id;
+                inspect.content_id = meta.content_id;
+                inspect.application_category_type = meta.application_category_type;
+                inspect.game_root = Some(game_root);
+            }
+        }
+
+        Ok(inspect)
+    }
+
+    /// Fold one entry path into the running "best param.json" choice.
+    ///
+    /// Shallowest wins, so a dump wrapped in an extra folder
+    /// (`[SITE]-PPSA12345/PPSA12345-app/sce_sys/param.json`) and a bare one
+    /// (`sce_sys/param.json`) both resolve to the real game root, and a
+    /// nested DLC or update folder deeper in the tree cannot outrank the
+    /// base game.
+    pub(crate) fn better_param_hit(
+        current: Option<(usize, String)>,
+        rel: &str,
+    ) -> Option<(usize, String)> {
+        let Some(root) = rel.strip_suffix("sce_sys/param.json") else {
+            return current;
+        };
+        // Guard against a file merely *ending* in that text, e.g.
+        // "notsce_sys/param.json" — the boundary must be a real path
+        // separator or the very start of the path.
+        if !(root.is_empty() || root.ends_with('/')) {
+            return current;
+        }
+        let depth = rel.split('/').count();
+        match &current {
+            Some((d, _)) if *d <= depth => current,
+            _ => Some((depth, root.trim_end_matches('/').to_string())),
+        }
+    }
+
+    /// Extract just `<game_root>/sce_sys/param.json` and parse it.
+    ///
+    /// Stops at the entry rather than walking the whole set: on a nine-volume
+    /// archive there is no reason to cross eight volume boundaries to read a
+    /// few KB. Returns `None` on anything unexpected — callers treat metadata
+    /// as a nicety, never a precondition.
+    fn read_param_json(
+        archive_path: &Path,
+        password: Option<&str>,
+        game_root: &str,
+    ) -> Option<crate::game_meta::FolderInspectResult> {
+        // A real param.json is a few KB. Refuse a huge one rather than write
+        // it to disk: this runs on untrusted archives before any upload.
+        const MAX_PARAM_JSON: u64 = 4 * 1024 * 1024;
+
+        let want = if game_root.is_empty() {
+            "sce_sys/param.json".to_string()
+        } else {
+            format!("{game_root}/sce_sys/param.json")
+        };
+
+        let tmp = std::env::temp_dir().join(format!(".ps5upload-param-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).ok()?;
+
+        let result = (|| -> Option<crate::game_meta::FolderInspectResult> {
+            let path_str = archive_path.to_string_lossy().into_owned();
+            let mut open = match password {
+                Some(pw) => Archive::with_password(&path_str, pw).open_for_processing(),
+                None => Archive::new(&path_str).open_for_processing(),
+            }
+            .ok()?;
+
+            loop {
+                let header = open.read_header().ok()??;
+                let name = header.entry().filename.clone();
+                let matches = sanitize_rar_entry(&name).as_deref() == Some(want.as_str());
+                if !matches || header.entry().unpacked_size > MAX_PARAM_JSON {
+                    open = header.skip().ok()?;
+                    continue;
+                }
+                let dest = tmp.join("param.json");
+                let _ = header.extract_to(&dest).ok()?;
+                let bytes = std::fs::read(&dest).ok()?;
+                return crate::game_meta::parse_param_json_bytes(&bytes).ok();
+            }
+        })();
+
+        let _ = std::fs::remove_dir_all(&tmp);
+        result
     }
 
     /// Metadata-only plan preview: total bytes + sanitised dest paths (sorted)
@@ -5463,5 +5603,86 @@ mod rar_batch_tests {
         let a = [1u8; 16];
         let b = [2u8; 16];
         assert_ne!(batch_tx_id(a, 3), batch_tx_id(b, 3));
+    }
+}
+
+#[cfg(test)]
+mod rar_param_root_tests {
+    use super::rar_support::better_param_hit;
+
+    /// Fold a whole archive listing, in order, the way inspect_rar does.
+    fn pick(entries: &[&str]) -> Option<String> {
+        let mut hit: Option<(usize, String)> = None;
+        for e in entries {
+            hit = better_param_hit(hit, e);
+        }
+        hit.map(|(_, root)| root)
+    }
+
+    #[test]
+    fn a_bare_dump_has_an_empty_root() {
+        assert_eq!(pick(&["sce_sys/param.json"]), Some(String::new()));
+    }
+
+    #[test]
+    fn a_wrapped_dump_resolves_to_the_wrapper() {
+        // The real shape from a scene release: an outer site-named folder,
+        // then the app folder.
+        assert_eq!(
+            pick(&[
+                "[SITE]-PPSA13428/PPSA13428-app/eboot.bin",
+                "[SITE]-PPSA13428/PPSA13428-app/sce_sys/param.json",
+            ]),
+            Some("[SITE]-PPSA13428/PPSA13428-app".to_string())
+        );
+    }
+
+    #[test]
+    fn the_shallowest_wins_regardless_of_listing_order() {
+        let deep_first = pick(&["Game/patch/sce_sys/param.json", "Game/sce_sys/param.json"]);
+        let shallow_first = pick(&["Game/sce_sys/param.json", "Game/patch/sce_sys/param.json"]);
+        assert_eq!(deep_first, Some("Game".to_string()));
+        assert_eq!(
+            deep_first, shallow_first,
+            "the answer must not depend on archive order"
+        );
+    }
+
+    #[test]
+    fn a_dlc_or_update_folder_cannot_outrank_the_base_game() {
+        assert_eq!(
+            pick(&[
+                "Game/sce_sys/param.json",
+                "Game/dlc0/sce_sys/param.json",
+                "Game/dlc1/sce_sys/param.json",
+            ]),
+            Some("Game".to_string())
+        );
+    }
+
+    #[test]
+    fn an_archive_without_param_json_has_no_root() {
+        assert_eq!(pick(&["Game/eboot.bin", "Game/sce_sys/icon0.png"]), None);
+    }
+
+    #[test]
+    fn a_path_merely_ending_in_the_text_is_not_a_match() {
+        // "notsce_sys" ends with "sce_sys" as a substring; only a real path
+        // boundary counts, or every such folder would claim to be a root.
+        assert_eq!(pick(&["Game/notsce_sys/param.json"]), None);
+    }
+
+    #[test]
+    fn param_json_elsewhere_is_ignored() {
+        assert_eq!(pick(&["Game/sce_sys/param.sfo", "Game/param.json"]), None);
+    }
+
+    #[test]
+    fn ties_keep_the_first_seen() {
+        // Two roots at the same depth: stable choice, no flapping.
+        assert_eq!(
+            pick(&["A/sce_sys/param.json", "B/sce_sys/param.json"]),
+            Some("A".to_string())
+        );
     }
 }
