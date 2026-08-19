@@ -3920,6 +3920,19 @@ mod rar_support {
         match e.code {
             RarCode::MissingPassword => anyhow::anyhow!("rar_password_required"),
             RarCode::BadPassword => anyhow::anyhow!("rar_password_wrong"),
+            // UnRAR reports a failed write as "Write error" and nothing more.
+            // In practice that is a full disk: the staging directory sits next
+            // to the archive, and a large game expands to far more than people
+            // expect. The pre-flight check catches most of these before any
+            // extraction starts; this covers a disk that fills up part-way
+            // (something else was writing to it too), where the bare message
+            // sends people looking for a corrupt archive instead.
+            RarCode::EWrite => anyhow::anyhow!(
+                "rar_staging_write_failed: could not write the extracted files — \
+the disk holding the .rar is most likely full. Free up space (a game can \
+expand to several times the size of the archive), or set \
+FTX2_ARCHIVE_STAGE_MB on the engine to extract and send it in batches."
+            ),
             _ => anyhow::anyhow!("{ctx}: {e}"),
         }
     }
@@ -4467,9 +4480,56 @@ mod rar_support {
         std::fs::create_dir_all(&stage)
             .with_context(|| format!("create rar staging dir {}", stage.display()))?;
 
+        let budget = BatchBudget::new(cfg.archive_stage_budget_bytes);
+
+        // Refuse up front if the extraction cannot fit on the host disk.
+        //
+        // Without this the failure arrives as `extract rar entry: Write error`
+        // several minutes in, after tens of GB have been written and with the
+        // half-finished staging directory still occupying them. The headers
+        // tell us the uncompressed total before a single byte is extracted, so
+        // there is no reason to find out the hard way.
+        //
+        // Advisory only: if free space cannot be determined we proceed, since
+        // refusing a transfer because a stat failed would be worse than the
+        // problem this prevents.
+        {
+            let (total_uncompressed, _) = rar_plan_preview(archive_path, password, &cfg.excludes)?;
+            let required = crate::host_space::staging_requirement(
+                total_uncompressed,
+                cfg.archive_stage_budget_bytes,
+            );
+            let available = crate::host_space::available_bytes(&base);
+            if let Some(short) = crate::host_space::staging_shortfall(
+                required,
+                available,
+                crate::host_space::STAGING_MARGIN_BYTES,
+            ) {
+                let hb = crate::host_space::human_bytes;
+                let hint = if budget.is_unlimited() {
+                    format!(
+                        " Uploading it in batches would need only a few GB at a time \
+instead of all {}: set FTX2_ARCHIVE_STAGE_MB (e.g. 4096) on the engine.",
+                        hb(total_uncompressed)
+                    )
+                } else {
+                    String::new()
+                };
+                bail!(
+                    "rar_staging_no_space: extracting this archive needs {} free in {}, \
+but only {} is available ({} short). Free up space, move the .rar to a drive \
+with more room, or reduce what is staged at once.{}",
+                    hb(required),
+                    base.display(),
+                    hb(available.unwrap_or(0)),
+                    hb(short),
+                    hint
+                );
+            }
+        }
+
         // Extract → transfer; ALWAYS remove the staging dir afterwards, even on
         // error (a partial extraction must not linger next to the user's file).
-        let budget = BatchBudget::new(cfg.archive_stage_budget_bytes);
         let result = (|| {
             if budget.is_unlimited() {
                 extract_rar_to_dir(archive_path, password, &stage, &cfg.excludes)?;
@@ -4488,12 +4548,44 @@ mod rar_support {
                 )
             }
         })();
-        if let Err(e) = std::fs::remove_dir_all(&stage) {
-            if e.kind() != std::io::ErrorKind::NotFound {
-                crate::core_log!("rar staging: failed to clean up {}: {}", stage.display(), e);
+        remove_staging_dir(&stage);
+        result
+    }
+
+    /// Delete the staging directory, retrying briefly before giving up.
+    ///
+    /// On Windows this raced the extractor's own file handles and failed with
+    /// "The process cannot access the file because it is being used by another
+    /// process" — which left a *part-extracted game* sitting on the user's
+    /// disk, easily tens of GB, with only a debug-level line to say so. The
+    /// handles close moments later, so a few short retries clear it.
+    ///
+    /// If it still cannot be removed the message says the path plainly and
+    /// says it is safe to delete: silently occupying that much space is worse
+    /// than a noisy log line.
+    fn remove_staging_dir(stage: &Path) {
+        const ATTEMPTS: u32 = 5;
+        let mut last: Option<std::io::Error> = None;
+        for attempt in 0..ATTEMPTS {
+            match std::fs::remove_dir_all(stage) {
+                Ok(()) => return,
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => return,
+                Err(e) => {
+                    last = Some(e);
+                    if attempt + 1 < ATTEMPTS {
+                        std::thread::sleep(std::time::Duration::from_millis(200u64 << attempt));
+                    }
+                }
             }
         }
-        result
+        if let Some(e) = last {
+            crate::core_log!(
+                "rar staging: could not remove {} after {ATTEMPTS} attempts: {e}. \
+This folder holds partly-extracted files and may be using a lot of disk \
+space — it is safe to delete by hand.",
+                stage.display()
+            );
+        }
     }
 
     #[cfg(test)]

@@ -2093,14 +2093,24 @@ static int recv_exact(int fd, void *buf, size_t len) {
             return -1;
         }
         if (n == 0) {
-            /* Peer closed the connection mid-frame. Usually means the
-             * client crashed or the user cancelled — not a bug on our
-             * side, but logging the byte-count we reached helps
-             * distinguish "nothing arrived" from "truncated after K
-             * bytes". */
-            fprintf(stderr,
-                    "[payload] recv_exact(fd=%d): peer closed after %zu/%zu bytes\n",
-                    fd, got, len);
+            /* Peer closed the connection mid-frame. A *truncated* frame is
+             * worth recording: it means a client died or was cancelled
+             * part-way, and the byte count says how far it got.
+             *
+             * `got == 0` is different — nothing arrived at all. That is a
+             * bare TCP connect-and-close: a port probe, a reachability
+             * check, a health poll. It happens constantly and says nothing.
+             * Logging it produced 8314 identical lines in one bug report,
+             * filling both 256 KB stderr logs and evicting every real
+             * diagnostic in them — the reap trace, the accept errors, the
+             * transfer timings. A log that reliably discards its own
+             * evidence is worse than no log, so stay silent for the empty
+             * case and keep the informative one. */
+            if (got > 0) {
+                fprintf(stderr,
+                        "[payload] recv_exact(fd=%d): peer closed after %zu/%zu bytes\n",
+                        fd, got, len);
+            }
             return -1;
         }
         got += (size_t)n;
@@ -15904,7 +15914,7 @@ static int create_listener(int port, int probe_max_rcvbuf, int *out_asked,
     int bind_attempt = 0;
     int fd = socket(AF_INET, SOCK_STREAM, 0);
     if (fd < 0) {
-        perror("[payload2] socket");
+        fprintf(stderr, "[payload2] socket: %s\n", strerror(errno));
         return -1;
     }
     {
@@ -15954,7 +15964,7 @@ static int create_listener(int port, int probe_max_rcvbuf, int *out_asked,
     for (bind_attempt = 0; bind_attempt < 20; bind_attempt++) {
         if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) == 0) break;
         if (errno != EADDRINUSE) {
-            perror("[payload2] bind");
+            fprintf(stderr, "[payload2] bind: %s\n", strerror(errno));
             close(fd);
             return -1;
         }
@@ -15973,7 +15983,7 @@ static int create_listener(int port, int probe_max_rcvbuf, int *out_asked,
      * but a larger backlog is cheap insurance against any transient burst
      * (FreeBSD clamps this to the kernel's somaxconn). */
     if (listen(fd, 128) != 0) {
-        perror("[payload2] listen");
+        fprintf(stderr, "[payload2] listen: %s\n", strerror(errno));
         close(fd);
         return -1;
     }
@@ -16133,11 +16143,11 @@ int runtime_server_loop(runtime_state_t *state) {
             if (errno == EINTR || errno == ECONNABORTED) continue;
             if (errno == EMFILE || errno == ENFILE || errno == ENOBUFS ||
                 errno == ENOMEM) {
-                perror("[payload2] accept (transient resource pressure)");
+                fprintf(stderr, "[payload2] accept (transient resource pressure): %s\n", strerror(errno));
                 usleep(100000); /* 100 ms back-off so we don't busy-spin */
                 continue;
             }
-            perror("[payload2] accept");
+            fprintf(stderr, "[payload2] accept: %s\n", strerror(errno));
             break;
         }
         /* Tune on the accept thread (writes state->last_client_rcvbuf, which no
@@ -16296,11 +16306,11 @@ void *runtime_mgmt_server_loop(void *state_ptr) {
             if (errno == EINTR || errno == ECONNABORTED) continue;
             if (errno == EMFILE || errno == ENFILE || errno == ENOBUFS ||
                 errno == ENOMEM) {
-                perror("[payload2] mgmt accept (transient resource pressure)");
+                fprintf(stderr, "[payload2] mgmt accept (transient resource pressure): %s\n", strerror(errno));
                 usleep(100000); /* 100 ms back-off */
                 continue;
             }
-            perror("[payload2] mgmt accept");
+            fprintf(stderr, "[payload2] mgmt accept: %s\n", strerror(errno));
             break;
         }
         tune_accepted_client(client_fd, NULL);

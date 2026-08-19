@@ -114,7 +114,7 @@ int runtime_try_takeover(runtime_state_t *state) {
 
     fd = socket(AF_INET, SOCK_STREAM, 0);
     if (fd < 0) {
-        perror("[payload2] takeover socket");
+        fprintf(stderr, "[payload2] takeover socket: %s\n", strerror(errno));
         return -1;
     }
 
@@ -129,7 +129,7 @@ int runtime_try_takeover(runtime_state_t *state) {
          * legacy payload (single-port builds only bind :9113). */
         fd = socket(AF_INET, SOCK_STREAM, 0);
         if (fd < 0) {
-            perror("[payload2] takeover socket (fallback)");
+            fprintf(stderr, "[payload2] takeover socket (fallback): %s\n", strerror(errno));
             return -1;
         }
         addr.sin_port = htons((uint16_t)transfer_port);
@@ -158,7 +158,7 @@ int runtime_try_takeover(runtime_state_t *state) {
     /* Send a proper binary FTX2 TAKEOVER_REQUEST frame. */
     build_takeover_frame(hdr);
     if (send(fd, hdr, sizeof(hdr), 0) != (ssize_t)sizeof(hdr)) {
-        perror("[payload2] takeover send");
+        fprintf(stderr, "[payload2] takeover send: %s\n", strerror(errno));
         close(fd);
         /* Port was open; try to wait for it to close anyway. */
     } else {

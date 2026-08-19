@@ -803,6 +803,27 @@ supported (Windows's "Send to → Compressed (zipped) folder" always does
 the right thing). Deflate64, LZMA, BZip2, Zstd and AES-encrypted zips are
 rejected with a clear message.
 
+**Q: My `.rar` upload failed with "not enough space" or "Write error".**
+A `.rar` is extracted on your PC before anything is sent, so you need room
+for the *extracted* game as well as the archive itself. A 180 GB game
+needs 180 GB free on top of the `.rar` — which catches people out, because
+uploading a `.exfat` image of the same size needs no extra space at all.
+
+ps5upload now checks before it starts and tells you how much is needed
+versus how much you have. Three ways to fix it:
+
+1. **Free up space**, or move the `.rar` to a drive that has room — the
+   temporary folder is created next to the archive, so the drive holding
+   the `.rar` is the one that needs to be free.
+2. **Extract in batches** so the full size is never needed at once — see
+   the next question.
+3. **Extract the `.rar` yourself** and upload the resulting folder.
+
+If a transfer failed part-way, check for a folder named
+`.ps5upload-rar-…` next to your archive. It normally cleans itself up, but
+if something on your PC had a file open it can be left behind holding a
+lot of space — it is safe to delete.
+
 **Q: A big `.rar` upload fills up my PC's disk. Can I avoid that?**
 Yes. By default a `.rar` is extracted in full before anything is sent, so
 a 100 GB game needs 100 GB free on your PC.

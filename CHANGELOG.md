@@ -4,6 +4,31 @@ What's new in ps5upload, written for humans.
 
 ---
 
+## 5.3.1
+
+**A big `.rar` that fills your PC's disk now says so — before it wastes your time.**
+
+- **Uploading a large `.rar` no longer fails five minutes in with "Write
+  error".** A `.rar` is extracted on your PC before being sent, and a big
+  game can need far more free space than people expect — one 180 GB game
+  needed 180 GB of temporary space on top of the archive itself. ps5upload
+  now checks before it starts, and if there isn't room it says how much is
+  needed, how much you have, and what to do about it. If a disk fills up
+  part-way anyway, the error now names the real cause instead of just
+  saying "Write error".
+- **A failed upload no longer leaves tens of GB behind.** On Windows the
+  temporary folder sometimes couldn't be deleted because a file was still
+  in use, silently keeping the space. It now retries, and if it still
+  can't, it tells you the folder to delete.
+- **The helper's log no longer drowns out its own errors.** Routine
+  connection checks were each writing an error line — over 8,000 identical
+  lines in one report, which pushed out every genuinely useful message.
+  Those are now silent; real truncated transfers are still logged.
+- Log lines from different parts of the helper no longer get spliced
+  together into unreadable text.
+
+---
+
 ## 5.3.0
 
 **Two ways the console could crash, fixed — and RAR uploads that don't fill up your PC.**
