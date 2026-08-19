@@ -60,12 +60,52 @@ int main(void) {
     CHECK(clean.restore_calls == 1);
     CHECK(clean.terminate_calls == 0);
 
+    /* Failing to STOP the tracee must not mean killing it outright.
+     *
+     * The tracee here is usually SceShellUI, and terminating that takes the
+     * whole console down — black screen, power-cord pull. A slow ShellUI (a
+     * game has been hogging the CPU for two hours) looks exactly like a
+     * broken one at the stop/wait step, so the expensive conclusion must not
+     * be drawn from that step alone.
+     *
+     * Restoring the saved registers is what actually makes the tracee safe
+     * to resume, and it is worth attempting even when the stop failed: on a
+     * running tracee PT_SETREGS simply fails, which costs nothing and lands
+     * us back at termination anyway. So: always try the restore before
+     * escalating. */
     fake_ctx_t cannot_stop = {.stop_rc = -1};
     CHECK(ptrace_recover_timed_out_tracee(&ops, &cannot_stop)
+          == PTRACE_RECOVERY_RESTORED);
+    CHECK(cannot_stop.restore_calls == 1);
+    CHECK(cannot_stop.terminate_calls == 0);
+
+    /* Same for a stop that was accepted but never reported — the timeout
+     * case that actually fires on a loaded console. */
+    fake_ctx_t wait_timed_out = {.wait_rc = -1};
+    CHECK(ptrace_recover_timed_out_tracee(&ops, &wait_timed_out)
+          == PTRACE_RECOVERY_RESTORED);
+    CHECK(wait_timed_out.restore_calls == 1);
+    CHECK(wait_timed_out.terminate_calls == 0);
+
+    /* But if the registers genuinely cannot be put back, the tracee must
+     * still never resume with our injected stack — terminate stands. */
+    fake_ctx_t stop_and_restore_failed = {.stop_rc = -1, .restore_rc = -1};
+    CHECK(ptrace_recover_timed_out_tracee(&ops, &stop_and_restore_failed)
           == PTRACE_RECOVERY_TERMINATED);
-    CHECK(cannot_stop.wait_calls == 0);
-    CHECK(cannot_stop.restore_calls == 0);
-    CHECK(cannot_stop.terminate_calls == 1);
+    CHECK(stop_and_restore_failed.restore_calls == 1);
+    CHECK(stop_and_restore_failed.terminate_calls == 1);
+
+    /* With no registers to restore (nothing was injected yet), a failed stop
+     * has nothing to make safe, so termination remains the only fail-closed
+     * option. */
+    {
+        ptrace_recovery_ops_t nores = ops;
+        nores.restore_registers = NULL;
+        fake_ctx_t no_regs_bad_stop = {.stop_rc = -1};
+        CHECK(ptrace_recover_timed_out_tracee(&nores, &no_regs_bad_stop)
+              == PTRACE_RECOVERY_TERMINATED);
+        CHECK(no_regs_bad_stop.terminate_calls == 1);
+    }
 
     fake_ctx_t cannot_restore = {.restore_rc = -1};
     CHECK(ptrace_recover_timed_out_tracee(&ops, &cannot_restore)
@@ -75,7 +115,8 @@ int main(void) {
     CHECK(cannot_restore.restore_calls == 1);
     CHECK(cannot_restore.terminate_calls == 1);
 
-    fake_ctx_t termination_failed = {.wait_rc = -1, .terminate_rc = -1};
+    fake_ctx_t termination_failed = {
+        .wait_rc = -1, .restore_rc = -1, .terminate_rc = -1};
     CHECK(ptrace_recover_timed_out_tracee(&ops, &termination_failed)
           == PTRACE_RECOVERY_FAILED);
     CHECK(termination_failed.terminate_calls == 1);

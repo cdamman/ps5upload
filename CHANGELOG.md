@@ -6,10 +6,29 @@ What's new in ps5upload, written for humans.
 
 ## Unreleased
 
+- **The helper no longer kills the system UI when a sensor read times
+  out.** If reading a temperature took too long — most likely when a game
+  has had the console busy for hours — the recovery path went straight to
+  terminating the process it was reading through, which is the PS5's own
+  system UI. That means a black screen and pulling the power cord. It now
+  tries to put the process back the way it found it first, and only
+  escalates if that genuinely fails. This is a strong suspect for the
+  5.2.1 lockup reports on 12.40, though not yet confirmed on hardware.
+- **Renaming a file across two drives over FTP no longer crashes the
+  console.** On this kernel a cross-drive rename panics instead of
+  failing politely, so dragging a file from a USB drive to internal
+  storage in an FTP client could take the whole console down. It's now
+  refused with a clear message — copy, then delete, instead.
 - Multi-part RAR uploads now name the volume that's actually missing
   (e.g. `game.part3.rar`) instead of giving generic advice. If every part
   is present, the message says so rather than telling you to do what you
   already did.
+- **RAR uploads can stop filling up your PC.** Set
+  `FTX2_ARCHIVE_STAGE_MB=4096` on the engine and a `.rar` is extracted and
+  sent in ~4 GB batches, instead of expanding the entire archive on your
+  PC first. Off by default: the old behaviour is the only one that can
+  resume anywhere in the archive, so it stays the default for slow or
+  flaky connections.
 - Dependency updates.
 
 ---

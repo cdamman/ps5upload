@@ -1323,6 +1323,24 @@ Logs page to find them.
 
 ## FTP, SMB, metadata, and backport helpers
 
+**Q: My FTP client says "Cannot rename across devices". Why?**
+
+Because the alternative was crashing your console.
+
+On the PS5, renaming a file from one drive to another (say a USB drive to
+internal storage) doesn't fail cleanly the way it does on a PC — it panics
+the kernel and locks the console up hard. Many FTP clients implement
+"move" as a rename, so dragging a file between two folders on different
+drives would trigger it.
+
+The server now checks first and refuses with a 553 instead. To move a file
+between drives, copy it to the new location and delete the original —
+that's byte-level I/O and is perfectly safe. Renaming *within* one drive
+still works normally.
+
+The same protection applies to the File Manager and to `mv` in the Shell
+screen.
+
 **Q: What is the FTP Server screen for?**
 It starts a small **FTP server on the PS5** (like `ftpsrv.elf`), so
 FileZilla, curl, or another PC can connect **to the console**. Default

@@ -1,6 +1,7 @@
 #include "ftp_server.h"
 
 #include "ftp_format.h"
+#include "cross_device.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -658,6 +659,19 @@ static void handle_rnto(struct ftp_session *s, const char *arg) {
     }
     char path[512];
     abs_path(s, arg, path, sizeof(path));
+    /* A cross-DEVICE rename() does not return EXDEV on this kernel — it
+     * panics the console. An FTP client dragging a file from /mnt/usb0
+     * to /data is an ordinary thing to do, so refuse it here rather than
+     * let the kernel take the machine down. 553 tells the client the
+     * name was disallowed; copy-then-delete is the safe alternative and
+     * every client can do it. */
+    if (xdev_rename_crosses(s->rename_path, path, xdev_stat_dev)
+        == XDEV_CROSSES) {
+        s->rename_path[0] = '\0';
+        send_resp(s->ctrl_fd, 553,
+                  "Cannot rename across devices - copy then delete instead");
+        return;
+    }
     if (rename(s->rename_path, path) != 0) {
         s->rename_path[0] = '\0';
         send_resp(s->ctrl_fd, 550, "Failed to rename");

@@ -165,6 +165,21 @@ pub struct TransferConfig {
     /// promptly once any one stream fails; (2) a user-facing Cancel button.
     /// `None` = never cancel (legacy behaviour).
     pub cancel: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
+    /// Cap on how many bytes of *extracted archive* may sit in the host
+    /// staging directory at once, for `.rar` uploads. `0` = unlimited,
+    /// which extracts the whole archive before sending any of it — the
+    /// original behaviour, and the default.
+    ///
+    /// Unlimited needs as much free space on the PC as the archive
+    /// expands to, which for a 100 GB game is 100 GB (#251). With a cap
+    /// set, extraction pauses at the cap, sends what it has, deletes it,
+    /// and continues — peak host usage becomes the cap.
+    ///
+    /// The trade-off is resume granularity: unlimited can resume anywhere
+    /// in the archive, batched can only resume within the current batch,
+    /// because a solid archive cannot be decoded backwards. That is why
+    /// this is opt-in rather than simply always on.
+    pub archive_stage_budget_bytes: u64,
 }
 
 impl TransferConfig {
@@ -184,6 +199,7 @@ impl TransferConfig {
             progress_bytes_finalized: None,
             bandwidth_cap_bps: None,
             cancel: None,
+            archive_stage_budget_bytes: 0,
         }
     }
 
@@ -4090,6 +4106,130 @@ mod rar_support {
         Ok((total, files))
     }
 
+    /// How much extracted data may sit on the host disk at once.
+    ///
+    /// Extracting a whole archive before sending it means a 100 GB game
+    /// needs 100 GB free on the PC, which is the complaint behind #251.
+    /// With a budget set, extraction stops once the staging dir reaches it,
+    /// sends that batch, deletes it, and resumes — so peak host usage is
+    /// the budget rather than the archive.
+    ///
+    /// A budget of 0 means unlimited, which is the original behaviour and
+    /// the default. That mode is still worth keeping: it is the only one
+    /// where an interrupted upload can resume across the *whole* archive.
+    /// Batched mode can only resume within the current batch, because a
+    /// solid archive cannot be decoded backwards.
+    #[derive(Clone, Copy)]
+    pub(crate) struct BatchBudget {
+        limit: u64,
+    }
+
+    impl BatchBudget {
+        pub(crate) fn new(limit: u64) -> Self {
+            Self { limit }
+        }
+
+        pub(crate) fn is_unlimited(&self) -> bool {
+            self.limit == 0
+        }
+
+        /// Should the staged batch be sent before extracting `next` bytes?
+        pub(crate) fn should_flush_before(
+            &self,
+            staged_bytes: u64,
+            staged_files: u64,
+            next: u64,
+        ) -> bool {
+            if self.limit == 0 {
+                return false;
+            }
+            // Never flush an empty batch: a single file bigger than the whole
+            // budget still has to be extracted (we cannot split one file), and
+            // flushing nothing would spin without making progress.
+            if staged_files == 0 {
+                return false;
+            }
+            // saturating_add, or a huge entry wraps and reads as "it fits".
+            staged_bytes.saturating_add(next) > self.limit
+        }
+    }
+
+    /// Tracks what is staged and when to flush, so the batching decision
+    /// lives in one testable place rather than in loop-local counters.
+    ///
+    /// The extraction loop is driven by unrar's forward-only API and needs a
+    /// real archive to run, which makes the loop itself awkward to unit
+    /// test. This struct is the part with the actual logic — batch
+    /// boundaries, the empty-batch guard, the batch counter — and it is
+    /// exercised directly. `offer` is deliberately separate from `record`
+    /// so the caller can flush *before* spending disk on the next entry.
+    pub(crate) struct BatchAccumulator {
+        budget: BatchBudget,
+        staged_bytes: u64,
+        staged_files: u64,
+        batch_index: u64,
+    }
+
+    impl BatchAccumulator {
+        pub(crate) fn new(budget: BatchBudget) -> Self {
+            Self {
+                budget,
+                staged_bytes: 0,
+                staged_files: 0,
+                batch_index: 0,
+            }
+        }
+
+        /// Must the staged batch be sent before extracting `size` bytes?
+        pub(crate) fn must_flush_before(&self, size: u64) -> bool {
+            self.budget
+                .should_flush_before(self.staged_bytes, self.staged_files, size)
+        }
+
+        /// Note that an entry of `size` was extracted into the staging dir.
+        pub(crate) fn record(&mut self, size: u64) {
+            self.staged_bytes = self.staged_bytes.saturating_add(size);
+            self.staged_files += 1;
+        }
+
+        pub(crate) fn has_staged(&self) -> bool {
+            self.staged_files > 0
+        }
+
+        pub(crate) fn batch_index(&self) -> u64 {
+            self.batch_index
+        }
+
+        /// The staged batch was sent and the staging dir emptied.
+        pub(crate) fn on_flushed(&mut self) {
+            self.staged_bytes = 0;
+            self.staged_files = 0;
+            self.batch_index += 1;
+        }
+    }
+
+    /// The tx_id for batch `index` of an upload the caller opened as `base`.
+    ///
+    /// Batch 0 is `base` unchanged, so a single-batch upload is
+    /// indistinguishable from the unbatched path — same id the client is
+    /// already tracking. Later batches mix the index into the trailing
+    /// bytes: deterministic, so retrying an upload reuses the same ids and
+    /// the payload's journal can still match them for resume.
+    pub(crate) fn batch_tx_id(base: [u8; 16], index: u64) -> [u8; 16] {
+        if index == 0 {
+            return base;
+        }
+        let mut out = base;
+        // Mix into the low 8 bytes. XOR with a multiplied index rather than
+        // the raw counter so two different uploads whose ids differ only in
+        // those bytes cannot collide on a later batch.
+        let mixed = index.wrapping_mul(0x9E37_79B9_7F4A_7C15);
+        for (i, b) in mixed.to_le_bytes().iter().enumerate() {
+            out[8 + i] ^= b;
+        }
+        out
+    }
+
     /// Extract every non-excluded file to `dest_dir` under sanitised relative
     /// paths (forward-only processing loop). Returns the count extracted.
     fn extract_rar_to_dir(
@@ -4154,6 +4294,146 @@ mod rar_support {
         Ok(extracted)
     }
 
+    /// Extract and send in batches bounded by `budget`, so the host never
+    /// holds more than the budget's worth of extracted data at once.
+    ///
+    /// Structurally this is `extract_rar_to_dir`'s loop with a flush in the
+    /// middle: unrar's processing loop only moves forward, which is exactly
+    /// what batching needs — each entry is extracted once, in order, and the
+    /// staging directory is emptied between batches.
+    ///
+    /// Each batch commits its own transaction (a transaction ends at its
+    /// commit, so one cannot span batches). They land in the same
+    /// `dest_root`, so the result on the console is identical to the
+    /// unbatched path; only the number of transactions differs.
+    #[allow(clippy::too_many_arguments)]
+    fn extract_and_transfer_batched(
+        cfg: &TransferConfig,
+        tx_id: [u8; 16],
+        dest_root: &str,
+        archive_path: &Path,
+        password: Option<&str>,
+        stage: &Path,
+        max_retries: u32,
+        initial_flags: u32,
+        budget: BatchBudget,
+    ) -> Result<TransferResult> {
+        let path_str = archive_path.to_string_lossy().into_owned();
+        let mut open = match password {
+            Some(pw) => Archive::with_password(&path_str, pw).open_for_processing(),
+            None => Archive::new(&path_str).open_for_processing(),
+        }
+        .map_err(|e| map_rar_open_err(&path_str, "open rar", e))?;
+
+        let mut acc = BatchAccumulator::new(budget);
+        let mut total_extracted: u64 = 0;
+        let mut agg: Option<TransferResult> = None;
+
+        // Send whatever is staged, then empty the staging dir for the next
+        // batch. Does nothing when nothing is staged, so the trailing call
+        // after the loop is always safe.
+        let flush = |acc: &mut BatchAccumulator, agg: &mut Option<TransferResult>| -> Result<()> {
+            if !acc.has_staged() {
+                return Ok(());
+            }
+            // Only the first batch may carry the caller's initial flags; a
+            // later batch is a brand-new transaction, never a resume of one
+            // the payload has already committed.
+            let flags = if acc.batch_index() == 0 {
+                initial_flags
+            } else {
+                0
+            };
+            let r = transfer_dir_resumable(
+                cfg,
+                batch_tx_id(tx_id, acc.batch_index()),
+                dest_root,
+                stage,
+                max_retries,
+                flags,
+            )?;
+            match agg {
+                None => *agg = Some(r),
+                Some(a) => {
+                    a.shards_sent += r.shards_sent;
+                    a.bytes_sent += r.bytes_sent;
+                    // Keep the most recent commit ack: callers parse it for
+                    // the finalize timing of the batch that finished last.
+                    a.commit_ack_body = r.commit_ack_body;
+                }
+            }
+            std::fs::remove_dir_all(stage)
+                .with_context(|| format!("clear rar staging dir {}", stage.display()))?;
+            std::fs::create_dir_all(stage)
+                .with_context(|| format!("recreate rar staging dir {}", stage.display()))?;
+            acc.on_flushed();
+            Ok(())
+        };
+
+        loop {
+            let header = match open
+                .read_header()
+                .map_err(|e| map_rar_err("read rar header", e))?
+            {
+                Some(h) => h,
+                None => break,
+            };
+            let entry_name = header.entry().filename.clone();
+            if header.entry().is_directory() {
+                open = header
+                    .skip()
+                    .map_err(|e| map_rar_err("skip rar entry", e))?;
+                continue;
+            }
+            let Some(rel) = sanitize_rar_entry(&entry_name) else {
+                bail!(
+                    "rar contains an unsafe or invalid entry path: {:?}",
+                    entry_name
+                );
+            };
+            if !cfg.excludes.is_empty()
+                && crate::excludes::is_excluded_strings(Path::new(&rel), &cfg.excludes)
+            {
+                open = header
+                    .skip()
+                    .map_err(|e| map_rar_err("skip rar entry", e))?;
+                continue;
+            }
+
+            // Decide BEFORE extracting: once this entry is on disk the
+            // budget is already spent.
+            let entry_size = header.entry().unpacked_size;
+            if acc.must_flush_before(entry_size) {
+                flush(&mut acc, &mut agg)?;
+            }
+
+            let dest = stage.join(&rel);
+            if let Some(parent) = dest.parent() {
+                std::fs::create_dir_all(parent)
+                    .with_context(|| format!("create rar staging dir {}", parent.display()))?;
+            }
+            open = header
+                .extract_to(&dest)
+                .map_err(|e| map_rar_err("extract rar entry", e))?;
+            acc.record(entry_size);
+            total_extracted += 1;
+        }
+
+        if total_extracted == 0 {
+            bail!(
+                "rar has no extractable files (after exclusions): {}",
+                archive_path.display()
+            );
+        }
+
+        flush(&mut acc, &mut agg)?;
+
+        // Unreachable in practice: total_extracted > 0 means the final flush
+        // had something staged. Surfaced as an error rather than unwrapped so
+        // a future change to the loop can't turn it into a panic.
+        agg.ok_or_else(|| anyhow::anyhow!("rar batching produced no transfer result"))
+    }
+
     /// Transfer a `.rar` (any volume set): extract to a host staging dir, stream
     /// the extracted tree to the PS5 via the directory transfer (which carries
     /// resume/hash/progress), then remove the staging dir.
@@ -4189,9 +4469,24 @@ mod rar_support {
 
         // Extract → transfer; ALWAYS remove the staging dir afterwards, even on
         // error (a partial extraction must not linger next to the user's file).
+        let budget = BatchBudget::new(cfg.archive_stage_budget_bytes);
         let result = (|| {
-            extract_rar_to_dir(archive_path, password, &stage, &cfg.excludes)?;
-            transfer_dir_resumable(cfg, tx_id, dest_root, &stage, max_retries, initial_flags)
+            if budget.is_unlimited() {
+                extract_rar_to_dir(archive_path, password, &stage, &cfg.excludes)?;
+                transfer_dir_resumable(cfg, tx_id, dest_root, &stage, max_retries, initial_flags)
+            } else {
+                extract_and_transfer_batched(
+                    cfg,
+                    tx_id,
+                    dest_root,
+                    archive_path,
+                    password,
+                    &stage,
+                    max_retries,
+                    initial_flags,
+                    budget,
+                )
+            }
         })();
         if let Err(e) = std::fs::remove_dir_all(&stage) {
             if e.kind() != std::io::ErrorKind::NotFound {
@@ -4876,7 +5171,7 @@ mod rar_volume_tests {
 
     /// Older split scheme: name.rar + name.r00, r01 …
     #[test]
-    fn handles_the_legacy_rNN_scheme() {
+    fn handles_the_legacy_r_nn_scheme() {
         let have = fs(&["/g/game.rar", "/g/game.r00", "/g/game.r02"]);
         assert_eq!(
             missing_volume("/g/game.rar", &have).as_deref(),
@@ -4906,5 +5201,175 @@ mod rar_volume_tests {
     fn trailing_absence_is_the_end_of_the_set() {
         let have = fs(&["/g/game.part1.rar", "/g/game.part2.rar"]);
         assert_eq!(missing_volume("/g/game.part1.rar", &have), None);
+    }
+}
+
+#[cfg(test)]
+mod rar_batch_tests {
+    use super::rar_support::{batch_tx_id, BatchAccumulator, BatchBudget};
+
+    /// Run `sizes` through the accumulator exactly the way the extraction
+    /// loop does, and report which batch each entry landed in.
+    ///
+    /// This drives the real `BatchAccumulator` rather than a copy of its
+    /// rules, so the batch boundaries asserted below are the boundaries the
+    /// upload will actually use.
+    fn batches_for(sizes: &[u64], budget: u64) -> Vec<u64> {
+        let mut acc = BatchAccumulator::new(BatchBudget::new(budget));
+        let mut out = Vec::new();
+        for &size in sizes {
+            if acc.must_flush_before(size) {
+                assert!(
+                    acc.has_staged(),
+                    "flushed an empty batch — would not progress"
+                );
+                acc.on_flushed();
+            }
+            out.push(acc.batch_index());
+            acc.record(size);
+        }
+        out
+    }
+
+    // The budget exists so a 100 GB archive doesn't need 100 GB of free
+    // space on the PC (#251). It bounds how much sits in the staging dir
+    // at once: extract up to the budget, send that, delete it, continue.
+
+    #[test]
+    fn a_zero_budget_never_flushes() {
+        // Zero means "unlimited" — the pre-existing behaviour of extracting
+        // everything and sending once. This has to stay reachable, because
+        // it's the only mode with whole-archive resume.
+        let b = BatchBudget::new(0);
+        assert!(!b.should_flush_before(u64::MAX, 5, u64::MAX));
+    }
+
+    #[test]
+    fn flushes_when_the_next_entry_would_exceed_the_budget() {
+        let b = BatchBudget::new(1000);
+        assert!(b.should_flush_before(900, 3, 200));
+    }
+
+    #[test]
+    fn does_not_flush_while_the_batch_still_fits() {
+        let b = BatchBudget::new(1000);
+        assert!(!b.should_flush_before(700, 3, 200));
+    }
+
+    #[test]
+    fn exactly_filling_the_budget_is_not_an_overflow() {
+        let b = BatchBudget::new(1000);
+        assert!(!b.should_flush_before(800, 2, 200));
+    }
+
+    #[test]
+    fn an_empty_batch_never_flushes_even_for_an_oversized_file() {
+        // A single file larger than the whole budget still has to be
+        // extracted — we cannot split one file across batches. Flushing an
+        // empty batch would send nothing and loop forever, so the guard is
+        // on staged_files, not on bytes.
+        let b = BatchBudget::new(1000);
+        assert!(!b.should_flush_before(0, 0, 50_000));
+    }
+
+    #[test]
+    fn does_not_overflow_on_huge_values() {
+        // staged + next must not wrap; a wrap would silently report "fits"
+        // for an archive that obviously does not.
+        let b = BatchBudget::new(1000);
+        assert!(b.should_flush_before(u64::MAX - 1, 1, 10));
+    }
+
+    // Each batch commits its own transaction, so each needs its own tx_id.
+    // Deriving them from the caller's id keeps them reproducible across a
+    // retry of the same upload.
+
+    #[test]
+    fn entries_fill_a_batch_then_start_the_next() {
+        // Budget 100: 60+30 fits, adding 50 would exceed → new batch.
+        assert_eq!(batches_for(&[60, 30, 50], 100), vec![0, 0, 1]);
+    }
+
+    #[test]
+    fn unlimited_keeps_everything_in_one_batch() {
+        assert_eq!(batches_for(&[60, 30, 50, 900], 0), vec![0, 0, 0, 0]);
+    }
+
+    #[test]
+    fn a_file_bigger_than_the_budget_gets_its_own_batch_and_does_not_stall() {
+        // The oversized entry cannot be split, so it goes alone; the next
+        // normal entry must then start a fresh batch rather than joining it.
+        assert_eq!(batches_for(&[10, 5000, 10], 100), vec![0, 1, 2]);
+    }
+
+    #[test]
+    fn every_entry_is_placed_exactly_once_and_batches_never_go_backwards() {
+        let sizes: Vec<u64> = (1..=40).map(|i| (i * 7) % 23 + 1).collect();
+        let got = batches_for(&sizes, 50);
+        assert_eq!(got.len(), sizes.len(), "an entry was dropped");
+        for w in got.windows(2) {
+            assert!(
+                w[1] == w[0] || w[1] == w[0] + 1,
+                "batch index jumped from {} to {}",
+                w[0],
+                w[1]
+            );
+        }
+    }
+
+    #[test]
+    fn no_batch_exceeds_the_budget_unless_one_entry_alone_does() {
+        let sizes = [30u64, 30, 30, 200, 10, 10];
+        let budget = 100u64;
+        let got = batches_for(&sizes, budget);
+        let mut totals: std::collections::BTreeMap<u64, (u64, usize)> =
+            std::collections::BTreeMap::new();
+        for (i, &b) in got.iter().enumerate() {
+            let e = totals.entry(b).or_insert((0, 0));
+            e.0 += sizes[i];
+            e.1 += 1;
+        }
+        for (batch, (bytes, count)) in totals {
+            if count > 1 {
+                assert!(
+                    bytes <= budget,
+                    "batch {batch} holds {bytes} bytes, over the {budget} budget"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn batch_zero_is_the_callers_own_tx_id() {
+        // Single-batch uploads must be byte-identical to the old behaviour,
+        // including the tx_id the client already knows about.
+        let base = [7u8; 16];
+        assert_eq!(batch_tx_id(base, 0), base);
+    }
+
+    #[test]
+    fn later_batches_are_distinct_from_each_other_and_from_the_base() {
+        let base = [7u8; 16];
+        let ids: Vec<[u8; 16]> = (0..8).map(|i| batch_tx_id(base, i)).collect();
+        for i in 0..ids.len() {
+            for j in (i + 1)..ids.len() {
+                assert_ne!(ids[i], ids[j], "batch {i} collided with batch {j}");
+            }
+        }
+    }
+
+    #[test]
+    fn derivation_is_deterministic() {
+        // A retry of the same upload must reuse the same per-batch ids, or
+        // the payload's journal can't match them up for resume.
+        let base = [3u8; 16];
+        assert_eq!(batch_tx_id(base, 5), batch_tx_id(base, 5));
+    }
+
+    #[test]
+    fn different_uploads_do_not_share_batch_ids() {
+        let a = [1u8; 16];
+        let b = [2u8; 16];
+        assert_ne!(batch_tx_id(a, 3), batch_tx_id(b, 3));
     }
 }

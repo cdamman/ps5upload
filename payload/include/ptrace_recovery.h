@@ -33,13 +33,39 @@ static inline int ptrace_lost_pid_matches(int lost_pid, int candidate_pid) {
 
 static inline ptrace_recovery_result_t
 ptrace_recover_timed_out_tracee(const ptrace_recovery_ops_t *ops, void *ctx) {
-    if (ops && ops->request_stop && ops->wait_stopped
-        && ops->request_stop(ctx) == 0
-        && ops->wait_stopped(ctx) == 0
-        && (!ops->restore_registers || ops->restore_registers(ctx) == 0)) {
+    if (!ops) return PTRACE_RECOVERY_FAILED;
+
+    /* Best case: stop the tracee, see the stop reported, put the registers
+     * back. Then it can be detached and resumed safely. */
+    int stopped = ops->request_stop && ops->wait_stopped
+                  && ops->request_stop(ctx) == 0
+                  && ops->wait_stopped(ctx) == 0;
+
+    /* Restoring the registers is what actually makes the tracee safe, so
+     * attempt it even when the stop failed or was never reported.
+     *
+     * This matters because terminating is not a cheap fallback here: the
+     * tracee is normally SceShellUI, and killing it takes the console down
+     * to a black screen. A ShellUI that is merely *slow* — a game has had
+     * the CPU for hours — is indistinguishable at the stop/wait step from
+     * one that is broken, and must not be killed on that evidence alone.
+     *
+     * The attempt is free: on a tracee that is still running, PT_SETREGS
+     * fails and we fall through to termination exactly as before. */
+    if (ops->restore_registers) {
+        if (ops->restore_registers(ctx) == 0) {
+            return PTRACE_RECOVERY_RESTORED;
+        }
+    } else if (stopped) {
+        /* Nothing was injected, and the tracee is stopped as asked — there
+         * is nothing to make safe. */
         return PTRACE_RECOVERY_RESTORED;
     }
-    if (ops && ops->terminate && ops->terminate(ctx) == 0) {
+
+    /* Either there were no registers to put back and we could not stop it,
+     * or the restore genuinely failed. A tracee that would resume at an
+     * injected instruction/stack must not be detached. */
+    if (ops->terminate && ops->terminate(ctx) == 0) {
         return PTRACE_RECOVERY_TERMINATED;
     }
     return PTRACE_RECOVERY_FAILED;

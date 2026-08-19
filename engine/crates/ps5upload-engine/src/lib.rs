@@ -119,6 +119,16 @@ fn make_transfer_config(addr: &str) -> TransferConfig {
             cfg.pack_file_max = n;
         }
     }
+    // Host staging budget for archive uploads, in MB. `FTX2_ARCHIVE_STAGE_MB=4096`
+    // keeps at most ~4 GB of extracted data on the PC at a time instead of
+    // expanding the whole archive first (#251). Unset or 0 = unlimited, the
+    // original behaviour, which is also the only mode that can resume across
+    // the whole archive rather than within the current batch.
+    if let Ok(v) = std::env::var("FTX2_ARCHIVE_STAGE_MB") {
+        if let Ok(n) = v.parse::<u64>() {
+            cfg.archive_stage_budget_bytes = n.saturating_mul(1024 * 1024);
+        }
+    }
     // Bandwidth cap. `FTX2_BANDWIDTH_MBPS=10` caps outbound at
     // 10 MB/s; setting `0` (or unsetting) disables the cap. The
     // throttle is enforced inside the pipelined sender — see

@@ -728,6 +728,11 @@ test-payload: payload
 		$(PAYLOAD_DIR)/tests/elf_param_selftest.c
 	@/tmp/ps5upload-elf-param-selftest
 	@echo "✓ SDK patcher targets param segments, not stray magic bytes"
+	@echo "Running cross-device rename-guard self-test (host build)..."
+	@cc -O2 -Wall -Wextra -Werror -o /tmp/ps5upload-cross-device-selftest \
+		$(PAYLOAD_DIR)/tests/cross_device_selftest.c
+	@/tmp/ps5upload-cross-device-selftest
+	@echo "✓ cross-mount renames are refused before they can panic the kernel"
 	@echo "Running SDK Changer filesystem-safety self-test (host build)..."
 	@cc -O2 -Wall -Wextra -Werror -I$(PAYLOAD_DIR)/include \
 		-o /tmp/ps5upload-sdk-changer-file-selftest \
