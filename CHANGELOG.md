@@ -4,6 +4,16 @@ What's new in ps5upload, written for humans.
 
 ---
 
+## 5.3.3
+
+**Fixes the Docker images, which 5.3.2 broke.**
+
+- The `ps5upload-engine` Docker images failed to build in 5.3.2. If you
+  run the engine in Docker, 5.3.2 has no image — use this release
+  instead. Everything else in 5.3.2 was unaffected.
+
+---
+
 ## 5.3.2
 
 **`.rar` uploads now show the game's real name — and a memory-safety bug in multi-part handling is fixed.**
