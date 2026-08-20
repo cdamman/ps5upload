@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Search,
   Download,
@@ -34,11 +34,36 @@ interface RepoBrowserProps {
  *  those rows. Falling through to the raw entry would render a blank
  *  line, so derive the title id from the filename instead: it is what
  *  the user searched by, and a title id beats nothing. */
-function displayTitle(e: { game_title: string; filename: string }): string {
+/** The title id a cheat file is named after, or null. */
+function titleIdOf(filename: string): string | null {
+  const m = filename.match(/^([A-Za-z]{4}\d{5})/);
+  return m ? m[1].toUpperCase() : null;
+}
+
+/** What to show as the row's name.
+ *
+ *  Sources, best first:
+ *   1. the repo's own game title, when it publishes one
+ *   2. the name your console reports for that game — one of the built-in
+ *      sources has no index and is enumerated by listing the repository,
+ *      which yields filenames but no titles, so without this every row
+ *      from it read as a bare id
+ *   3. the title id, which at least identifies the game
+ *
+ *  Falling through to the raw filename is the last resort. */
+function displayTitle(
+  e: { game_title: string; filename: string },
+  namesByTitleId: Map<string, string>,
+): string {
   const t = e.game_title.trim();
   if (t) return t;
-  const id = e.filename.match(/^([A-Za-z]{4}\d{5})/);
-  return id ? id[1] : e.filename;
+  const id = titleIdOf(e.filename);
+  if (id) {
+    const known = namesByTitleId.get(id);
+    if (known) return known;
+    return id;
+  }
+  return e.filename;
 }
 
 export function RepoBrowser({ addr, onDownloaded, onClose }: RepoBrowserProps) {
@@ -53,6 +78,17 @@ export function RepoBrowser({ addr, onDownloaded, onClose }: RepoBrowserProps) {
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [games, setGames] = useState<InstalledTitle[]>([]);
   const [loadingGames, setLoadingGames] = useState(false);
+
+  /* Names for the games on this console, keyed by title id. Cheat files
+   * are named by title id, so this turns "PPSA01234" into the game's
+   * actual name for anything the user has installed. */
+  const namesByTitleId = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const g of games) {
+      if (g.titleId && g.titleName) m.set(g.titleId.toUpperCase(), g.titleName);
+    }
+    return m;
+  }, [games]);
 
   useEffect(() => {
     void (async () => {
@@ -266,7 +302,7 @@ export function RepoBrowser({ addr, onDownloaded, onClose }: RepoBrowserProps) {
                   <div className="flex items-center justify-between gap-3 p-3">
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-medium">
-                        {displayTitle(e)}
+                        {displayTitle(e, namesByTitleId)}
                       </div>
                       <div className="truncate font-mono text-xs text-[var(--color-muted)]">
                         {e.filename}

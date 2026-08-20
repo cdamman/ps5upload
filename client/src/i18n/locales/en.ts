@@ -1326,10 +1326,12 @@ localimage_open: "Open an image",
 localimage_pick: "Choose a game image",
 localimage_filter: "Disk images",
 localimage_explain:
-  "This opens the image as a drive on this computer, so you can replace patch files or edit details inside it with your normal tools. ps5upload does not change the image itself \u2014 your operating system does all the writing. Eject it here when you are finished.",
+  "It opens the image as a normal drive on this computer, so you can add, replace and delete files inside it \u2014 patch files, for example \u2014 using Finder or Explorer, exactly like a USB stick. Changes are saved straight into the image file. ps5upload never writes to the image itself; your operating system does. Eject it here when you are done.",
 localimage_none: "No image open",
 localimage_none_hint: "Choose a .exfat or .img file to open it as a drive.",
 localimage_not_mounted: "attached, but nothing could be mounted from it",
+localimage_open_failed:
+  "The image is mounted at {path}, but this computer would not open it. Open that folder yourself.",
 localimage_reveal: "Show files",
 localimage_eject: "Eject",
 health: "Health Check",

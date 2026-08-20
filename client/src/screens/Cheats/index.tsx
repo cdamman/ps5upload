@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Gamepad2,
   RefreshCw,
@@ -31,6 +31,8 @@ import {
   cheatsReload,
   cheatsStatus,
   cheatsEngineSet,
+  appsInstalled,
+  type InstalledTitle,
   type CheatTitle,
   type CheatMod,
   type CheatsStatusResponse,
@@ -42,6 +44,33 @@ export default function CheatsScreen() {
   const host = useConnectionStore((s) => s.host);
   const payloadStatus = useConnectionStore((s) => s.payloadStatus);
   const addr = host ? transferAddr(host) : "";
+
+  /* Names for the games on this console.
+   *
+   * A cheat file only carries a game name in the .json format; .shn and
+   * .mc4 carry none, so those rows showed a bare title id twice over.
+   * The console knows what the game is called, so ask it. */
+  const [installed, setInstalled] = useState<InstalledTitle[]>([]);
+  useEffect(() => {
+    void (async () => {
+      if (!addr || payloadStatus !== "up") return;
+      try {
+        const r = await appsInstalled(addr);
+        setInstalled(r.titles);
+      } catch {
+        // Non-fatal: rows fall back to the title id, as before.
+        setInstalled([]);
+      }
+    })();
+  }, [addr, payloadStatus]);
+
+  const namesByTitleId = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const g of installed) {
+      if (g.titleId && g.titleName) m.set(g.titleId.toUpperCase(), g.titleName);
+    }
+    return m;
+  }, [installed]);
 
   const [titles, setTitles] = useState<CheatTitle[]>([]);
   const [status, setStatus] = useState<CheatsStatusResponse | null>(null);
@@ -285,7 +314,9 @@ export default function CheatsScreen() {
                   >
                     <div className="min-w-0">
                       <div className="truncate font-medium">
-                        {t.name || t.title_id}
+                        {t.name ||
+                          namesByTitleId.get(t.title_id.toUpperCase()) ||
+                          t.title_id}
                       </div>
                       <div className="font-mono text-xs text-[var(--color-muted)]">
                         {t.title_id}

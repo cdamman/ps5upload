@@ -11,7 +11,7 @@ import {
 } from "../../components";
 import { useTr } from "../../state/lang";
 import { pickPath } from "../../lib/pickPath";
-import { openExternalUrl } from "../../lib/openExternalUrl";
+import { openLocalPath } from "../../lib/openLocalPath";
 import {
   localImageAttach,
   localImageDetach,
@@ -63,7 +63,17 @@ export default function LocalImageScreen() {
       // Open the mounted volume straight away — the whole point is to
       // get the user to the files, not to a device name.
       if (info.mount_point) {
-        void openExternalUrl(`file://${info.mount_point}`);
+        const opened = await openLocalPath(info.mount_point);
+        if (!opened) {
+          // Don't leave them staring at a screen that looks idle.
+          setError(
+            tr(
+              "localimage_open_failed",
+              { path: info.mount_point },
+              `The image is mounted at ${info.mount_point}, but this computer would not open it. Open that folder yourself.`,
+            ),
+          );
+        }
       }
     } catch (e) {
       setError(String(e));
@@ -146,7 +156,7 @@ export default function LocalImageScreen() {
             {tr(
               "localimage_explain",
               undefined,
-              "This opens the image as a drive on this computer, so you can replace patch files or edit details inside it with your normal tools. ps5upload does not change the image itself — your operating system does all the writing. Eject it here when you are finished.",
+              "It opens the image as a normal drive on this computer, so you can add, replace and delete files inside it \u2014 patch files, for example \u2014 using Finder or Explorer, exactly like a USB stick. Changes are saved straight into the image file. ps5upload never writes to the image itself; your operating system does. Eject it here when you are done.",
             )}
           </span>
         </span>
@@ -186,9 +196,20 @@ export default function LocalImageScreen() {
                   variant="secondary"
                   size="sm"
                   leftIcon={<FolderOpen size={13} />}
-                  onClick={() =>
-                    void openExternalUrl(`file://${a.mount_point}`)
-                  }
+                  onClick={() => {
+                    void (async () => {
+                      const opened = await openLocalPath(a.mount_point);
+                      if (!opened) {
+                        setError(
+                          tr(
+                            "localimage_open_failed",
+                            { path: a.mount_point },
+                            `The image is mounted at ${a.mount_point}, but this computer would not open it. Open that folder yourself.`,
+                          ),
+                        );
+                      }
+                    })();
+                  }}
                 >
                   {tr("localimage_reveal", undefined, "Show files")}
                 </Button>
