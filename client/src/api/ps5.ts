@@ -4014,6 +4014,88 @@ export interface RemotePlayDevice {
   client_type: number;
 }
 
+/** ── Console health check ──────────────────────────────────────────
+ *
+ *  Mirrors `ps5upload-core::health`. `status` is deliberately four-way:
+ *  `skip` means "not measurable here", which is common on retail
+ *  firmware and must not be shown as a failure. */
+export type HealthStatus = "pass" | "warn" | "fail" | "skip";
+
+export type HealthCategory =
+  | "connectivity"
+  | "runtime"
+  | "storage"
+  | "system"
+  | "remoteplay"
+  | "hygiene";
+
+/** Repairs the engine can perform. Closed set -- the UI names one. */
+export type HealthFixAction =
+  | "create_tool_dirs"
+  | "clean_junk"
+  | "enable_remote_play"
+  | "sync_clock";
+
+export interface HealthCheck {
+  id: string;
+  title: string;
+  category: HealthCategory;
+  status: HealthStatus;
+  detail: string;
+  remedy: string;
+  fix?: HealthFixAction;
+}
+
+export interface HealthReport {
+  addr: string;
+  duration_ms: number;
+  checks: HealthCheck[];
+  summary: { pass: number; warn: number; fail: number; skip: number };
+}
+
+export interface HealthJunkFile {
+  path: string;
+  size: number;
+}
+
+export interface HealthFixOutcome {
+  action: HealthFixAction;
+  ok: boolean;
+  changed: string[];
+  error?: string | null;
+}
+
+export async function healthScan(addr?: string): Promise<HealthReport> {
+  return invoke("health_scan", { addr: addr ?? null });
+}
+
+/** Exactly what `clean_junk` would delete, so the user can see it
+ *  before anything is removed. */
+export async function healthJunk(
+  addr?: string,
+): Promise<{ files: HealthJunkFile[]; total_bytes: number }> {
+  return invoke("health_junk", { addr: addr ?? null });
+}
+
+/** Apply one repair.
+ *
+ *  Guarded: this is an action behind a button, so a refusal must not
+ *  read as success. The `detail` hook keeps the partial-progress list
+ *  in the message -- "deleted 3 files, then failed" is far more useful
+ *  than a bare failure, and a repair that got halfway is not a no-op. */
+export async function healthFix(
+  action: HealthFixAction,
+  addr?: string,
+): Promise<HealthFixOutcome> {
+  const resp: HealthFixOutcome = await invoke("health_fix", {
+    addr: addr ?? null,
+    action,
+  });
+  return assertOk(resp, `Repair (${action})`, (r) =>
+    r.changed.length ? `Completed first: ${r.changed.join("; ")}` : undefined,
+  );
+}
+
 export async function remoteplayReadiness(
   addr?: string,
 ): Promise<RemotePlayReadiness> {

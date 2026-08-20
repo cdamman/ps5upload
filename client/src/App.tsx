@@ -38,6 +38,7 @@ const FileSystemScreen = lazy(() => import("./screens/FileSystem"));
 const HardwareScreen = lazy(() => import("./screens/Hardware"));
 const ProfileScreen = lazy(() => import("./screens/Profile"));
 const BackupScreen = lazy(() => import("./screens/Backup"));
+const HealthScreen = lazy(() => import("./screens/Health"));
 const RemotePlayScreen = lazy(() => import("./screens/RemotePlay"));
 const FanCurveScreen = lazy(() => import("./screens/FanCurve"));
 const NotificationsScreen = lazy(() => import("./screens/Notifications"));
@@ -224,6 +225,14 @@ export default function App() {
           element={
             <Suspense fallback={<ScreenLoader />}>
               <BackupScreen />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/health"
+          element={
+            <Suspense fallback={<ScreenLoader />}>
+              <HealthScreen />
             </Suspense>
           }
         />

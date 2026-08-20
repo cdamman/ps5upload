@@ -52,6 +52,7 @@ import {
   ShieldAlert,
   Server,
   Network,
+  Stethoscope,
 } from "lucide-react";
 
 export interface NavItem {
@@ -184,6 +185,12 @@ export const NAV_ITEMS: NavItem[] = [
     icon: CircleUserRound,
   },
   { to: "/fan-curve", key: "fan_curve", fallback: "Fan Curve", icon: Fan },
+  {
+    to: "/health",
+    key: "health",
+    fallback: "Health Check",
+    icon: Stethoscope,
+  },
   {
     to: "/remote-play",
     key: "remote_play",

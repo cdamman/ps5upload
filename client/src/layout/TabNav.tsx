@@ -99,6 +99,7 @@ const TABS: TabDef[] = [
       "/fan-curve",
       "/profile",
       "/backup",
+      "/health",
       "/remote-play",
       "/notifications",
       "/fw-spoof",

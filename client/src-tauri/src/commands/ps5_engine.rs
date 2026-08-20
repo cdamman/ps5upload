@@ -881,6 +881,33 @@ pub async fn remoteplay_status(addr: Option<String>) -> Result<JsonValue, String
 }
 
 #[tauri::command]
+pub async fn health_scan(addr: Option<String>) -> Result<JsonValue, String> {
+    let base = engine::url();
+    let mut url = format!("{base}/api/ps5/health/scan");
+    if let Some(a) = addr {
+        url.push_str(&format!("?addr={}", urlencoding(&a)));
+    }
+    get_json(&url).await
+}
+
+#[tauri::command]
+pub async fn health_junk(addr: Option<String>) -> Result<JsonValue, String> {
+    let base = engine::url();
+    let mut url = format!("{base}/api/ps5/health/junk");
+    if let Some(a) = addr {
+        url.push_str(&format!("?addr={}", urlencoding(&a)));
+    }
+    get_json(&url).await
+}
+
+#[tauri::command]
+pub async fn health_fix(addr: Option<String>, action: String) -> Result<JsonValue, String> {
+    let base = engine::url();
+    let url = format!("{base}/api/ps5/health/fix");
+    post_json(&url, &serde_json::json!({ "addr": addr, "action": action })).await
+}
+
+#[tauri::command]
 pub async fn remoteplay_readiness(addr: Option<String>) -> Result<JsonValue, String> {
     let base = engine::url();
     let mut url = format!("{base}/api/ps5/remoteplay/readiness");
