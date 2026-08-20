@@ -21,6 +21,7 @@ pub mod payload_lifecycle;
 pub mod pkg_install;
 pub mod process_mgr;
 pub mod profile;
+pub mod rar_stream;
 pub mod remoteplay;
 pub mod saves;
 pub mod sdk_changer;
