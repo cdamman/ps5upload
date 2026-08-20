@@ -220,6 +220,38 @@ static void rp_get_account_id(char *out, size_t out_sz) {
     snprintf(out, out_sz, "%s", b64);
 }
 
+/* Enumerate the 32-slot registration table — the devices this console
+ * has been paired with.
+ *
+ * A slot whose user_id reads 0 is empty. regist_key and aes_key are
+ * deliberately NOT reported: they are pairing secrets, nothing in the UI
+ * needs them, and they should not travel over the wire. */
+int remoteplay_devices_json(char *out, size_t out_size) {
+    size_t n = 0;
+    int first = 1;
+
+    n += (size_t)snprintf(out + n, out_size - n, "{\"devices\":[");
+    for (uint32_t slot = 1; slot <= 32; slot++) {
+        int user_id = 0;
+        int client_type = 0;
+        uint32_t ec = 0;
+        if (sys_registry_get_int(rp_key_regist_user_id(slot), &user_id, &ec) != 0) {
+            continue;
+        }
+        if (user_id == 0 || user_id == -1) continue;
+        (void)sys_registry_get_int(rp_key_regist_client_type(slot),
+                                   &client_type, NULL);
+        /* Leave room for the closing "]}" plus a NUL. */
+        if (n + 80 >= out_size) break;
+        n += (size_t)snprintf(out + n, out_size - n,
+                              "%s{\"slot\":%u,\"user_id\":%d,\"client_type\":%d}",
+                              first ? "" : ",", slot, user_id, client_type);
+        first = 0;
+    }
+    n += (size_t)snprintf(out + n, out_size - n, "]}");
+    return (int)n;
+}
+
 /* Turn Remote Play on.
  *
  * Two scopes, because FW 10.00 split them: the system-wide service
