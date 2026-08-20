@@ -42,6 +42,13 @@ static inline uint32_t rp_key_user_enable(uint32_t slot) {
     return rp_ent_num(slot, 16, 65536, 125859841u, 127170561u);
 }
 
+/* Account type for a user slot: "np" once activated, empty otherwise.
+ * Not a Remote Play key as such, but Remote Play readiness depends on it —
+ * an unactivated account cannot pair. Base from ps5-payload-dev's offact. */
+static inline uint32_t rp_key_account_type(uint32_t slot) {
+    return rp_ent_num(slot, 16, 65536, 125874183u, 127184903u);
+}
+
 /* Paired-device table: 32 registration records.
  *
  * Only user_id and client_type are exposed here. regist_key and aes_key

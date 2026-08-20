@@ -51,7 +51,7 @@ static void fsg_handler(int sig) {
 
 /* Safely call kernel_get_fw_version() with fault recovery. Returns 0 on
  * fault (caller treats 0 as "unknown"). */
-static unsigned int safe_kernel_fw_version(void) {
+unsigned int fw_safe_kernel_version(void) {
     struct sigaction old_segv, old_bus, old_ill;
     struct sigaction sa;
     memset(&sa, 0, sizeof(sa));
@@ -100,7 +100,7 @@ int fw_spoof_status(char *buf, size_t cap, size_t *written) {
      * firmware field, which IS the running system software version.
      * This is the same value that sceKernelGetSystemSwVersion() would
      * return in userspace (which we can't call from a kthread). */
-    unsigned int kernel_fw = safe_kernel_fw_version();
+    unsigned int kernel_fw = fw_safe_kernel_version();
 
     /* Secondary sources for cross-validation */
     char kernel_rel[64];

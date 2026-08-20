@@ -32,6 +32,11 @@ int main(void) {
     CHECK(rp_key_user_enable(0) == 127170561u);
     CHECK(rp_key_user_enable(17) == 127170561u);
 
+    /* Account type, from offact's table. */
+    CHECK(rp_key_account_type(1) == 125874183u);
+    CHECK(rp_key_account_type(2) == 125874183u + 65536u);
+    CHECK(rp_key_account_type(17) == 127184903u);
+
     /* Registration table, 32 slots. */
     CHECK(rp_key_regist_user_id(1) == 1090584832u);
     CHECK(rp_key_regist_user_id(32) == 1090584832u + 31u * 65536u);

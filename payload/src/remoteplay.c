@@ -13,6 +13,8 @@
 #include "notif.h"
 #include "proc_list.h"
 #include "sys_registry.h"
+#include "rp_keys.h"
+#include "fw_spoof.h"
 
 #define RP_STATE_IDLE      0
 #define RP_STATE_STARTING  1
@@ -166,6 +168,22 @@ static void rp_base64_encode(const uint8_t *in, size_t inlen, char *out) {
  * an empty string if it can't be resolved (no user logged in, registry
  * symbols unavailable on this firmware, etc.). Never fails hard — a
  * missing account id just means the UI shows only the PIN. */
+/* Registry slot (1..16) whose user-id matches `uid`, or -1.
+ *
+ * The slot is the index every per-user key is derived from, so almost
+ * everything below needs it. */
+static int rp_slot_for_user(int uid) {
+    if (uid <= 0) return -1;
+    for (uint32_t i = 1; i <= 16; i++) {
+        int reg_uid = 0;
+        if (sys_registry_get_int(rp_key_user_id(i), &reg_uid, NULL) == 0 &&
+            reg_uid == uid) {
+            return (int)i;
+        }
+    }
+    return -1;
+}
+
 static void rp_get_account_id(char *out, size_t out_sz) {
     if (!out || out_sz == 0) return;
     out[0] = '\0';
@@ -173,16 +191,7 @@ static void rp_get_account_id(char *out, size_t out_sz) {
     int uid = 0;
     if (sceUserServiceGetForegroundUser(&uid) != 0 || uid <= 0) return;
 
-    /* Find the registry slot whose user-id matches the foreground user. */
-    int slot = -1;
-    for (uint32_t i = 1; i <= 16; i++) {
-        int reg_uid = 0;
-        if (sys_registry_get_int(rp_key_user_id(i), &reg_uid, NULL) == 0 &&
-            reg_uid == uid) {
-            slot = (int)i;
-            break;
-        }
-    }
+    int slot = rp_slot_for_user(uid);
     if (slot < 0) return;
 
     uint8_t raw[8] = {0};
@@ -194,6 +203,72 @@ static void rp_get_account_id(char *out, size_t out_sz) {
     char b64[16];
     rp_base64_encode(raw, sizeof(raw), b64);
     snprintf(out, out_sz, "%s", b64);
+}
+
+static void rp_json_escape(const char *src, char *dst, size_t dst_cap);
+
+/* Read-only snapshot of everything that decides whether Remote Play can
+ * work on this console, right now.
+ *
+ * Deliberately performs NO writes. The point is that the UI can tell
+ * someone exactly which precondition is missing instead of surfacing a
+ * Sony error code, and every fix is then a separate, explicit action.
+ *
+ * The two gates people trip over: the service toggle, and — on FW 10.00
+ * and later — per-user permission. Pairing can succeed while sessions are
+ * refused because the second is unset. */
+int remoteplay_readiness_json(char *out, size_t out_size) {
+    /* Resolve first, or symbols_ok would report "unavailable" merely
+     * because nothing has asked for them yet. Resolution is idempotent
+     * and cheap; reporting a stale false is a lie the UI would repeat. */
+    resolve_once();
+
+    int uid = 0;
+    int svc = 0;
+    int usr = 0;
+    unsigned int fw = fw_safe_kernel_version();
+    int has_per_user = rp_fw_has_per_user_enable(fw);
+    uint64_t acct_raw = 0;
+    char acct_b64[32] = "";
+    char acct_type[24] = "";
+    char acct_type_esc[64] = "";
+
+    if (sceUserServiceGetForegroundUser(&uid) != 0) uid = 0;
+    int slot = rp_slot_for_user(uid);
+
+    if (slot > 0) {
+        uint8_t raw[8] = {0};
+        if (sys_registry_get_bin(rp_key_account_id((uint32_t)slot), raw,
+                                 sizeof(raw), NULL) == 0) {
+            /* Little-endian: the account id is the raw 8 bytes, and the
+             * base64 clients want is over those bytes, not over a hex
+             * rendering of them. */
+            for (int i = 7; i >= 0; i--) {
+                acct_raw = (acct_raw << 8) | raw[i];
+            }
+            rp_base64_encode(raw, sizeof(raw), acct_b64);
+        }
+        (void)sys_registry_get_str(rp_key_account_type((uint32_t)slot),
+                                   acct_type, sizeof(acct_type), NULL);
+    }
+
+    (void)sys_registry_get_int(rp_key_service_enable(), &svc, NULL);
+    if (slot > 0 && has_per_user) {
+        (void)sys_registry_get_int(rp_key_user_enable((uint32_t)slot), &usr,
+                                   NULL);
+    }
+
+    rp_json_escape(acct_type, acct_type_esc, sizeof(acct_type_esc));
+
+    return snprintf(out, out_size,
+                    "{\"fw_magic\":%u,\"has_per_user\":%d,"
+                    "\"foreground_uid\":%d,\"user_slot\":%d,"
+                    "\"account_id_b64\":\"%s\",\"account_id_raw\":%llu,"
+                    "\"account_type\":\"%s\",\"service_enabled\":%d,"
+                    "\"user_enabled\":%d,\"symbols_ok\":%d}",
+                    fw, has_per_user, uid, slot, acct_b64,
+                    (unsigned long long)acct_raw, acct_type_esc,
+                    svc ? 1 : 0, usr ? 1 : 0, g_resolved ? 1 : 0);
 }
 
 static void rp_json_escape(const char *src, char *dst, size_t dst_cap) {
