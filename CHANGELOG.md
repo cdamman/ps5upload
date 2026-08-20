@@ -6,6 +6,17 @@ What's new in ps5upload, written for humans.
 
 ## Unreleased
 
+- **Remote Play works.** It never has: the helper called one of Sony's
+  functions the wrong way and gave up before it started. You can now pair
+  a device from the Remote Play screen and get a PIN.
+- **The Remote Play screen tells you what's missing.** Instead of an error
+  code, you get a short checklist — signed in, account activated, Remote
+  Play on, and (on firmware 10.00 and later) allowed for your user — with
+  a button next to anything it can fix for you.
+- **Date and time settings work again.** The console's timezone and clock
+  format were always blank. Same underlying cause as Remote Play: the
+  helper could not read the console's settings at all.
+
 - **`.rar` uploads no longer need free space on your PC.** A `.rar` used to
   be extracted in full before anything was sent, so a 180 GB game needed
   180 GB free on top of the archive. It is now decompressed and sent at the
