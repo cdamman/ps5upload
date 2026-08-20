@@ -123,17 +123,21 @@ pub struct RemotePlayReadiness {
 }
 
 impl RemotePlayReadiness {
-    /// Firmware as (major, minor), e.g. 9.60 -> (9, 60).
+    /// Firmware as (major, minor), e.g. 0x09600004 -> (9, 60).
     ///
-    /// The magic carries low-order bits past the version (5.10 reads as
-    /// 0x05100023), so mask them off rather than showing the raw number.
+    /// Both bytes are **BCD**, not binary: 9.60 is 0x0960 and 10.00 is
+    /// 0x1000. Reading them as plain integers gives 9.96 and 16.0 — which
+    /// is exactly the bug this replaced. The magic also carries low-order
+    /// bits past the version (5.10 reads as 0x05100023), so the raw number
+    /// is never something to show a user.
     pub fn firmware(&self) -> Option<(u8, u8)> {
         if self.fw_magic == 0 {
             return None;
         }
-        let major = ((self.fw_magic >> 24) & 0xFF) as u8;
-        let minor_bcd = ((self.fw_magic >> 16) & 0xFF) as u8;
-        Some((major, minor_bcd))
+        let bcd = |b: u8| (b >> 4) * 10 + (b & 0x0F);
+        let major = bcd(((self.fw_magic >> 24) & 0xFF) as u8);
+        let minor = bcd(((self.fw_magic >> 16) & 0xFF) as u8);
+        Some((major, minor))
     }
 
     pub fn registry_ok(&self) -> bool {
@@ -235,4 +239,47 @@ pub fn remoteplay_devices(addr: &str) -> Result<RemotePlayDevices> {
         bail!("unexpected reply to RemotePlayDevices: {ft:?}");
     }
     Ok(serde_json::from_slice(&resp)?)
+}
+
+#[cfg(test)]
+mod firmware_tests {
+    use super::RemotePlayReadiness;
+
+    fn with_magic(fw_magic: u32) -> RemotePlayReadiness {
+        RemotePlayReadiness {
+            fw_magic,
+            has_per_user: 0,
+            foreground_uid: 0,
+            user_slot: 0,
+            account_id_b64: String::new(),
+            account_id_raw: 0,
+            account_type: String::new(),
+            service_enabled: 0,
+            user_enabled: 0,
+            symbols_ok: 0,
+            registry_err: 0,
+        }
+    }
+
+    #[test]
+    fn decodes_bcd_not_binary() {
+        // Real magics read off the two test consoles. Decoding these as
+        // plain integers yields 5.16 and 9.96 — the bug this pins.
+        assert_eq!(with_magic(0x05100023).firmware(), Some((5, 10)));
+        assert_eq!(with_magic(0x09600004).firmware(), Some((9, 60)));
+    }
+
+    #[test]
+    fn a_major_of_ten_is_not_sixteen() {
+        // 10.00 is where per-user Remote Play arrives, so getting this
+        // wrong would mislabel exactly the firmware that matters most.
+        assert_eq!(with_magic(0x10000000).firmware(), Some((10, 0)));
+        assert_eq!(with_magic(0x12700000).firmware(), Some((12, 70)));
+        assert_eq!(with_magic(0x13200000).firmware(), Some((13, 20)));
+    }
+
+    #[test]
+    fn unknown_firmware_has_no_version() {
+        assert_eq!(with_magic(0).firmware(), None);
+    }
 }

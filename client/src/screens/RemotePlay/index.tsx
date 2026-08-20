@@ -33,6 +33,19 @@ import {
 } from "../../api/ps5";
 import { humanizePs5Error } from "../../lib/humanizeError";
 
+/** Firmware magic to a human version, e.g. 0x09600004 -> "9.60".
+ *
+ *  Both bytes are BCD, not binary: 9.60 is 0x0960 and 10.00 is 0x1000.
+ *  Reading them as plain integers gives "9.96" and "16.0" — which is
+ *  exactly what this screen displayed before. The magic also carries
+ *  low-order bits past the version, so it is never shown raw. */
+export function formatFirmware(magic: number): string {
+  const bcd = (b: number) => (b >> 4) * 10 + (b & 0x0f);
+  const major = bcd((magic >> 24) & 0xff);
+  const minor = bcd((magic >> 16) & 0xff);
+  return `${major}.${minor < 10 ? "0" : ""}${minor}`;
+}
+
 /** Readiness checklist: every precondition Remote Play needs, and where a
  *  row can be fixed, the button that fixes it.
  *
@@ -67,9 +80,7 @@ function ReadinessPanel({
     );
   }
 
-  const fw = readiness.fw_magic
-    ? `${(readiness.fw_magic >> 24) & 0xff}.${(((readiness.fw_magic >> 16) & 0xff) < 10 ? "0" : "") + ((readiness.fw_magic >> 16) & 0xff)}`
-    : null;
+  const fw = readiness.fw_magic ? formatFirmware(readiness.fw_magic) : null;
 
   const activated =
     readiness.account_id_raw !== 0 && readiness.account_type === "np";
