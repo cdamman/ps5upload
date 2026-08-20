@@ -393,27 +393,22 @@ static char g_rp_pin[16] = "";
 static char g_rp_account_id[32] = "";
 static time_t g_rp_deadline = 0;
 
-/* ── Stale-session reset ────────────────────────────────────────────
+/* Clear stale Remote Play pairing state.
  *
- * Kill the SceRemotePlay daemon to clear any stale pairing session that
- * persisted from a prior attempt (Sony's IPC state survives an arsenal
- * restart). SceSysCore auto-restarts it within seconds; we wait up to 6s
- * for a fresh PID to appear so the subsequent Initialize/PIN-gen call
- * doesn't race the respawn. Ported from elf-arsenal's
- * reset_remoteplay_daemon(). */
+ * This used to find the SceRemotePlay system daemon and proc_kill() it,
+ * then wait up to 6.5s for the OS to respawn it. That is the same hazard
+ * as SIGKILLing SceShellUI (see ptrace_recovery.h): killing a Sony system
+ * process to "reset" it can wedge the whole console, and it did — a PS5
+ * Pro on FW 9.60 froze on a pairing request and needed a hard reboot.
+ *
+ * Sony provides the supported way to do this: sceRemoteplayNotifyPinCodeError(1)
+ * clears stale PIN state, which is what the reference implementations use
+ * and what the caller already invokes. Nothing here needs to kill anything.
+ */
 static void rp_reset_daemon(void) {
-    int old_pid = proc_find_pid_by_name("SceRemotePlay");
-    if (old_pid <= 0) return;
-    proc_kill(old_pid);
-    usleep(500000);
-    for (int i = 0; i < 30; i++) {
-        usleep(200000);
-        int new_pid = proc_find_pid_by_name("SceRemotePlay");
-        if (new_pid > 0 && new_pid != old_pid) {
-            usleep(500000);
-            return;
-        }
-    }
+    /* Intentionally empty. See the comment above: the daemon must not be
+     * killed. Kept as a named no-op so the call site still reads as
+     * "clear stale state" and nobody reintroduces the kill. */
 }
 
 /* ── Auto-enable Remote Play in registry ────────────────────────────
