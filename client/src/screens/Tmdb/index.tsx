@@ -1,11 +1,16 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Database, Search, AlertTriangle, CheckCircle2, RefreshCw } from "lucide-react";
 import { PageHeader, Button, ErrorCard, ConnectionGate, Card, Spinner, Checkbox } from "../../components";
 import { useTr } from "../../state/lang";
 import { useConnectionStore } from "../../state/connection";
 import { transferAddr } from "../../lib/addr";
 import { humanizePs5Error } from "../../lib/humanizeError";
-import { tmdbFetch, type TmdbFetchResponse } from "../../api/ps5";
+import {
+  tmdbFetch,
+  appsInstalled,
+  type TmdbFetchResponse,
+  type InstalledTitle,
+} from "../../api/ps5";
 
 export default function TmdbScreen() {
   const tr = useTr();
@@ -19,15 +24,45 @@ export default function TmdbScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<TmdbFetchResponse | null>(null);
+  /* Picking beats typing. Nobody knows their game's title id, and the old
+   * screen opened with an empty box expecting one — so the first action
+   * available was to get it wrong. We list what is actually installed and
+   * let people click. Manual entry stays for the cases the list cannot
+   * cover (a game not installed yet, or a specific region variant). */
+  const [installed, setInstalled] = useState<InstalledTitle[] | null>(null);
+  const [loadingList, setLoadingList] = useState(false);
+  const [showManual, setShowManual] = useState(false);
 
-  const handleFetch = useCallback(async () => {
-    if (!addr || payloadStatus !== "up" || !titleId.trim()) return;
+  const loadInstalled = useCallback(async () => {
+    if (!addr || payloadStatus !== "up") return;
+    setLoadingList(true);
+    try {
+      const r = await appsInstalled(addr);
+      setInstalled(r.titles.filter((t) => !t.system));
+    } catch {
+      /* Non-fatal — the manual box still works, so a failed listing
+       * degrades to the old behaviour instead of blocking the screen. */
+      setInstalled([]);
+    } finally {
+      setLoadingList(false);
+    }
+  }, [addr, payloadStatus]);
+
+  useEffect(() => {
+    void loadInstalled();
+  }, [loadInstalled]);
+
+  /* Takes an explicit id so a click can look up immediately instead of
+   * waiting a render for setTitleId to land. */
+  const handleFetch = useCallback(async (idOverride?: string) => {
+    const id = (idOverride ?? titleId).trim();
+    if (!addr || payloadStatus !== "up" || !id) return;
     setLoading(true);
     setError(null);
     setResult(null);
     try {
       const resp = await tmdbFetch(
-        titleId.trim().toUpperCase(),
+        id.toUpperCase(),
         refresh,
         addr,
         region.trim() || undefined,
@@ -63,7 +98,77 @@ export default function TmdbScreen() {
 
         {error && <div className="mb-4"><ErrorCard title={error} /></div>}
 
+        {/* What this screen is FOR, in one line. It was previously
+            unexplained, so the only way to learn was to try it. */}
+        <p className="mb-4 text-sm text-[var(--color-muted)]">
+          {tr(
+            "tmdb_explain",
+            undefined,
+            "Fetches a game's proper name and cover details from the PlayStation Store and caches them on the console. Useful when a game shows up as a bare ID or a blank tile.",
+          )}
+        </p>
+
+        {/* Pick a game rather than typing an ID nobody memorises. */}
         <Card className="mb-4">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-sm font-medium">
+              {tr("tmdb_pick_game", undefined, "Pick a game")}
+            </span>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => void loadInstalled()}
+              disabled={loadingList}
+            >
+              <RefreshCw size={14} className={loadingList ? "animate-spin" : ""} />
+            </Button>
+          </div>
+          {loadingList && !installed ? (
+            <Spinner />
+          ) : installed && installed.length > 0 ? (
+            <div className="flex max-h-64 flex-col gap-1 overflow-y-auto">
+              {installed.map((t) => (
+                <button
+                  key={t.titleId}
+                  type="button"
+                  onClick={() => {
+                    setTitleId(t.titleId);
+                    void handleFetch(t.titleId);
+                  }}
+                  className={`flex items-center justify-between rounded-md border px-2 py-1.5 text-left text-sm hover:bg-[var(--color-surface)] ${
+                    titleId === t.titleId
+                      ? "border-[var(--color-accent)] bg-[var(--color-accent)]/10"
+                      : "border-[var(--color-border)]"
+                  }`}
+                >
+                  <span className="truncate">{t.titleName || t.titleId}</span>
+                  <span className="ml-2 shrink-0 font-mono text-xs text-[var(--color-muted)]">
+                    {t.titleId}
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-[var(--color-muted)]">
+              {tr(
+                "tmdb_no_installed",
+                undefined,
+                "No games found on this console. You can still enter an ID by hand below.",
+              )}
+            </p>
+          )}
+          <button
+            type="button"
+            className="mt-3 text-xs text-[var(--color-muted)] underline"
+            onClick={() => setShowManual((v) => !v)}
+          >
+            {showManual
+              ? tr("tmdb_hide_manual", undefined, "Hide manual entry")
+              : tr("tmdb_show_manual", undefined, "Enter an ID by hand instead")}
+          </button>
+        </Card>
+
+        <Card className={showManual ? "mb-4" : "mb-4 hidden"}>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <input
               type="text"

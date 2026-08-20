@@ -1,6 +1,11 @@
 {
   "ar": {
     "missing": [
+      "backup_explain",
+      "backup_preset_appmeta",
+      "backup_preset_cheats",
+      "backup_preset_homebrew",
+      "backup_preset_patches",
       "err_rar_missing_volume",
       "fakelib_add",
       "fakelib_added",
@@ -61,7 +66,12 @@
       "smb_upload_done",
       "smb_upload_folder_ps5",
       "smb_upload_ps5",
-      "smb_uploading"
+      "smb_uploading",
+      "tmdb_explain",
+      "tmdb_hide_manual",
+      "tmdb_no_installed",
+      "tmdb_pick_game",
+      "tmdb_show_manual"
     ],
     "stale": [],
     "untranslated": [
@@ -73,6 +83,11 @@
   },
   "bn": {
     "missing": [
+      "backup_explain",
+      "backup_preset_appmeta",
+      "backup_preset_cheats",
+      "backup_preset_homebrew",
+      "backup_preset_patches",
       "err_rar_missing_volume",
       "fakelib_add",
       "fakelib_added",
@@ -133,7 +148,12 @@
       "smb_upload_done",
       "smb_upload_folder_ps5",
       "smb_upload_ps5",
-      "smb_uploading"
+      "smb_uploading",
+      "tmdb_explain",
+      "tmdb_hide_manual",
+      "tmdb_no_installed",
+      "tmdb_pick_game",
+      "tmdb_show_manual"
     ],
     "stale": [],
     "untranslated": [
@@ -146,6 +166,11 @@
   },
   "de": {
     "missing": [
+      "backup_explain",
+      "backup_preset_appmeta",
+      "backup_preset_cheats",
+      "backup_preset_homebrew",
+      "backup_preset_patches",
       "err_rar_missing_volume",
       "fakelib_add",
       "fakelib_added",
@@ -206,7 +231,12 @@
       "smb_upload_done",
       "smb_upload_folder_ps5",
       "smb_upload_ps5",
-      "smb_uploading"
+      "smb_uploading",
+      "tmdb_explain",
+      "tmdb_hide_manual",
+      "tmdb_no_installed",
+      "tmdb_pick_game",
+      "tmdb_show_manual"
     ],
     "stale": [],
     "untranslated": [
@@ -224,6 +254,11 @@
   },
   "es": {
     "missing": [
+      "backup_explain",
+      "backup_preset_appmeta",
+      "backup_preset_cheats",
+      "backup_preset_homebrew",
+      "backup_preset_patches",
       "err_rar_missing_volume",
       "fakelib_add",
       "fakelib_added",
@@ -284,7 +319,12 @@
       "smb_upload_done",
       "smb_upload_folder_ps5",
       "smb_upload_ps5",
-      "smb_uploading"
+      "smb_uploading",
+      "tmdb_explain",
+      "tmdb_hide_manual",
+      "tmdb_no_installed",
+      "tmdb_pick_game",
+      "tmdb_show_manual"
     ],
     "stale": [],
     "untranslated": [
@@ -300,6 +340,11 @@
   },
   "fr": {
     "missing": [
+      "backup_explain",
+      "backup_preset_appmeta",
+      "backup_preset_cheats",
+      "backup_preset_homebrew",
+      "backup_preset_patches",
       "err_rar_missing_volume",
       "fakelib_add",
       "fakelib_added",
@@ -360,7 +405,12 @@
       "smb_upload_done",
       "smb_upload_folder_ps5",
       "smb_upload_ps5",
-      "smb_uploading"
+      "smb_uploading",
+      "tmdb_explain",
+      "tmdb_hide_manual",
+      "tmdb_no_installed",
+      "tmdb_pick_game",
+      "tmdb_show_manual"
     ],
     "stale": [],
     "untranslated": [
@@ -376,6 +426,11 @@
   },
   "hi": {
     "missing": [
+      "backup_explain",
+      "backup_preset_appmeta",
+      "backup_preset_cheats",
+      "backup_preset_homebrew",
+      "backup_preset_patches",
       "err_rar_missing_volume",
       "fakelib_add",
       "fakelib_added",
@@ -436,7 +491,12 @@
       "smb_upload_done",
       "smb_upload_folder_ps5",
       "smb_upload_ps5",
-      "smb_uploading"
+      "smb_uploading",
+      "tmdb_explain",
+      "tmdb_hide_manual",
+      "tmdb_no_installed",
+      "tmdb_pick_game",
+      "tmdb_show_manual"
     ],
     "stale": [],
     "untranslated": [
@@ -449,6 +509,11 @@
   },
   "id": {
     "missing": [
+      "backup_explain",
+      "backup_preset_appmeta",
+      "backup_preset_cheats",
+      "backup_preset_homebrew",
+      "backup_preset_patches",
       "err_rar_missing_volume",
       "fakelib_add",
       "fakelib_added",
@@ -509,7 +574,12 @@
       "smb_upload_done",
       "smb_upload_folder_ps5",
       "smb_upload_ps5",
-      "smb_uploading"
+      "smb_uploading",
+      "tmdb_explain",
+      "tmdb_hide_manual",
+      "tmdb_no_installed",
+      "tmdb_pick_game",
+      "tmdb_show_manual"
     ],
     "stale": [],
     "untranslated": [
@@ -527,6 +597,11 @@
   },
   "it": {
     "missing": [
+      "backup_explain",
+      "backup_preset_appmeta",
+      "backup_preset_cheats",
+      "backup_preset_homebrew",
+      "backup_preset_patches",
       "err_rar_missing_volume",
       "fakelib_add",
       "fakelib_added",
@@ -587,7 +662,12 @@
       "smb_upload_done",
       "smb_upload_folder_ps5",
       "smb_upload_ps5",
-      "smb_uploading"
+      "smb_uploading",
+      "tmdb_explain",
+      "tmdb_hide_manual",
+      "tmdb_no_installed",
+      "tmdb_pick_game",
+      "tmdb_show_manual"
     ],
     "stale": [],
     "untranslated": [
@@ -605,6 +685,11 @@
   },
   "ja": {
     "missing": [
+      "backup_explain",
+      "backup_preset_appmeta",
+      "backup_preset_cheats",
+      "backup_preset_homebrew",
+      "backup_preset_patches",
       "err_rar_missing_volume",
       "fakelib_add",
       "fakelib_added",
@@ -665,7 +750,12 @@
       "smb_upload_done",
       "smb_upload_folder_ps5",
       "smb_upload_ps5",
-      "smb_uploading"
+      "smb_uploading",
+      "tmdb_explain",
+      "tmdb_hide_manual",
+      "tmdb_no_installed",
+      "tmdb_pick_game",
+      "tmdb_show_manual"
     ],
     "stale": [],
     "untranslated": [
@@ -680,6 +770,11 @@
   },
   "ko": {
     "missing": [
+      "backup_explain",
+      "backup_preset_appmeta",
+      "backup_preset_cheats",
+      "backup_preset_homebrew",
+      "backup_preset_patches",
       "err_rar_missing_volume",
       "fakelib_add",
       "fakelib_added",
@@ -740,7 +835,12 @@
       "smb_upload_done",
       "smb_upload_folder_ps5",
       "smb_upload_ps5",
-      "smb_uploading"
+      "smb_uploading",
+      "tmdb_explain",
+      "tmdb_hide_manual",
+      "tmdb_no_installed",
+      "tmdb_pick_game",
+      "tmdb_show_manual"
     ],
     "stale": [],
     "untranslated": [
@@ -753,6 +853,11 @@
   },
   "pl": {
     "missing": [
+      "backup_explain",
+      "backup_preset_appmeta",
+      "backup_preset_cheats",
+      "backup_preset_homebrew",
+      "backup_preset_patches",
       "err_rar_missing_volume",
       "fakelib_add",
       "fakelib_added",
@@ -813,7 +918,12 @@
       "smb_upload_done",
       "smb_upload_folder_ps5",
       "smb_upload_ps5",
-      "smb_uploading"
+      "smb_uploading",
+      "tmdb_explain",
+      "tmdb_hide_manual",
+      "tmdb_no_installed",
+      "tmdb_pick_game",
+      "tmdb_show_manual"
     ],
     "stale": [],
     "untranslated": [
@@ -827,6 +937,11 @@
   },
   "pt-BR": {
     "missing": [
+      "backup_explain",
+      "backup_preset_appmeta",
+      "backup_preset_cheats",
+      "backup_preset_homebrew",
+      "backup_preset_patches",
       "err_rar_missing_volume",
       "fakelib_add",
       "fakelib_added",
@@ -887,7 +1002,12 @@
       "smb_upload_done",
       "smb_upload_folder_ps5",
       "smb_upload_ps5",
-      "smb_uploading"
+      "smb_uploading",
+      "tmdb_explain",
+      "tmdb_hide_manual",
+      "tmdb_no_installed",
+      "tmdb_pick_game",
+      "tmdb_show_manual"
     ],
     "stale": [],
     "untranslated": [
@@ -905,6 +1025,11 @@
   },
   "ru": {
     "missing": [
+      "backup_explain",
+      "backup_preset_appmeta",
+      "backup_preset_cheats",
+      "backup_preset_homebrew",
+      "backup_preset_patches",
       "err_rar_missing_volume",
       "fakelib_add",
       "fakelib_added",
@@ -965,7 +1090,12 @@
       "smb_upload_done",
       "smb_upload_folder_ps5",
       "smb_upload_ps5",
-      "smb_uploading"
+      "smb_uploading",
+      "tmdb_explain",
+      "tmdb_hide_manual",
+      "tmdb_no_installed",
+      "tmdb_pick_game",
+      "tmdb_show_manual"
     ],
     "stale": [],
     "untranslated": [
@@ -980,6 +1110,11 @@
   },
   "th": {
     "missing": [
+      "backup_explain",
+      "backup_preset_appmeta",
+      "backup_preset_cheats",
+      "backup_preset_homebrew",
+      "backup_preset_patches",
       "err_rar_missing_volume",
       "fakelib_add",
       "fakelib_added",
@@ -1040,7 +1175,12 @@
       "smb_upload_done",
       "smb_upload_folder_ps5",
       "smb_upload_ps5",
-      "smb_uploading"
+      "smb_uploading",
+      "tmdb_explain",
+      "tmdb_hide_manual",
+      "tmdb_no_installed",
+      "tmdb_pick_game",
+      "tmdb_show_manual"
     ],
     "stale": [],
     "untranslated": [
@@ -1055,6 +1195,11 @@
   },
   "tr": {
     "missing": [
+      "backup_explain",
+      "backup_preset_appmeta",
+      "backup_preset_cheats",
+      "backup_preset_homebrew",
+      "backup_preset_patches",
       "err_rar_missing_volume",
       "fakelib_add",
       "fakelib_added",
@@ -1115,7 +1260,12 @@
       "smb_upload_done",
       "smb_upload_folder_ps5",
       "smb_upload_ps5",
-      "smb_uploading"
+      "smb_uploading",
+      "tmdb_explain",
+      "tmdb_hide_manual",
+      "tmdb_no_installed",
+      "tmdb_pick_game",
+      "tmdb_show_manual"
     ],
     "stale": [],
     "untranslated": [
@@ -1129,6 +1279,11 @@
   },
   "vi": {
     "missing": [
+      "backup_explain",
+      "backup_preset_appmeta",
+      "backup_preset_cheats",
+      "backup_preset_homebrew",
+      "backup_preset_patches",
       "err_rar_missing_volume",
       "fakelib_add",
       "fakelib_added",
@@ -1189,7 +1344,12 @@
       "smb_upload_done",
       "smb_upload_folder_ps5",
       "smb_upload_ps5",
-      "smb_uploading"
+      "smb_uploading",
+      "tmdb_explain",
+      "tmdb_hide_manual",
+      "tmdb_no_installed",
+      "tmdb_pick_game",
+      "tmdb_show_manual"
     ],
     "stale": [],
     "untranslated": [
@@ -1204,6 +1364,11 @@
   },
   "zh-CN": {
     "missing": [
+      "backup_explain",
+      "backup_preset_appmeta",
+      "backup_preset_cheats",
+      "backup_preset_homebrew",
+      "backup_preset_patches",
       "err_rar_missing_volume",
       "fakelib_add",
       "fakelib_added",
@@ -1264,7 +1429,12 @@
       "smb_upload_done",
       "smb_upload_folder_ps5",
       "smb_upload_ps5",
-      "smb_uploading"
+      "smb_uploading",
+      "tmdb_explain",
+      "tmdb_hide_manual",
+      "tmdb_no_installed",
+      "tmdb_pick_game",
+      "tmdb_show_manual"
     ],
     "stale": [],
     "untranslated": [
@@ -1277,6 +1447,11 @@
   },
   "zh-TW": {
     "missing": [
+      "backup_explain",
+      "backup_preset_appmeta",
+      "backup_preset_cheats",
+      "backup_preset_homebrew",
+      "backup_preset_patches",
       "err_rar_missing_volume",
       "fakelib_add",
       "fakelib_added",
@@ -1337,7 +1512,12 @@
       "smb_upload_done",
       "smb_upload_folder_ps5",
       "smb_upload_ps5",
-      "smb_uploading"
+      "smb_uploading",
+      "tmdb_explain",
+      "tmdb_hide_manual",
+      "tmdb_no_installed",
+      "tmdb_pick_game",
+      "tmdb_show_manual"
     ],
     "stale": [],
     "untranslated": [

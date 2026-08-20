@@ -38,6 +38,40 @@ function formatTimestamp(ts: number): string {
   return d.toLocaleString();
 }
 
+/** Things people actually want to keep a copy of.
+ *
+ *  Deliberately conservative: user data the helper or homebrew owns, plus
+ *  the home-screen tile metadata that goes wrong often enough to be worth
+ *  saving. System paths are not offered — a snapshot is only as safe as
+ *  the restore, and restoring over live system state is not something to
+ *  suggest with a one-click button. */
+const BACKUP_PRESETS: {
+  path: string;
+  label: string;
+  labelKey: string;
+}[] = [
+  { path: "/data/homebrew", label: "Homebrew apps", labelKey: "backup_preset_homebrew" },
+  { path: "/user/appmeta", label: "Game tiles & icons", labelKey: "backup_preset_appmeta" },
+  { path: "/data/ps5upload/cheats", label: "Cheats", labelKey: "backup_preset_cheats" },
+  { path: "/data/ps5upload/patches", label: "Patches", labelKey: "backup_preset_patches" },
+];
+
+/** A name that reads like something, derived from the path and today's date.
+ *
+ *  The old field just said "Tag (alphanumeric, dash, underscore)" and left
+ *  it blank, so the rules were stated but the answer was not. */
+function defaultTagFor(p: string): string {
+  const leaf =
+    p
+      .split("/")
+      .filter(Boolean)
+      .pop()
+      ?.replace(/[^A-Za-z0-9_-]/g, "-") ?? "snapshot";
+  const d = new Date();
+  const stamp = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return `${leaf}-${stamp}`.slice(0, 32);
+}
+
 export default function BackupScreen() {
   const tr = useTr();
   const host = useConnectionStore((s) => s.host);
@@ -50,6 +84,8 @@ export default function BackupScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const [tag, setTag] = useState("");
+  /* Once the user names a snapshot themselves, stop rewriting it. */
+  const [tagTouched, setTagTouched] = useState(false);
   const [path, setPath] = useState("");
   const [busy, setBusy] = useState(false);
   const [actionMsg, setActionMsg] = useState<string | null>(null);
@@ -215,22 +251,66 @@ export default function BackupScreen() {
               <Plus size={16} />
               {tr("backup_new_snapshot", undefined, "New snapshot")}
             </h3>
+
+            {/* Say what this is for. The screen used to open with two empty
+                boxes labelled "Tag" and "PS5 path", which assumes the reader
+                already knows both what to copy and what to call it. */}
+            <p className="text-sm text-[var(--color-muted)]">
+              {tr(
+                "backup_explain",
+                undefined,
+                "Copies files from the console to this computer so you can put them back later. Pick something common below, or type your own path.",
+              )}
+            </p>
+
+            {/* Common targets, so the first action is a click and not a
+                guess. Choosing one fills in a sensible tag too. */}
+            <div className="flex flex-wrap gap-2">
+              {BACKUP_PRESETS.map((preset) => (
+                <button
+                  key={preset.path}
+                  type="button"
+                  onClick={() => {
+                    setPath(preset.path);
+                    setTag(defaultTagFor(preset.path));
+                  }}
+                  title={preset.path}
+                  className={`rounded-md border px-2 py-1 text-xs ${
+                    path === preset.path
+                      ? "border-[var(--color-accent)] bg-[var(--color-accent)]/10"
+                      : "border-[var(--color-border)] hover:bg-[var(--color-surface)]"
+                  }`}
+                >
+                  {tr(preset.labelKey, undefined, preset.label)}
+                </button>
+              ))}
+            </div>
+
             <div className="space-y-3">
               <Input
-                label={tr("backup_tag_label", undefined, "Tag (alphanumeric, dash, underscore)")}
-                type="text"
-                value={tag}
-                onChange={(e) => setTag(e.target.value)}
-                maxLength={32}
-                placeholder={tr("backup_tag_placeholder", undefined, "app-db")}
-              />
-              <Input
-                label={tr("backup_path_label", undefined, "PS5 path (file or directory)")}
+                label={tr("backup_path_label", undefined, "What to copy")}
                 type="text"
                 value={path}
-                onChange={(e) => setPath(e.target.value)}
-                placeholder="/system_data/priv/mms/app.db"
+                onChange={(e) => {
+                  setPath(e.target.value);
+                  /* Keep the tag in step while it is still auto-derived, so
+                     the common case needs no thought — but never clobber a
+                     name the user typed themselves. */
+                  if (!tagTouched) setTag(defaultTagFor(e.target.value));
+                }}
+                placeholder="/data/homebrew"
                 className="font-mono"
+              />
+              <Input
+                label={tr("backup_tag_label", undefined, "Name for this snapshot")}
+                type="text"
+                value={tag}
+                onChange={(e) => {
+                  setTagTouched(true);
+                  setTag(e.target.value);
+                }}
+                maxLength={32}
+                placeholder={tr("backup_tag_placeholder", undefined, "homebrew-2026-08-20")}
               />
               <Button
                 onClick={handleSnapshot}
