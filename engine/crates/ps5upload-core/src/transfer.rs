@@ -3890,7 +3890,8 @@ pub fn transfer_7z_resumable(
 // ═══════════════════════════════════════════════════════════════════════════
 #[cfg(not(target_os = "android"))]
 pub use rar_support::{
-    inspect_rar, rar_plan_preview, transfer_rar_resumable, transfer_rar_streaming,
+    inspect_rar, rar_plan_preview, spawn_rar_worker_for_test, transfer_rar_resumable,
+    transfer_rar_streaming,
 };
 
 #[cfg(not(target_os = "android"))]
@@ -4175,7 +4176,16 @@ mod rar_support {
 
     /// Metadata-only plan preview: total bytes + sanitised dest paths (sorted)
     /// for the live file tree. No extraction.
-    pub fn rar_plan_preview(
+    /// Entries in **archive order** — the order a processing walk produces.
+    ///
+    /// Keep this distinct from `rar_plan_preview`, which sorts. The streaming
+    /// upload builds its manifest from this: shard numbers are assigned in
+    /// send order, and the resume rule ("skip anything at or below the last
+    /// acked shard") is only sound if shards go out ascending. Feeding it
+    /// sorted names transposed two adjacent pairs in a real 181-file archive
+    /// — `precisionarrow` vs `precision_precisionplus`, where `_` sorts
+    /// before a letter — and the lock-step check caught it.
+    pub(crate) fn rar_plan_entries(
         archive_path: &Path,
         password: Option<&str>,
         excludes: &[String],
@@ -4204,6 +4214,18 @@ mod rar_support {
             total += e.unpacked_size;
             files.push((rel, e.unpacked_size));
         }
+        Ok((total, files))
+    }
+
+    /// Entries sorted by path, for showing a human a file list.
+    ///
+    /// Do NOT use this to build a transfer manifest — see `rar_plan_entries`.
+    pub fn rar_plan_preview(
+        archive_path: &Path,
+        password: Option<&str>,
+        excludes: &[String],
+    ) -> Result<(u64, Vec<(String, u64)>)> {
+        let (total, mut files) = rar_plan_entries(archive_path, password, excludes)?;
         files.sort_by(|a, b| a.0.cmp(&b.0));
         Ok((total, files))
     }
@@ -4342,6 +4364,20 @@ mod rar_support {
         (rx, handle)
     }
 
+    /// Test-only shim so an out-of-crate harness can drive the worker
+    /// directly. Not part of the public surface beyond tests.
+    #[doc(hidden)]
+    pub fn spawn_rar_worker_for_test(
+        archive_path: &Path,
+        password: Option<&str>,
+        excludes: Vec<String>,
+    ) -> (
+        std::sync::mpsc::Receiver<crate::rar_stream::StreamMsg>,
+        std::thread::JoinHandle<()>,
+    ) {
+        spawn_rar_worker(archive_path, password, excludes)
+    }
+
     /// Stream a `.rar` to the console: one forward-only decompression, shards
     /// emitted as the bytes arrive.
     ///
@@ -4364,7 +4400,9 @@ mod rar_support {
         // ── Planning pass ── headers only, no decompression. Sizes come from
         //    archive metadata, so the manifest is complete before a byte is
         //    decoded.
-        let (_, plan_files) = rar_plan_preview(archive_path, password, &cfg.excludes)?;
+        // Archive order, NOT the sorted preview: shard numbers are assigned in
+        // send order and the resume rule depends on them ascending.
+        let (_, plan_files) = rar_plan_entries(archive_path, password, &cfg.excludes)?;
         if plan_files.is_empty() {
             bail!(
                 "rar has no extractable files (after exclusions): {}",
@@ -4549,6 +4587,32 @@ mod rar_support {
         /// bytes exactly. That is worth keeping, so it now drives the
         /// streaming bridge directly — no mock server, no network, just
         /// "does UnRAR hand us the right bytes through the channel".
+        /// The manifest must be built in ARCHIVE order, never the sorted
+        /// preview order.
+        ///
+        /// This is a regression test for a real failure: streaming used
+        /// `rar_plan_preview`, which sorts, and two adjacent files in a
+        /// 181-entry archive transposed because `_` sorts before a letter
+        /// (`precision_precisionplus` vs `precisionarrow`). Every shipped
+        /// fixture holds a single entry, where sorting is a no-op, so no
+        /// fixture test could see it. Asserting the two functions are
+        /// *different functions* is the part CI can actually hold onto.
+        #[test]
+        fn the_streaming_plan_is_archive_order_not_sorted() {
+            let a = fixture("crypted.rar");
+            let (t1, archive_order) = rar_plan_entries(&a, Some("unrar"), &[]).unwrap();
+            let (t2, sorted) = rar_plan_preview(&a, Some("unrar"), &[]).unwrap();
+            // Same content either way...
+            assert_eq!(t1, t2);
+            let mut a_sorted = archive_order.clone();
+            a_sorted.sort_by(|x, y| x.0.cmp(&y.0));
+            assert_eq!(a_sorted, sorted, "the two must agree once sorted");
+            // ...and the preview is sorted by construction.
+            let mut check = sorted.clone();
+            check.sort_by(|x, y| x.0.cmp(&y.0));
+            assert_eq!(check, sorted, "rar_plan_preview must stay sorted");
+        }
+
         #[test]
         fn streaming_decompresses_content_exactly() {
             use crate::rar_stream::{next_entry, EntryReader};
