@@ -5224,6 +5224,60 @@ async fn notif_list_handler(
     }
 }
 
+#[derive(Deserialize)]
+struct LocalImageReq {
+    path: Option<String>,
+    device: Option<String>,
+}
+
+/// POST /api/local/image/attach  { "path": "/path/to.exfat" }
+///
+/// Attaches the image so the OS mounts it, and returns where. This is a
+/// host-side operation -- no console involved.
+async fn local_image_attach(Json(req): Json<LocalImageReq>) -> impl IntoResponse {
+    let Some(path) = req.path else {
+        return json_err(StatusCode::BAD_REQUEST, "path is required").into_response();
+    };
+    let r = tokio::task::spawn_blocking(move || ps5upload_core::local_image::attach(&path))
+        .await
+        .map_err(anyhow::Error::from)
+        .and_then(|r| r);
+    match r {
+        Ok(info) => (StatusCode::OK, Json(info)).into_response(),
+        Err(e) => json_err(StatusCode::BAD_REQUEST, format!("{e:#}")).into_response(),
+    }
+}
+
+/// POST /api/local/image/detach  { "device": "/dev/disk4" }
+async fn local_image_detach(Json(req): Json<LocalImageReq>) -> impl IntoResponse {
+    let Some(device) = req.device else {
+        return json_err(StatusCode::BAD_REQUEST, "device is required").into_response();
+    };
+    let r = tokio::task::spawn_blocking(move || ps5upload_core::local_image::detach(&device))
+        .await
+        .map_err(anyhow::Error::from)
+        .and_then(|r| r);
+    match r {
+        Ok(()) => (StatusCode::OK, Json(serde_json::json!({ "ok": true }))).into_response(),
+        Err(e) => json_err(StatusCode::BAD_REQUEST, format!("{e:#}")).into_response(),
+    }
+}
+
+/// GET /api/local/image/status — what is attached, and whether this
+/// platform can attach at all.
+async fn local_image_status() -> impl IntoResponse {
+    let unsupported = ps5upload_core::local_image::unsupported_reason();
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "attached": ps5upload_core::local_image::status(),
+            "supported": unsupported.is_none(),
+            "unsupported_reason": unsupported,
+        })),
+    )
+        .into_response()
+}
+
 /// POST /api/ps5/activity/reset
 ///
 /// Discards ps5upload's recorded play time on the console. This is our
@@ -7721,6 +7775,9 @@ async fn run(cfg: EngineConfig) -> anyhow::Result<()> {
         .route("/api/ps5/notif/list", get(notif_list_handler))
         .route("/api/ps5/notif/clear", post(notif_clear_handler))
         .route("/api/ps5/activity/reset", post(activity_reset_handler))
+        .route("/api/local/image/attach", post(local_image_attach))
+        .route("/api/local/image/detach", post(local_image_detach))
+        .route("/api/local/image/status", get(local_image_status))
         .route("/api/ps5/cheats/list", get(cheats_list_handler))
         .route("/api/ps5/cheats/get", get(cheats_get_handler))
         .route("/api/ps5/cheats/toggle", post(cheats_toggle_handler))

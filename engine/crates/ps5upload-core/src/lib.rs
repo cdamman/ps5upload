@@ -15,6 +15,7 @@ pub mod fw_spoof;
 pub mod game_meta;
 pub mod health;
 pub mod hw;
+pub mod local_image;
 pub mod log;
 pub mod notif;
 pub mod payload_lifecycle;
