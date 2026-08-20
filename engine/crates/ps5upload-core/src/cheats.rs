@@ -223,7 +223,22 @@ pub struct CheatRepo {
     /// `https://raw.githubusercontent.com/etaHEN/PS5_Cheats/main/`
     pub raw_base: String,
     /// Index files in the repo root (e.g. `json.txt`, `shn.txt`).
+    /// Empty when the repo publishes no index and must be enumerated
+    /// through `tree_api` instead.
     pub index_files: Vec<String>,
+    /// Base URL holding the `json/`, `shn/` and `mc4/` subdirectories.
+    /// Usually equal to `raw_base`, but repos that nest their cheats
+    /// (e.g. under `cheats/`) point this deeper.
+    #[serde(default)]
+    pub content_base: String,
+    /// GitHub git-trees API URL used to enumerate repos that ship no
+    /// index files. Empty means "use `index_files`".
+    #[serde(default)]
+    pub tree_api: String,
+    /// Path prefix inside the tree that contains the format
+    /// subdirectories, e.g. `cheats/`. Empty means the tree root.
+    #[serde(default)]
+    pub tree_prefix: String,
 }
 
 /// One entry parsed from a repo index file (`filename=game_title`).
@@ -279,6 +294,9 @@ pub fn cheat_repos() -> Vec<CheatRepo> {
             name: "etaHEN/PS5_Cheats".into(),
             raw_base: "https://raw.githubusercontent.com/etaHEN/PS5_Cheats/main/".into(),
             index_files: vec!["json.txt".into(), "shn.txt".into(), "mc4.txt".into()],
+            content_base: "https://raw.githubusercontent.com/etaHEN/PS5_Cheats/main/".into(),
+            tree_api: String::new(),
+            tree_prefix: String::new(),
         },
         CheatRepo {
             id: "goldhen".into(),
@@ -286,13 +304,27 @@ pub fn cheat_repos() -> Vec<CheatRepo> {
             raw_base: "https://raw.githubusercontent.com/GoldHEN/GoldHEN_Cheat_Repository/main/"
                 .into(),
             index_files: vec!["json.txt".into(), "shn.txt".into(), "mc4.txt".into()],
+            content_base:
+                "https://raw.githubusercontent.com/GoldHEN/GoldHEN_Cheat_Repository/main/".into(),
+            tree_api: String::new(),
+            tree_prefix: String::new(),
         },
+        // This repo publishes no `*.txt` index and lives on `master`
+        // with its cheats nested under `cheats/`, so it is enumerated
+        // through the git-trees API instead.
         CheatRepo {
             id: "henmix".into(),
             name: "TeeKay87/HEN-Cheats-Collection".into(),
-            raw_base: "https://raw.githubusercontent.com/TeeKay87/HEN-Cheats-Collection/main/"
+            raw_base: "https://raw.githubusercontent.com/TeeKay87/HEN-Cheats-Collection/master/"
                 .into(),
-            index_files: vec!["json.txt".into(), "shn.txt".into(), "mc4.txt".into()],
+            index_files: Vec::new(),
+            content_base:
+                "https://raw.githubusercontent.com/TeeKay87/HEN-Cheats-Collection/master/cheats/"
+                    .into(),
+            tree_api:
+                "https://api.github.com/repos/TeeKay87/HEN-Cheats-Collection/git/trees/master?recursive=1"
+                    .into(),
+            tree_prefix: "cheats/".into(),
         },
     ]
 }
@@ -306,6 +338,34 @@ fn format_from_index(index_name: &str) -> &'static str {
         "mc4.txt" => "mc4",
         _ => "json",
     }
+}
+
+/// Split a git-tree path into `(filename, format)`.
+///
+/// Accepts exactly `<prefix><format>/<filename>` where `<format>` is one
+/// of `json`, `shn` or `mc4` and the file's extension agrees with it.
+/// Anything else — a nested path, an unknown directory, a README —
+/// returns `None`.
+fn tree_entry_from_path(path: &str, prefix: &str) -> Option<(String, &'static str)> {
+    let rest = path.strip_prefix(prefix)?;
+    let (dir, filename) = rest.split_once('/')?;
+    // Reject nested paths: the filename must be a leaf.
+    if filename.contains('/') || filename.is_empty() {
+        return None;
+    }
+    let format = match dir {
+        "json" => "json",
+        "shn" => "shn",
+        "mc4" => "mc4",
+        _ => return None,
+    };
+    // The extension must agree with the directory, so stray files
+    // (READMEs, images) inside a format directory are ignored.
+    let ext = filename.rsplit_once('.')?.1;
+    if !ext.eq_ignore_ascii_case(format) {
+        return None;
+    }
+    Some((filename.to_string(), format))
 }
 
 #[cfg(not(target_os = "android"))]
@@ -336,52 +396,140 @@ fn parse_index_line(line: &str) -> Option<(String, String)> {
     Some((filename, game_title))
 }
 
+/// Cached git-tree listings, keyed by repo id. The trees API is rate
+/// limited (60 requests/hour unauthenticated) and each response covers
+/// thousands of files, so a listing is reused for an hour rather than
+/// refetched on every search.
+#[cfg(not(target_os = "android"))]
+fn tree_cache() -> &'static std::sync::Mutex<
+    std::collections::HashMap<String, (std::time::Instant, Vec<(String, String)>)>,
+> {
+    static CACHE: std::sync::OnceLock<
+        std::sync::Mutex<
+            std::collections::HashMap<String, (std::time::Instant, Vec<(String, String)>)>,
+        >,
+    > = std::sync::OnceLock::new();
+    CACHE.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
+}
+
+#[cfg(not(target_os = "android"))]
+const TREE_CACHE_TTL: std::time::Duration = std::time::Duration::from_secs(3600);
+
+/// Enumerate a repo that ships no index files by reading its git tree.
+/// Returns `(filename, format)` pairs.
+#[cfg(not(target_os = "android"))]
+fn repo_tree_listing(repo: &CheatRepo) -> Result<Vec<(String, String)>> {
+    if let Some((fetched, cached)) = tree_cache()
+        .lock()
+        .ok()
+        .and_then(|c| c.get(&repo.id).cloned())
+    {
+        if fetched.elapsed() < TREE_CACHE_TTL {
+            return Ok(cached);
+        }
+    }
+
+    let bytes = repo_fetch(&repo.tree_api)?;
+    let parsed: serde_json::Value = serde_json::from_slice(&bytes)?;
+    let nodes = parsed
+        .get("tree")
+        .and_then(|t| t.as_array())
+        .ok_or_else(|| anyhow::anyhow!("no tree in response for {}", repo.id))?;
+
+    let mut out = Vec::new();
+    for node in nodes {
+        if node.get("type").and_then(|t| t.as_str()) != Some("blob") {
+            continue;
+        }
+        let Some(path) = node.get("path").and_then(|p| p.as_str()) else {
+            continue;
+        };
+        if let Some((filename, format)) = tree_entry_from_path(path, &repo.tree_prefix) {
+            out.push((filename, format.to_string()));
+        }
+    }
+
+    if let Ok(mut cache) = tree_cache().lock() {
+        cache.insert(repo.id.clone(), (std::time::Instant::now(), out.clone()));
+    }
+    Ok(out)
+}
+
 /// Search all community repos for cheat entries matching `query`.
 /// `query` may match either the filename (e.g. a CUSA ID) or the game
 /// title. Matching is case-insensitive substring.
 pub fn cheats_repo_search(query: &str) -> Result<CheatRepoSearchResponse> {
     #[cfg(target_os = "android")]
     let _ = query;
-    let mut entries = Vec::new();
+    let mut entries: Vec<CheatRepoEntry> = Vec::new();
+    // De-duplicate by filename across every repo. `Vec::dedup_by` only
+    // collapses *adjacent* duplicates, so it never caught the case it
+    // was written for: the same file listed by two different repos,
+    // whose entries are never adjacent because repos are walked in turn.
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    #[cfg(target_os = "android")]
+    let _ = &seen;
+
     for repo in cheat_repos() {
-        for idx in &repo.index_files {
-            let url = format!("{}{}", repo.raw_base, idx);
-            #[cfg(not(target_os = "android"))]
-            {
-                let q = query.to_lowercase();
-                match repo_fetch(&url) {
-                    Ok(bytes) => {
-                        let text = String::from_utf8_lossy(&bytes);
-                        for line in text.lines() {
-                            if let Some((filename, game_title)) = parse_index_line(line) {
-                                if q.is_empty()
-                                    || filename.to_lowercase().contains(&q)
-                                    || game_title.to_lowercase().contains(&q)
-                                {
-                                    entries.push(CheatRepoEntry {
-                                        filename,
-                                        game_title,
-                                        format: format_from_index(idx).into(),
-                                        repo_id: repo.id.clone(),
-                                    });
-                                }
-                            }
+        #[cfg(not(target_os = "android"))]
+        {
+            let q = query.to_lowercase();
+            let repo_id = repo.id.clone();
+            let mut push = |filename: String, game_title: String, format: String| {
+                let matches = q.is_empty()
+                    || filename.to_lowercase().contains(&q)
+                    || game_title.to_lowercase().contains(&q);
+                if !matches || !seen.insert(filename.clone()) {
+                    return;
+                }
+                entries.push(CheatRepoEntry {
+                    filename,
+                    game_title,
+                    format,
+                    repo_id: repo_id.clone(),
+                });
+            };
+
+            if repo.index_files.is_empty() {
+                // No index published — enumerate through the git tree.
+                // Game titles are not available this way, so these
+                // entries match on filename (the title id) only.
+                match repo_tree_listing(&repo) {
+                    Ok(listing) => {
+                        for (filename, format) in listing {
+                            push(filename, String::new(), format);
                         }
                     }
                     Err(e) => {
-                        eprintln!("[cheats] fetch failed for {}/{}: {}", repo.id, idx, e);
+                        eprintln!("[cheats] tree listing failed for {}: {}", repo.id, e);
+                    }
+                }
+            } else {
+                for idx in &repo.index_files {
+                    let url = format!("{}{}", repo.raw_base, idx);
+                    match repo_fetch(&url) {
+                        Ok(bytes) => {
+                            let text = String::from_utf8_lossy(&bytes);
+                            for line in text.lines() {
+                                if let Some((filename, game_title)) = parse_index_line(line) {
+                                    push(filename, game_title, format_from_index(idx).into());
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("[cheats] fetch failed for {}/{}: {}", repo.id, idx, e);
+                        }
                     }
                 }
             }
-            #[cfg(target_os = "android")]
-            {
-                let _ = &url;
-                eprintln!("[cheats] repo fetch not available on android");
-            }
+        }
+        #[cfg(target_os = "android")]
+        {
+            let _ = &repo;
+            eprintln!("[cheats] repo fetch not available on android");
         }
     }
-    // De-duplicate by filename (multiple repos may list the same file).
-    entries.dedup_by(|a: &mut CheatRepoEntry, b: &mut CheatRepoEntry| a.filename == b.filename);
+
     Ok(CheatRepoSearchResponse {
         entries,
         error: None,
@@ -426,8 +574,15 @@ pub fn cheats_repo_download(
 
         // Try each format subdirectory until one succeeds.
         let mut bytes = None;
+        // `content_base` is where the format directories actually live,
+        // which is not always the repo root (see the henmix entry).
+        let base = if repo.content_base.is_empty() {
+            repo.raw_base.clone()
+        } else {
+            repo.content_base.clone()
+        };
         for subdir in &["json", "shn", "mc4", "misc"] {
-            let try_url = format!("{}{}/{}", repo.raw_base, subdir, filename);
+            let try_url = format!("{}{}/{}", base, subdir, filename);
             match repo_fetch(&try_url) {
                 Ok(b) => {
                     bytes = Some(b);
@@ -599,13 +754,101 @@ mod tests {
     }
 
     #[test]
+    fn tree_entry_from_path_json() {
+        assert_eq!(
+            tree_entry_from_path("cheats/json/CUSA00002_01.00_c20ae0e8.json", "cheats/"),
+            Some(("CUSA00002_01.00_c20ae0e8.json".to_string(), "json"))
+        );
+    }
+
+    #[test]
+    fn tree_entry_from_path_shn_and_mc4() {
+        assert_eq!(
+            tree_entry_from_path("cheats/shn/CUSA123.shn", "cheats/"),
+            Some(("CUSA123.shn".to_string(), "shn"))
+        );
+        assert_eq!(
+            tree_entry_from_path("cheats/mc4/CUSA123.mc4", "cheats/"),
+            Some(("CUSA123.mc4".to_string(), "mc4"))
+        );
+    }
+
+    #[test]
+    fn tree_entry_from_path_empty_prefix() {
+        assert_eq!(
+            tree_entry_from_path("json/CUSA1.json", ""),
+            Some(("CUSA1.json".to_string(), "json"))
+        );
+    }
+
+    #[test]
+    fn tree_entry_from_path_rejects_outside_prefix() {
+        assert_eq!(tree_entry_from_path("docs/json/a.json", "cheats/"), None);
+    }
+
+    #[test]
+    fn tree_entry_from_path_rejects_unknown_dir() {
+        assert_eq!(tree_entry_from_path("cheats/misc/a.json", "cheats/"), None);
+    }
+
+    #[test]
+    fn tree_entry_from_path_rejects_nested() {
+        assert_eq!(tree_entry_from_path("cheats/json/sub/a.json", "cheats/"), None);
+    }
+
+    #[test]
+    fn tree_entry_from_path_rejects_mismatched_extension() {
+        // A README or image sitting inside a format directory.
+        assert_eq!(tree_entry_from_path("cheats/json/README.md", "cheats/"), None);
+        assert_eq!(tree_entry_from_path("cheats/json/noext", "cheats/"), None);
+    }
+
+    #[test]
+    fn tree_entry_from_path_rejects_directory_itself() {
+        assert_eq!(tree_entry_from_path("cheats/json/", "cheats/"), None);
+    }
+
+    #[test]
+    fn every_repo_is_enumerable() {
+        // A repo must be reachable one way or the other: either it
+        // publishes index files, or it declares a tree API. An entry
+        // with neither contributes nothing and fails silently.
+        for r in cheat_repos() {
+            assert!(
+                !r.index_files.is_empty() || !r.tree_api.is_empty(),
+                "repo {} has no enumeration strategy",
+                r.id
+            );
+            assert!(!r.content_base.is_empty(), "repo {} has no content_base", r.id);
+            assert!(
+                r.content_base.ends_with('/'),
+                "repo {} content_base must end in / so URLs join correctly",
+                r.id
+            );
+        }
+    }
+
+    #[test]
+    fn henmix_points_at_master_branch_and_cheats_root() {
+        // Regression: this entry used to point at `main/` (the repo is
+        // on `master`) and at the repo root (cheats live under
+        // `cheats/`), so every lookup 404'd.
+        let r = cheat_repos().into_iter().find(|r| r.id == "henmix").unwrap();
+        assert!(r.content_base.ends_with("/master/cheats/"), "{}", r.content_base);
+        assert!(r.tree_api.contains("/git/trees/master"), "{}", r.tree_api);
+        assert!(r.index_files.is_empty());
+    }
+
+    #[test]
     fn cheat_repos_list_nonempty() {
         let repos = cheat_repos();
         assert!(repos.len() >= 2);
         for r in &repos {
             assert!(!r.id.is_empty());
             assert!(!r.raw_base.is_empty());
-            assert!(!r.index_files.is_empty());
+            // Enumeration strategy is asserted by
+            // `every_repo_is_enumerable`; a repo may legitimately have
+            // no index files if it declares a tree API instead.
         }
     }
 
