@@ -271,7 +271,11 @@ impl<Mode: OpenMode> OpenArchive<Mode, CursorBeforeHeader> {
     ///
     /// Basic usage:
     ///
-    /// ```
+    /// ps5upload local change: `no_run`. The example opens `data/version.rar`,
+    /// and only `src/` is vendored here — upstream's binary test fixtures are
+    /// not. It still type-checks; it just does not execute.
+    ///
+    /// ```no_run
     /// let archive = unrar::Archive::new("data/version.rar").open_for_listing().unwrap().read_header();
     /// assert!(archive.as_ref().is_ok_and(Option::is_some));
     /// let archive = archive.unwrap().unwrap();
