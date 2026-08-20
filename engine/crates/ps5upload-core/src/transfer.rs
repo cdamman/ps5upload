@@ -3905,13 +3905,15 @@ pub fn transfer_7z_resumable(
 //  and LICENSES/UnRAR-license.txt.
 // ═══════════════════════════════════════════════════════════════════════════
 #[cfg(not(target_os = "android"))]
-pub use rar_support::{inspect_rar, rar_plan_preview, transfer_rar_resumable};
+pub use rar_support::{
+    inspect_rar, rar_plan_preview, transfer_rar_resumable, transfer_rar_streaming,
+};
 
 #[cfg(not(target_os = "android"))]
 mod rar_support {
     use super::*;
     use unrar::error::{Code as RarCode, UnrarError};
-    use unrar::{Archive, FileHeader};
+    use unrar::{Archive, FileHeader, StreamSink};
 
     /// Map UnRAR errors to stable, UI-detectable strings for the two cases the
     /// UI must react to (prompt for / re-prompt the password); everything else
@@ -4561,6 +4563,293 @@ FTX2_ARCHIVE_STAGE_MB on the engine to extract and send it in batches."
         // had something staged. Surfaced as an error rather than unwrapped so
         // a future change to the loop can't turn it into a panic.
         agg.ok_or_else(|| anyhow::anyhow!("rar batching produced no transfer result"))
+    }
+
+    /// Walk the archive on a worker thread, pushing entry-framed messages.
+    ///
+    /// Runs on its own thread because UnRAR pushes bytes at us while the shard
+    /// sender pulls; the bounded channel between them is the backpressure, so
+    /// peak memory is a few chunks rather than a whole entry.
+    fn spawn_rar_worker(
+        archive_path: &Path,
+        password: Option<&str>,
+        excludes: Vec<String>,
+    ) -> (
+        std::sync::mpsc::Receiver<crate::rar_stream::StreamMsg>,
+        std::thread::JoinHandle<()>,
+    ) {
+        use crate::rar_stream::StreamMsg;
+
+        let path_str = archive_path.to_string_lossy().into_owned();
+        let password = password.map(str::to_string);
+        // 4 chunks is enough to keep the sender fed without letting the worker
+        // run far ahead of the network.
+        let (tx, rx) = std::sync::mpsc::sync_channel::<StreamMsg>(4);
+
+        let handle = std::thread::spawn(move || {
+            let fail = |tx: &std::sync::mpsc::SyncSender<StreamMsg>, msg: String| {
+                let _ = tx.send(StreamMsg::Failed(msg));
+            };
+
+            let opened = match password.as_deref() {
+                Some(pw) => Archive::with_password(&path_str, pw).open_for_processing(),
+                None => Archive::new(&path_str).open_for_processing(),
+            };
+            let mut open = match opened {
+                Ok(o) => o,
+                Err(e) => {
+                    fail(
+                        &tx,
+                        format!("{:#}", map_rar_open_err(&path_str, "open rar", e)),
+                    );
+                    return;
+                }
+            };
+
+            loop {
+                let header = match open.read_header() {
+                    Ok(Some(h)) => h,
+                    Ok(None) => {
+                        let _ = tx.send(StreamMsg::Finished);
+                        return;
+                    }
+                    Err(e) => {
+                        fail(&tx, format!("{:#}", map_rar_err("read rar header", e)));
+                        return;
+                    }
+                };
+
+                let name = header.entry().filename.clone();
+                let sanitised = sanitize_rar_entry(&name);
+                let skip_this = header.entry().is_directory()
+                    || match &sanitised {
+                        None => true,
+                        Some(rel) => {
+                            !excludes.is_empty()
+                                && crate::excludes::is_excluded_strings(
+                                    Path::new(rel),
+                                    &excludes,
+                                )
+                        }
+                    };
+
+                if skip_this {
+                    match header.skip() {
+                        Ok(next) => {
+                            open = next;
+                            continue;
+                        }
+                        Err(e) => {
+                            fail(&tx, format!("{:#}", map_rar_err("skip rar entry", e)));
+                            return;
+                        }
+                    }
+                }
+
+                let Some(rel) = sanitised else {
+                    fail(&tx, format!("rar contains an unsafe entry path: {name:?}"));
+                    return;
+                };
+                if tx.send(StreamMsg::Entry(rel)).is_err() {
+                    return; // consumer gone (cancel or error) — unwind quietly
+                }
+
+                let (chunk_tx, chunk_rx) = std::sync::mpsc::sync_channel::<Box<[u8]>>(4);
+                // Forward this entry's chunks on a helper thread: UnRAR's walk
+                // blocks inside read_to_sink, so something else has to move
+                // bytes onto the framed channel or the two capacities deadlock.
+                let fwd_tx = tx.clone();
+                let fwd = std::thread::spawn(move || {
+                    for c in chunk_rx {
+                        if fwd_tx.send(StreamMsg::Chunk(c)).is_err() {
+                            return false;
+                        }
+                    }
+                    true
+                });
+
+                let sink = StreamSink::new(chunk_tx);
+                let result = header.read_to_sink(sink);
+                let alive = fwd.join().unwrap_or(false);
+
+                match result {
+                    Ok((sink, next)) => {
+                        if sink.disconnected() || !alive {
+                            return; // consumer went away
+                        }
+                        if tx.send(StreamMsg::EntryEnd).is_err() {
+                            return;
+                        }
+                        open = next;
+                    }
+                    Err(e) => {
+                        fail(&tx, format!("{:#}", map_rar_err("extract rar entry", e)));
+                        return;
+                    }
+                }
+            }
+        });
+
+        (rx, handle)
+    }
+
+    /// Stream a `.rar` to the console: one forward-only decompression, shards
+    /// emitted as the bytes arrive.
+    ///
+    /// No staging directory, so a `.rar` upload needs no free host disk beyond
+    /// the archive itself. Structurally this mirrors `transfer_7z_with_opts`
+    /// on purpose — same sender, same resume rule, same lock-step plan check.
+    pub fn transfer_rar_streaming(
+        cfg: &TransferConfig,
+        tx_id: [u8; 16],
+        dest_root: &str,
+        archive_path: &Path,
+        password: Option<&str>,
+        flags: u32,
+    ) -> Result<TransferResult> {
+        use crate::rar_stream::{next_entry, EntryReader};
+        use std::io::Read;
+
+        let tx_id_hex = bytes_to_hex(&tx_id);
+
+        // ── Planning pass ── headers only, no decompression. Sizes come from
+        //    archive metadata, so the manifest is complete before a byte is
+        //    decoded.
+        let (_, plan_files) = rar_plan_preview(archive_path, password, &cfg.excludes)?;
+        if plan_files.is_empty() {
+            bail!(
+                "rar has no extractable files (after exclusions): {}",
+                archive_path.display()
+            );
+        }
+
+        let mut planned_files: Vec<ManifestFile> = Vec::with_capacity(plan_files.len());
+        let mut plan: Vec<(String, u64, u64)> = Vec::with_capacity(plan_files.len());
+        let mut next_seq: u64 = 1;
+        let mut total_bytes: u64 = 0;
+        for (rel, size) in &plan_files {
+            let dest_path = join_ps5_path(dest_root, Path::new(rel));
+            let shard_start = next_seq;
+            let shard_count = if *size == 0 {
+                1
+            } else {
+                size.div_ceil(cfg.shard_size as u64)
+            };
+            next_seq += shard_count;
+            total_bytes += *size;
+            planned_files.push(ManifestFile {
+                path: dest_path,
+                size: *size,
+                shard_start,
+                shard_count,
+            });
+            plan.push((rel.clone(), *size, shard_start));
+        }
+        let total_shards = next_seq - 1;
+        let file_count = planned_files.len() as u64;
+        ensure_manifest_paths_fit(&planned_files)?;
+        let manifest_json = serde_json::to_vec(&Manifest {
+            dest_root: dest_root.to_string(),
+            file_count,
+            total_bytes,
+            total_shards,
+            files: planned_files,
+        })?;
+
+        let mut c = Connection::connect(&cfg.addr)?;
+        let begin_ack = send_begin_and_expect_ack(
+            &mut c,
+            &tx_meta_buf_flags(
+                tx_id,
+                2,
+                flags | TX_FLAG_APPLY_PROGRESS_REQUESTED,
+                &manifest_json,
+            ),
+        )?;
+        let last_acked_shard = parse_last_acked_shard(&begin_ack, flags & TX_FLAG_RESUME != 0);
+        guard_last_acked(last_acked_shard, total_shards)?;
+
+        // ── Send pass ──
+        let (rx, worker) = spawn_rar_worker(archive_path, password, cfg.excludes.clone());
+        let mut shards_sent = 0u64;
+        let send_result = (|| -> Result<()> {
+            let mut sender = PipelinedSender::new(&mut c, cfg, tx_id, total_shards);
+            let mut buf = vec![0u8; cfg.shard_size];
+            let mut pos = 0usize;
+
+            while let Some(name) = next_entry(&rx)? {
+                // Lock-step with the plan. Both passes walk the archive in the
+                // same order, so a mismatch means something is wrong — fail
+                // rather than write one file's bytes to another's dest path.
+                if pos >= plan.len() || plan[pos].0 != name {
+                    bail!("rar stream desynced from plan at entry {name:?}");
+                }
+                let (_, size, shard_start) = plan[pos].clone();
+                pos += 1;
+
+                let mut rd = EntryReader::new(&rx);
+                if size == 0 {
+                    // Drain the (empty) entry so framing stays aligned.
+                    std::io::copy(&mut rd, &mut std::io::sink())?;
+                    if shard_start > last_acked_shard {
+                        sender.send_with(shard_start, &[], 1, 0)?;
+                        shards_sent += 1;
+                    }
+                    if let Some(p) = &cfg.progress_files {
+                        p.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    }
+                    continue;
+                }
+
+                let mut seq = shard_start;
+                let mut remaining = size;
+                while remaining > 0 {
+                    let n = std::cmp::min(cfg.shard_size as u64, remaining) as usize;
+                    // Enforces the header's size: a short entry errors here
+                    // rather than committing a truncated file.
+                    rd.read_exact(&mut buf[..n])?;
+                    if seq > last_acked_shard {
+                        sender.send_with(seq, &buf[..n], 1, 0)?;
+                        shards_sent += 1;
+                        if let Some(p) = &cfg.progress_bytes {
+                            p.fetch_add(n as u64, std::sync::atomic::Ordering::Relaxed);
+                        }
+                    }
+                    seq += 1;
+                    remaining -= n as u64;
+                }
+                // The entry must be exactly its declared size: anything left
+                // means the plan and the stream disagree.
+                let mut extra = [0u8; 1];
+                if rd.read(&mut extra)? != 0 {
+                    bail!("rar entry {name:?} produced more bytes than its header declared");
+                }
+                if let Some(p) = &cfg.progress_files {
+                    p.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                }
+            }
+
+            if pos != plan.len() {
+                bail!("rar stream ended after {pos} of {} planned files", plan.len());
+            }
+            sender.drain()?;
+            Ok(())
+        })();
+
+        // Always release the worker: dropping the receiver unblocks it if it is
+        // waiting on a full channel, and joining keeps it from outliving us.
+        drop(rx);
+        let _ = worker.join();
+        send_result?;
+
+        let commit_ack = send_commit_and_expect_ack(&mut c, &tx_meta_buf(tx_id, 0, b""), cfg)?;
+        Ok(TransferResult {
+            tx_id_hex,
+            shards_sent,
+            bytes_sent: total_bytes,
+            dest: dest_root.to_string(),
+            commit_ack_body: String::from_utf8_lossy(&commit_ack).into_owned(),
+        })
     }
 
     /// Transfer a `.rar` (any volume set): extract to a host staging dir, stream
