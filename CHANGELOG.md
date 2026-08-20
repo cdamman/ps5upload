@@ -17,8 +17,9 @@ What's new in ps5upload, written for humans.
   because there is no longer anywhere for one to be left.
 
 Verified on a real 9-volume, 127 GB password-protected archive (181 files,
-every name and size matching) and by uploading a real game's files to a PS5
-on firmware 9.60, reading them back off the console to confirm.
+every name and size matching) and by uploading a real game's files to two
+PS5s — firmware 5.10 and 9.60 — reading them back off each console to
+confirm.
 
 ---
 
