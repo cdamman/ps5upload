@@ -13,7 +13,6 @@ pub mod fs_ops;
 pub mod ftp;
 pub mod fw_spoof;
 pub mod game_meta;
-pub mod host_space;
 pub mod hw;
 pub mod log;
 pub mod notif;

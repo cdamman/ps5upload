@@ -8,9 +8,7 @@
 mod mock_server;
 use mock_server::MockServer;
 
-use ps5upload_core::transfer::{
-    transfer_rar_resumable, transfer_rar_streaming, TransferConfig,
-};
+use ps5upload_core::transfer::{transfer_rar_resumable, transfer_rar_streaming, TransferConfig};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
