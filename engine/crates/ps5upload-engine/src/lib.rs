@@ -34,6 +34,7 @@
 //!   GET  /api/ps5/list-dir?path=...   → list immediate children of a directory on PS5
 
 mod engine_log;
+mod log_dedup;
 mod local_fs;
 mod pkg_install;
 mod smb;
@@ -464,10 +465,45 @@ async fn log_requests(req: Request, next: Next) -> axum::response::Response {
     let resp = next.run(req).await;
     let ms = start.elapsed().as_millis();
     let status = resp.status().as_u16();
-    if status >= 500 {
-        log_warn!("{method} {path} -> {status} ({ms}ms)");
-    } else {
-        log_debug!("{method} {path} -> {status} ({ms}ms)");
+    // The full per-request trace always goes to the debug log, which is
+    // what the crash trace relies on. What varies is whether this also
+    // reaches the user at the default level.
+    log_debug!("{method} {path} -> {status} ({ms}ms)");
+
+    // A console that is switched off answers every status poll with 502,
+    // once a second, indefinitely. Reported plainly that buries every
+    // other line in the log and tells the reader nothing they did not
+    // learn from the first one. So repeats collapse: first failure,
+    // then quiet, then an occasional reminder, then a recovery line.
+    let key = format!("{method} {path}");
+    let action = match log_dedup::failure_log().lock() {
+        Ok(mut log) => log.observe(&key, status >= 500, std::time::Instant::now()),
+        // A poisoned lock must not silence real failures.
+        Err(_) => {
+            if status >= 500 {
+                log_dedup::LogAction::Warn { suppressed: 0 }
+            } else {
+                log_dedup::LogAction::Quiet
+            }
+        }
+    };
+    match action {
+        log_dedup::LogAction::Warn { suppressed: 0 } => {
+            log_warn!("{method} {path} -> {status} ({ms}ms)");
+        }
+        log_dedup::LogAction::Warn { suppressed } => {
+            log_warn!(
+                "{method} {path} -> {status} ({ms}ms) — still failing, \
+                 {suppressed} identical repeat(s) not logged"
+            );
+        }
+        log_dedup::LogAction::Recovered { suppressed } => {
+            log_warn!(
+                "{method} {path} -> {status} — recovered after {suppressed} \
+                 failure(s)"
+            );
+        }
+        log_dedup::LogAction::Quiet => {}
     }
     resp
 }

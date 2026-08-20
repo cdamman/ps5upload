@@ -694,6 +694,9 @@ test-payload: payload
 	@cc -O2 -Wall -Wextra -Werror -o /tmp/ps5upload-tmdb-id-selftest \
 		$(PAYLOAD_DIR)/tests/tmdb_id_selftest.c
 	@/tmp/ps5upload-tmdb-id-selftest
+	@echo "Checking per-console isolation..."
+	@./scripts/check-per-console-isolation.sh
+	@echo "✓ one console's data cannot be shown under another's name"
 	@echo "Checking Sony-API lock coverage..."
 	@./scripts/check-sony-api-lock.sh $(PAYLOAD_DIR)/src
 	@echo "✓ every sceUserService/sceRegMgr caller is serialized"
