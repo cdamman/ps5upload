@@ -36,10 +36,10 @@
 typedef struct app_info {
     uint32_t app_id;
     uint64_t unknown1;
-    uint32_t app_type;
-    /* 9 characters plus the terminator, e.g. "CUSA12345". Treat as
-     * fixed-size: do not assume the kernel terminated it. */
-    char     title_id[10];
+    /* Offset 16. Measured, not assumed -- see the note above.
+     * The field is wider than the value it holds, so do not
+     * assume the kernel terminated it. */
+    char     title_id[14];
     char     unknown2[0x3c];
 } app_info_t;
 
@@ -48,11 +48,10 @@ typedef struct app_info {
  * returning empty title ids on a console. */
 _Static_assert(offsetof(app_info_t, app_id) == 0,
                "app_id must be first");
-_Static_assert(offsetof(app_info_t, app_type) == 16,
-               "app_type sits between unknown1 and title_id");
-_Static_assert(offsetof(app_info_t, title_id) == 20,
-               "title_id must be at offset 20 — offset 16 reads app_type "
-               "and yields an empty string for every process");
+_Static_assert(offsetof(app_info_t, title_id) == 16,
+               "title_id is at offset 16 on the firmwares this was "
+               "measured on; offset 20 returns only the last five "
+               "characters of the real value");
 
 extern int sceKernelGetAppInfo(pid_t pid, app_info_t *info);
 

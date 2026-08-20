@@ -4,6 +4,23 @@ What's new in ps5upload, written for humans.
 
 ---
 
+## 5.4.6
+
+**Fixes game detection, which 5.4.5 broke — and makes Game Activity work.**
+
+- **Games are identified correctly again.** 5.4.5 changed how the helper
+  reads a game's ID and got it wrong, so IDs came back with the first four
+  characters missing. Anything that asks "which game is this?" was affected:
+  the process list, cheats, and play-time tracking. Reverted and checked
+  against two consoles.
+- **Game Activity records play time.** Verified on a real game: launches,
+  seconds played, and a live "playing now" marker.
+- **Game Activity knows what you're playing right now.** The screen asked
+  the console for the current game and the console never answered, so it
+  could not tell a session in progress from a finished one.
+
+---
+
 ## 5.4.5
 
 **A new screen for editing game images, and a quieter log.**

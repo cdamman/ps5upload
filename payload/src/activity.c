@@ -391,8 +391,15 @@ int activity_get_json(char *buf, size_t cap, size_t *written) {
     pthread_mutex_lock(&g_lock);
 
     int64_t now = now_ts();
-    int n = snprintf(buf, cap, "{\"now_ts\":%lld,\"titles\":[",
-                     (long long)now);
+    /* The game running right now, so a client can say "playing now"
+     * without inferring it. The field was in the client's contract but
+     * never emitted here, so it always read as empty and the UI could
+     * not tell a live session from a finished one. */
+    char cur_esc[32];
+    json_escape(g_current_title, cur_esc, sizeof(cur_esc));
+    int n = snprintf(buf, cap,
+                     "{\"now_ts\":%lld,\"current_title\":\"%s\",\"titles\":[",
+                     (long long)now, cur_esc);
     if (n < 0 || (size_t)n >= cap) { pthread_mutex_unlock(&g_lock); return -1; }
 
     int first = 1;

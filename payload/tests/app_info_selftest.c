@@ -25,26 +25,24 @@ static void check(int cond, const char *what) {
 
 int main(void) {
     check(offsetof(app_info_t, app_id) == 0, "app_id at 0");
-    check(offsetof(app_info_t, app_type) == 16, "app_type at 16");
-    check(offsetof(app_info_t, title_id) == 20, "title_id at 20");
+    check(offsetof(app_info_t, title_id) == 16, "title_id at 16");
 
     /* A process as the kernel reports it. */
     app_info_t info;
     memset(&info, 0, sizeof(info));
     info.app_id = 0x1234;
-    info.app_type = 0;               /* zero for ordinary processes */
     memcpy(info.title_id, "CUSA12345", 10);
 
     char tid[10] = {0};
     check(app_info_title_id(&info, tid, sizeof(tid)), "reads a valid title id");
     check(strcmp(tid, "CUSA12345") == 0, "title id round-trips exactly");
 
-    /* The regression itself: reading 4 bytes early lands on app_type,
-     * which is zero, so the string terminates immediately. This is what
-     * every caller saw before the fix. */
-    const char *at_old_offset = (const char *)&info + 16;
-    check(at_old_offset[0] == '\0',
-          "old offset 16 yields an empty string (the bug)");
+    /* The regression a release actually shipped: reading four bytes too
+     * far returns the tail of the value, not the value. Pin the symptom
+     * so the mistake is recognisable if it recurs. */
+    const char *four_bytes_late = (const char *)&info + 20;
+    check(strcmp(four_bytes_late, "12345") == 0,
+          "reading at offset 20 returns only the tail (the shipped bug)");
 
     /* Shape validation — a wrong layout must degrade to "no title"
      * rather than feed garbage into cheat lookups and the UI. */
@@ -71,7 +69,7 @@ int main(void) {
           "reads exactly 9 chars, never into the following bytes");
 
     if (failures == 0) {
-        printf("✓ app_info layout puts title_id at offset 20 and validates it\n");
+        printf("✓ app_info layout puts title_id at offset 16 and validates it\n");
         return 0;
     }
     printf("✗ %d failure(s)\n", failures);
