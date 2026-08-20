@@ -93,6 +93,12 @@ impl FailureLog {
     }
 }
 
+/// Process-wide state for the request logger.
+pub fn failure_log() -> &'static Mutex<FailureLog> {
+    static LOG: std::sync::OnceLock<Mutex<FailureLog>> = std::sync::OnceLock::new();
+    LOG.get_or_init(|| Mutex::new(FailureLog::new()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -194,10 +200,4 @@ mod tests {
         );
         assert_eq!(f.observe("GET /a", true, at(t0, 2)), LogAction::Quiet);
     }
-}
-
-/// Process-wide state for the request logger.
-pub fn failure_log() -> &'static Mutex<FailureLog> {
-    static LOG: std::sync::OnceLock<Mutex<FailureLog>> = std::sync::OnceLock::new();
-    LOG.get_or_init(|| Mutex::new(FailureLog::new()))
 }
