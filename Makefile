@@ -733,6 +733,11 @@ test-payload: payload
 		$(PAYLOAD_DIR)/tests/cross_device_selftest.c
 	@/tmp/ps5upload-cross-device-selftest
 	@echo "✓ cross-mount renames are refused before they can panic the kernel"
+	@echo "Running Remote Play registry-key self-test (host build)..."
+	@cc -O2 -Wall -Wextra -Werror -o /tmp/ps5upload-rp-keys-selftest \
+		$(PAYLOAD_DIR)/tests/rp_keys_selftest.c
+	@/tmp/ps5upload-rp-keys-selftest
+	@echo "✓ Remote Play keys match Sony's entry-number formula"
 	@echo "Running SDK Changer filesystem-safety self-test (host build)..."
 	@cc -O2 -Wall -Wextra -Werror -I$(PAYLOAD_DIR)/include \
 		-o /tmp/ps5upload-sdk-changer-file-selftest \
