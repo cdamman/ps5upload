@@ -12,9 +12,15 @@
 
 #include "notif.h"
 #include "proc_list.h"
+#include "sony_api_lock.h"
 #include "sys_registry.h"
 #include "rp_keys.h"
 #include "fw_spoof.h"
+
+/* Forward declaration: rp_enable_locked calls this before it is
+ * defined. See the serialization note at the bottom of this file for
+ * why the cores must call each other rather than the public wrappers. */
+static int rp_readiness_json_locked(char *out, size_t out_size);
 
 #define RP_STATE_IDLE      0
 #define RP_STATE_STARTING  1
@@ -226,7 +232,7 @@ static void rp_get_account_id(char *out, size_t out_sz) {
  * A slot whose user_id reads 0 is empty. regist_key and aes_key are
  * deliberately NOT reported: they are pairing secrets, nothing in the UI
  * needs them, and they should not travel over the wire. */
-int remoteplay_devices_json(char *out, size_t out_size) {
+static int rp_devices_json_locked(char *out, size_t out_size) {
     size_t n = 0;
     int first = 1;
 
@@ -264,7 +270,7 @@ int remoteplay_devices_json(char *out, size_t out_size) {
  *
  * Return: >=0 length written, -1 write failed, -2 firmware has no
  * per-user setting, -3 no foreground user to apply it to. */
-int remoteplay_enable(int user_scope, char *out, size_t out_size) {
+static int rp_enable_locked(int user_scope, char *out, size_t out_size) {
     unsigned int fw = fw_safe_kernel_version();
 
     if (!user_scope) {
@@ -290,7 +296,7 @@ int remoteplay_enable(int user_scope, char *out, size_t out_size) {
             return -1;
         }
     }
-    return remoteplay_readiness_json(out, out_size);
+    return rp_readiness_json_locked(out, out_size);
 }
 
 static void rp_json_escape(const char *src, char *dst, size_t dst_cap);
@@ -305,7 +311,7 @@ static void rp_json_escape(const char *src, char *dst, size_t dst_cap);
  * The two gates people trip over: the service toggle, and — on FW 10.00
  * and later — per-user permission. Pairing can succeed while sessions are
  * refused because the second is unset. */
-int remoteplay_readiness_json(char *out, size_t out_size) {
+static int rp_readiness_json_locked(char *out, size_t out_size) {
     /* Resolve first, or symbols_ok would report "unavailable" merely
      * because nothing has asked for them yet. Resolution is idempotent
      * and cheap; reporting a stale false is a lie the UI would repeat. */
@@ -449,7 +455,7 @@ void remoteplay_init(void) {
     pthread_mutex_unlock(&g_rp_mtx);
 }
 
-int remoteplay_request(const char *manual_account_id) {
+static int rp_request_locked(const char *manual_account_id) {
     resolve_once();
 
     /* Resolve the account id before taking the lock — it does registry +
@@ -558,7 +564,7 @@ int remoteplay_request(const char *manual_account_id) {
     return 0;
 }
 
-int remoteplay_get_status(char *buf, size_t cap) {
+static int rp_get_status_locked(char *buf, size_t cap) {
     if (!buf || cap == 0) return -1;
     resolve_once();
 
@@ -636,7 +642,7 @@ int remoteplay_get_status(char *buf, size_t cap) {
     return len > 0 ? 0 : -1;
 }
 
-int remoteplay_cancel(void) {
+static int rp_cancel_locked(void) {
     resolve_once();
     pthread_mutex_lock(&g_rp_mtx);
     int s = g_rp_state;
@@ -654,4 +660,69 @@ int remoteplay_cancel(void) {
         }
     }
     return 0;
+}
+
+/* ── Sony-API serialization ──────────────────────────────────────────
+ *
+ * Every function below touches sceUserService, sceRegMgr or
+ * sceRemoteplay. Those APIs are not safe to call concurrently from
+ * multiple connection threads — the same hazard handle_profile_info,
+ * register.c and bgft.c already serialize on `sony_api_lock`. The
+ * Remote Play entry points were the one Sony-API surface in the
+ * payload that did not, so a Profile-screen read racing the desktop's
+ * Remote Play status poll could fault inside sceUserService and take
+ * the host process down with it (console error CE-108262-9).
+ *
+ * The lock is held for a whole entry point rather than per call. That
+ * is safe here because none of these block: there is no thread, no
+ * sleep and no poll loop — pairing progresses through repeated short
+ * `remoteplay_get_status` calls. Holding it across the network send
+ * would be wrong, so the callers in runtime.c send AFTER these return.
+ *
+ * Thin wrappers, rather than lock/unlock inside each function, so that
+ * the many early `return`s cannot leak the mutex. Internal cross-calls
+ * go core-to-core (`rp_enable_locked` -> `rp_readiness_json_locked`);
+ * `sony_api_lock` is not recursive, so calling a public wrapper from
+ * inside another core would deadlock. */
+
+int remoteplay_devices_json(char *out, size_t out_size) {
+    pthread_mutex_lock(&sony_api_lock);
+    int rc = rp_devices_json_locked(out, out_size);
+    pthread_mutex_unlock(&sony_api_lock);
+    return rc;
+}
+
+int remoteplay_enable(int user_scope, char *out, size_t out_size) {
+    pthread_mutex_lock(&sony_api_lock);
+    int rc = rp_enable_locked(user_scope, out, out_size);
+    pthread_mutex_unlock(&sony_api_lock);
+    return rc;
+}
+
+int remoteplay_readiness_json(char *out, size_t out_size) {
+    pthread_mutex_lock(&sony_api_lock);
+    int rc = rp_readiness_json_locked(out, out_size);
+    pthread_mutex_unlock(&sony_api_lock);
+    return rc;
+}
+
+int remoteplay_request(const char *manual_account_id) {
+    pthread_mutex_lock(&sony_api_lock);
+    int rc = rp_request_locked(manual_account_id);
+    pthread_mutex_unlock(&sony_api_lock);
+    return rc;
+}
+
+int remoteplay_get_status(char *buf, size_t cap) {
+    pthread_mutex_lock(&sony_api_lock);
+    int rc = rp_get_status_locked(buf, cap);
+    pthread_mutex_unlock(&sony_api_lock);
+    return rc;
+}
+
+int remoteplay_cancel(void) {
+    pthread_mutex_lock(&sony_api_lock);
+    int rc = rp_cancel_locked();
+    pthread_mutex_unlock(&sony_api_lock);
+    return rc;
 }
