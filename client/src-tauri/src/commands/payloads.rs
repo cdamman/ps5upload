@@ -399,6 +399,36 @@ const CATALOGUE: &[CatalogueEntry] = &[
         // wants to play homebrew/backups without any PSN
         // account. Sonic Loader uses earthonion's fork that
         // dropped the SDL2 UI for headless registry writes.
+        // ps5-webkit-autoloader — installs an autoloader into the
+        // console's browser so payloads load from the WebKit entry
+        // point without a PC in the loop each time.
+        //
+        // The release ships three assets: a Windows host .exe, a
+        // Python host .py, and the on-console installer .elf. Only the
+        // .elf is a payload; pick_asset skips the other two because
+        // they have no payload-shaped extension, but the hint names
+        // the installer explicitly so the intent is legible rather
+        // than relying on that filter.
+        //
+        // Asset names carry the version ("..._v0.3.1.elf"), so the
+        // hint deliberately stops before the version — a pinned hint
+        // would stop matching at the next release.
+        id: "webkit-autoloader",
+        display_name: "WebKit Autoloader (installer)",
+        role: "Loads payloads from the console's browser",
+        description: "Installs an autoloader reachable from the PS5's own web browser, so payloads can be launched from the console without sending them from a PC every time. One-shot installer ELF: send it, it installs, it exits. Run it after your kernel exploit, like any other payload.",
+        repo_host: "github.com",
+        repo_owner: "itsPLK",
+        repo_name: "ps5-webkit-autoloader",
+        asset_name_hint: "webkit-autoloader-installer",
+        on_console_marker_path: None,
+        process_name_hint: None,
+        ports: &[],
+        autoload_priority: 5,
+        autoload_delay_ms: 200,
+        homepage: "https://github.com/itsPLK/ps5-webkit-autoloader",
+    },
+    CatalogueEntry {
         id: "np-fake-signin",
         display_name: "NP Fake Sign-in",
         role: "Offline account activation (no PSN required)",
@@ -1888,6 +1918,56 @@ mod tests {
         let re: ResolvedEntry = (&r).into();
         assert!(re.is_custom);
         assert_eq!(re.repo_host, "github.com");
+    }
+
+    #[test]
+    fn pick_asset_picks_the_webkit_autoloader_elf_not_the_host_tools() {
+        // The real v0.3.1 release ships a Windows host .exe, a Python
+        // host .py, and the on-console installer .elf. Only the .elf is
+        // a payload — sending either host tool to a PS5 is nonsense.
+        //
+        // The asset names carry the version, so the catalogue hint stops
+        // before it; a version-pinned hint would silently stop matching
+        // at the next release and the entry would quietly go dead.
+        let r = GithubRelease {
+            tag_name: "v0.3.1".into(),
+            name: "".into(),
+            body: "".into(),
+            published_at: "".into(),
+            html_url: "".into(),
+            prerelease: false,
+            assets: vec![
+                GithubAsset {
+                    name: "webkit-autoloader-host_v0.3.1.exe".into(),
+                    browser_download_url: "https://example/exe".into(),
+                    size: 11196317,
+                },
+                GithubAsset {
+                    name: "webkit-autoloader-host_v0.3.1.py".into(),
+                    browser_download_url: "https://example/py".into(),
+                    size: 3467510,
+                },
+                GithubAsset {
+                    name: "webkit-autoloader-installer_v0.3.1.elf".into(),
+                    browser_download_url: "https://example/elf".into(),
+                    size: 1983744,
+                },
+            ],
+        };
+        let (n, _, _) = pick_asset(&r, "webkit-autoloader-installer");
+        assert_eq!(n, "webkit-autoloader-installer_v0.3.1.elf");
+
+        // And a future version keeps matching.
+        let r2 = GithubRelease {
+            assets: vec![GithubAsset {
+                name: "webkit-autoloader-installer_v9.9.9.elf".into(),
+                browser_download_url: "https://example/elf".into(),
+                size: 1,
+            }],
+            ..r
+        };
+        let (n2, _, _) = pick_asset(&r2, "webkit-autoloader-installer");
+        assert_eq!(n2, "webkit-autoloader-installer_v9.9.9.elf");
     }
 
     #[test]

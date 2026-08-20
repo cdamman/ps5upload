@@ -120,7 +120,13 @@ nav_section_help: "Help",
 nav_section_setup: "Setup",
 nav_section_files: "Files",
 nav_section_browse: "Browse PS5",
+// Kept although no section uses it any more: every other locale still
+// translates it, and the coverage gate requires en.ts to carry every
+// translated key.
 nav_section_system: "System",
+nav_section_console: "Console",
+nav_section_games_mods: "Games & Mods",
+nav_section_advanced: "Advanced",
 nav_section_diagnostics: "Diagnostics",
 sidebar_collapse: "Collapse navigation",
 sidebar_expand: "Expand navigation",

@@ -49,7 +49,6 @@ const GameActivityScreen = lazy(() => import("./screens/GameActivity"));
 const GameHubScreen = lazy(() => import("./screens/GameHub"));
 const SdkChangerScreen = lazy(() => import("./screens/SdkChanger"));
 const FakelibScreen = lazy(() => import("./screens/Fakelib"));
-const TmdbScreen = lazy(() => import("./screens/Tmdb"));
 const FwSpoofScreen = lazy(() => import("./screens/FwSpoof"));
 const FtpServerScreen = lazy(() => import("./screens/FtpServer"));
 const SmbBrowserScreen = lazy(() => import("./screens/SmbBrowser"));
@@ -314,14 +313,6 @@ export default function App() {
           element={
             <Suspense fallback={<ScreenLoader />}>
               <SdkChangerScreen />
-            </Suspense>
-          }
-        />
-        <Route
-          path="/tmdb"
-          element={
-            <Suspense fallback={<ScreenLoader />}>
-              <TmdbScreen />
             </Suspense>
           }
         />

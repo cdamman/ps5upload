@@ -47,7 +47,6 @@ import {
   Bell,
   Clock,
   Layers,
-  Database,
   ShieldAlert,
   Server,
   Network,
@@ -170,7 +169,7 @@ export const NAV_ITEMS: NavItem[] = [
     key: "hardware",
     fallback: "Hardware",
     icon: Cpu,
-    section: { key: "nav_section_system", fallback: "System" },
+    section: { key: "nav_section_console", fallback: "Console" },
   },
   {
     to: "/processes",
@@ -214,6 +213,7 @@ export const NAV_ITEMS: NavItem[] = [
     key: "cheats_title",
     fallback: "Cheats",
     icon: Gamepad2,
+    section: { key: "nav_section_games_mods", fallback: "Games & Mods" },
   },
   {
     to: "/game-activity",
@@ -234,18 +234,11 @@ export const NAV_ITEMS: NavItem[] = [
     icon: Layers,
   },
   {
-    to: "/tmdb",
-    key: "tmdb_title",
-    // "TMDB" reads as The Movie Database; it is actually Title MetaData,
-    // and it now sources from the console rather than the PS Store.
-    fallback: "Game Metadata",
-    icon: Database,
-  },
-  {
     to: "/fw-spoof",
     key: "fw_spoof_title",
     fallback: "FW Spoof",
     icon: ShieldAlert,
+    section: { key: "nav_section_advanced", fallback: "Advanced" },
   },
   {
     to: "/ftp-server",

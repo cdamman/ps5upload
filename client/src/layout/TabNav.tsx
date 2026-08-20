@@ -70,7 +70,6 @@ const TABS: TabDef[] = [
       "/videos",
       "/game-activity",
       "/sdk-changer",
-      "/tmdb",
       "/search",
     ],
   },

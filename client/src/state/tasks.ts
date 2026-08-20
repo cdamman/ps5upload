@@ -52,7 +52,6 @@ export type TaskKind =
   | "save-backup"
   | "save-restore"
   // enrichment (lightweight client ops)
-  | "tmdb-fetch"
   | "cheat-download"
   | "icon-fetch"
   // library ops
