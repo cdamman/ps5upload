@@ -5,6 +5,7 @@ import {
   CheckCheck,
   Mail,
   MailOpen,
+  Trash2,
 } from "lucide-react";
 import {
   PageHeader,
@@ -19,7 +20,7 @@ import { useConnectionStore } from "../../state/connection";
 import { useDocumentVisible } from "../../lib/visibility";
 import { useStaleHostGuard } from "../../lib/staleHostGuard";
 import { transferAddr } from "../../lib/addr";
-import { notifList, type Notification } from "../../api/ps5";
+import { notifList, notifClear, type Notification } from "../../api/ps5";
 import { humanizePs5Error } from "../../lib/humanizeError";
 
 function formatTs(ts: number): string {
@@ -48,6 +49,7 @@ export default function NotificationsScreen() {
   const [items, setItems] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [clearing, setClearing] = useState(false);
   const sinceSeqRef = useRef(0);
   const busyRef = useRef(false);
 
@@ -78,6 +80,26 @@ export default function NotificationsScreen() {
     }
   }, [addr, payloadStatus, guard]);
 
+  const handleClear = useCallback(async () => {
+    if (!addr || payloadStatus !== "up") return;
+    setClearing(true);
+    setError(null);
+    const probe = guard.capture();
+    try {
+      await notifClear(addr);
+      if (probe.isStale()) return;
+      // The payload keeps its sequence counter running rather than
+      // rewinding it, so sinceSeqRef stays valid and the next poll
+      // returns only genuinely new notifications.
+      setItems([]);
+    } catch (e) {
+      if (probe.isStale()) return;
+      setError(humanizePs5Error(String(e)));
+    } finally {
+      setClearing(false);
+    }
+  }, [addr, payloadStatus, guard]);
+
   useEffect(() => {
     void refresh();
     if (!visible) return;
@@ -99,18 +121,36 @@ export default function NotificationsScreen() {
         )}
         count={items.length}
         right={
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={refresh}
-            disabled={loading || payloadStatus !== "up" || !addr}
-          >
-            {loading ? (
-              <Spinner size={14} tone="inherit" />
-            ) : (
-              <RefreshCw size={14} />
-            )}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              leftIcon={<Trash2 size={14} />}
+              onClick={handleClear}
+              disabled={
+                clearing ||
+                items.length === 0 ||
+                payloadStatus !== "up" ||
+                !addr
+              }
+            >
+              {clearing
+                ? tr("ps5notif_clearing", undefined, "Clearing\u2026")
+                : tr("ps5notif_clear", undefined, "Clear all")}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={refresh}
+              disabled={loading || payloadStatus !== "up" || !addr}
+            >
+              {loading ? (
+                <Spinner size={14} tone="inherit" />
+              ) : (
+                <RefreshCw size={14} />
+              )}
+            </Button>
+          </div>
         }
       />
 

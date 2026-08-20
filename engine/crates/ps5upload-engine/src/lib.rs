@@ -5188,6 +5188,26 @@ async fn notif_list_handler(
     }
 }
 
+/// POST /api/ps5/notif/clear
+///
+/// Empties the payload's notification ring. These are messages
+/// ps5upload put on the console's screen, so this clears everything
+/// the Notifications screen can show.
+async fn notif_clear_handler(
+    State(state): State<AppState>,
+    Query(q): Query<AddrQuery>,
+) -> impl IntoResponse {
+    let addr = mgmt_addr_or_default(q.addr, &state.default_ps5_addr);
+    let r = tokio::task::spawn_blocking(move || ps5upload_core::notif::notif_clear(&addr))
+        .await
+        .map_err(anyhow::Error::from)
+        .and_then(|r| r);
+    match r {
+        Ok(result) => (StatusCode::OK, Json(result)).into_response(),
+        Err(e) => json_err(StatusCode::BAD_GATEWAY, format!("{e:#}")).into_response(),
+    }
+}
+
 // ── v4.2: Cheat engine handlers ──────────────────────────────────────
 #[derive(Deserialize)]
 struct CheatsAddrQuery {
@@ -7644,6 +7664,7 @@ async fn run(cfg: EngineConfig) -> anyhow::Result<()> {
         .route("/api/ps5/hw/fan-curve", post(fan_curve_set_handler))
         .route("/api/ps5/hw/fan-curve/get", get(fan_curve_get_handler))
         .route("/api/ps5/notif/list", get(notif_list_handler))
+        .route("/api/ps5/notif/clear", post(notif_clear_handler))
         .route("/api/ps5/cheats/list", get(cheats_list_handler))
         .route("/api/ps5/cheats/get", get(cheats_get_handler))
         .route("/api/ps5/cheats/toggle", post(cheats_toggle_handler))

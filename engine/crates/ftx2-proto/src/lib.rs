@@ -599,6 +599,10 @@ pub enum FrameType {
     /// Ack: `{"ok":bool,"err":".."}`.
     NotifSend = 240,
     NotifSendAck = 241,
+    /// Empty the payload's notification ring and its on-disk snapshot.
+    /// Req: empty. Ack: `{"ok":bool,"removed":N}`.
+    NotifClear = 251,
+    NotifClearAck = 252,
     // ── Cheat engine (v4.2) ───────────────────────────────────────────
     /// List all titles that have cheat files installed.
     /// Req: empty. Ack: `{"titles":[{"title_id":"CUSA00000","name":"..",
@@ -874,6 +878,8 @@ impl FrameType {
             197 => Ok(Self::HwFanCurveSetAck),
             198 => Ok(Self::NotifList),
             199 => Ok(Self::NotifListAck),
+            251 => Ok(Self::NotifClear),
+            252 => Ok(Self::NotifClearAck),
             200 => Ok(Self::CheatsList),
             201 => Ok(Self::CheatsListAck),
             202 => Ok(Self::CheatsGet),

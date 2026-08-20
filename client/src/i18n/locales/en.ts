@@ -1340,6 +1340,12 @@ health_junk_explain:
   "These are unfinished files left behind by interrupted transfers. Only files ps5upload created are listed, and nothing outside its own folders is touched.",
 health_junk_none: "Nothing to clean.",
 health_junk_delete: "Delete them",
+cheats_search_action: "Search",
+cheats_install: "Install",
+cheats_installing: "Installing\u2026",
+cheats_installed: "Installed",
+ps5notif_clear: "Clear all",
+ps5notif_clearing: "Clearing\u2026",
 about_disclaimer_title: "Disclaimer",
 about_disclaimer_purpose:
   "ps5upload is provided for research, educational, interoperability, and homebrew development purposes only. It is not affiliated with, endorsed by, or connected to Sony Interactive Entertainment Inc. \u201cPlayStation\u201d and \u201cPS5\u201d are trademarks of Sony Interactive Entertainment Inc., used here for identification only.",

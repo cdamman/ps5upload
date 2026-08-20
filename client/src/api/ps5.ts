@@ -4172,6 +4172,25 @@ export async function notifList(
   });
 }
 
+export interface NotifClearResult {
+  ok: boolean;
+  removed: number;
+  error?: string | null;
+}
+
+/** Empty the console-side notification list.
+ *
+ *  These entries are messages ps5upload itself put on the console's
+ *  screen and keeps in its own ring buffer -- Sony's own notification
+ *  panel is not readable -- so this really does clear everything the
+ *  screen can show. Guarded: it is an action behind a button. */
+export async function notifClear(addr?: string): Promise<NotifClearResult> {
+  const resp: NotifClearResult = await invoke("notif_clear", {
+    addr: addr ?? null,
+  });
+  return assertOk(resp, "Clear notifications");
+}
+
 // ── Cheat engine ─────────────────────────────────────────────────────
 export interface CheatTitle {
   title_id: string;

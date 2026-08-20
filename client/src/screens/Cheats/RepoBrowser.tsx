@@ -24,6 +24,22 @@ interface RepoBrowserProps {
   onClose: () => void;
 }
 
+
+/** What to show as the row's name.
+ *
+ *  Not every source publishes game titles. One of the built-in sources
+ *  has no index file at all and is enumerated by listing the repository,
+ *  which yields filenames but no titles -- so `game_title` is empty for
+ *  those rows. Falling through to the raw entry would render a blank
+ *  line, so derive the title id from the filename instead: it is what
+ *  the user searched by, and a title id beats nothing. */
+function displayTitle(e: { game_title: string; filename: string }): string {
+  const t = e.game_title.trim();
+  if (t) return t;
+  const id = e.filename.match(/^([A-Za-z]{4}\d{5})/);
+  return id ? id[1] : e.filename;
+}
+
 export function RepoBrowser({ addr, onDownloaded, onClose }: RepoBrowserProps) {
   const tr = useTr();
   const [repos, setRepos] = useState<CheatRepo[]>([]);
@@ -139,13 +155,15 @@ export function RepoBrowser({ addr, onDownloaded, onClose }: RepoBrowserProps) {
             <Button
               onClick={handleSearch}
               disabled={searching}
-              size="sm"
+              leftIcon={
+                searching ? (
+                  <Spinner size={14} tone="inherit" />
+                ) : (
+                  <Search size={14} />
+                )
+              }
             >
-              {searching ? (
-                <Spinner size={14} tone="inherit" />
-              ) : (
-                <Search size={14} />
-              )}
+              {tr("cheats_search_action", undefined, "Search")}
             </Button>
           </div>
 
@@ -156,35 +174,41 @@ export function RepoBrowser({ addr, onDownloaded, onClose }: RepoBrowserProps) {
             <div className="space-y-1.5">
               {entries.map((e) => (
                 <Card key={e.filename}>
-                  <div className="flex items-center justify-between gap-3 p-2.5">
+                  <div className="flex items-center justify-between gap-3 p-3">
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-medium">
-                        {e.game_title}
+                        {displayTitle(e)}
                       </div>
                       <div className="truncate font-mono text-xs text-[var(--color-muted)]">
                         {e.filename}
                       </div>
-                      <span className="badge mt-1 inline-block text-xs">
+                      <span className="badge mt-1 inline-block text-xs uppercase">
                         {e.format}
                       </span>
                     </div>
                     {downloaded.has(e.filename) ? (
-                      <CheckCircle2
-                        size={20}
-                        className="flex-shrink-0 text-[var(--color-good)]"
-                      />
+                      <span className="flex flex-shrink-0 items-center gap-1.5 text-sm font-medium text-[var(--color-good)]">
+                        <CheckCircle2 size={16} />
+                        {tr("cheats_installed", undefined, "Installed")}
+                      </span>
                     ) : (
                       <Button
-                        variant="ghost"
+                        variant="primary"
                         size="sm"
+                        className="flex-shrink-0"
                         onClick={() => void handleDownload(e)}
                         disabled={downloading === e.filename}
+                        leftIcon={
+                          downloading === e.filename ? (
+                            <Spinner size={14} tone="inherit" />
+                          ) : (
+                            <Download size={14} />
+                          )
+                        }
                       >
-                        {downloading === e.filename ? (
-                          <Spinner size={14} tone="inherit" />
-                        ) : (
-                          <Download size={14} />
-                        )}
+                        {downloading === e.filename
+                          ? tr("cheats_installing", undefined, "Installing\u2026")
+                          : tr("cheats_install", undefined, "Install")}
                       </Button>
                     )}
                   </div>

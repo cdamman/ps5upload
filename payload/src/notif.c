@@ -201,6 +201,28 @@ static size_t json_escape_append(char *buf, size_t cap, size_t off,
     return off;
 }
 
+/* Empty the ring and the on-disk snapshot.
+ *
+ * The sequence counter deliberately keeps counting rather than
+ * resetting to zero. Clients poll with `since_seq`, so rewinding it
+ * would make already-seen sequence numbers valid again and a client
+ * holding a high watermark would go silent until the counter caught
+ * back up.
+ *
+ * Returns the number of entries removed. */
+int notif_clear(void) {
+    pthread_mutex_lock(&s_ring_mtx);
+    int removed = (int)s_count;
+    memset(s_ring, 0, sizeof(s_ring));
+    s_write_idx = 0;
+    s_count = 0;
+    /* Persist the now-empty ring so the clear survives a payload
+     * reload; falling back to unlink keeps us empty either way. */
+    notif_persist_locked();
+    pthread_mutex_unlock(&s_ring_mtx);
+    return removed;
+}
+
 int notif_send(const char *msg, int level) {
     if (!msg) return -1;
     if (!valid_level(level)) level = NOTIF_LEVEL_INFO;

@@ -403,6 +403,8 @@ extern int posix_fallocate(int fd, off_t offset, off_t len);
 #define FTX2_FRAME_NOTIF_LIST_ACK        199u
 #define FTX2_FRAME_NOTIF_SEND            240u
 #define FTX2_FRAME_NOTIF_SEND_ACK        241u
+#define FTX2_FRAME_NOTIF_CLEAR           251u
+#define FTX2_FRAME_NOTIF_CLEAR_ACK       252u
 /* v4.2: Cheat engine */
 #define FTX2_FRAME_CHEATS_LIST           200u
 #define FTX2_FRAME_CHEATS_LIST_ACK       201u
@@ -10426,6 +10428,26 @@ static int handle_notif_list(runtime_state_t *state, int client_fd,
     return rc;
 }
 
+/* ── Notification clear handler ─────────────────────────────────────── */
+static int handle_notif_clear(runtime_state_t *state, int client_fd,
+                              uint64_t trace_id) {
+    if (!state) return -1;
+    int removed = notif_clear();
+    pthread_mutex_lock(&state->state_mtx);
+    state->command_count += 1;
+    pthread_mutex_unlock(&state->state_mtx);
+    char body[64];
+    int n = snprintf(body, sizeof(body),
+                     "{\"ok\":true,\"removed\":%d}", removed);
+    if (n < 0 || (size_t)n >= sizeof(body)) {
+        const char *e = "{\"ok\":false,\"error\":\"format\"}";
+        return send_frame(client_fd, FTX2_FRAME_NOTIF_CLEAR_ACK, 0, trace_id,
+                          e, strlen(e));
+    }
+    return send_frame(client_fd, FTX2_FRAME_NOTIF_CLEAR_ACK, 0, trace_id,
+                      body, (uint64_t)n);
+}
+
 /* ── Notification send handler ──────────────────────────────────────── */
 static int handle_notif_send(runtime_state_t *state, int client_fd,
                               uint64_t trace_id, const char *body) {
@@ -15814,6 +15836,9 @@ static int handle_binary_frame(runtime_state_t *state, int client_fd,
     }
     if (hdr.frame_type == FTX2_FRAME_NOTIF_LIST) {
         return handle_notif_list(state, client_fd, hdr.trace_id, request_body);
+    }
+    if (hdr.frame_type == FTX2_FRAME_NOTIF_CLEAR) {
+        return handle_notif_clear(state, client_fd, hdr.trace_id);
     }
     if (hdr.frame_type == FTX2_FRAME_NOTIF_SEND) {
         return handle_notif_send(state, client_fd, hdr.trace_id, request_body);

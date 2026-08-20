@@ -19,8 +19,8 @@ import {
   Spinner,
 } from "../../components";
 import { useTr } from "../../state/lang";
-import { useConnectionStore } from "../../state/connection";
 import { mgmtAddr } from "../../lib/addr";
+import { useStaleHostGuard } from "../../lib/staleHostGuard";
 import {
   healthScan,
   healthJunk,
@@ -86,9 +86,13 @@ function humanBytes(n: number): string {
 
 export default function HealthScreen() {
   const tr = useTr();
-  const host = useConnectionStore((s) => s.host);
-  // Health checks go over the management port, not the transfer port.
-  const addr = host ? mgmtAddr(host) : "";
+  // The address is taken from the guard's captured host inside each
+  // async call (see below), not read here, so a console switch mid-scan
+  // cannot retarget or misattribute the result.
+  // Results must never land on a console the user has since
+  // switched away from -- a health verdict shown against the
+  // wrong console is worse than none.
+  const guard = useStaleHostGuard();
 
   const [report, setReport] = useState<HealthReport | null>(null);
   const [scanning, setScanning] = useState(false);
@@ -107,14 +111,18 @@ export default function HealthScreen() {
     setScanning(true);
     setError(null);
     setNote(null);
+    const probe = guard.capture();
     try {
-      setReport(await healthScan(addr ?? undefined));
+      const r = await healthScan(probe.host ? mgmtAddr(probe.host) : undefined);
+      if (probe.isStale()) return;
+      setReport(r);
     } catch (e) {
+      if (probe.isStale()) return;
       setError(String(e));
     } finally {
       setScanning(false);
     }
-  }, [addr]);
+  }, [guard]);
 
   useEffect(() => {
     void scan();
@@ -125,11 +133,16 @@ export default function HealthScreen() {
       setFixing(action);
       setError(null);
       setNote(null);
+      const probe = guard.capture();
       try {
         // A failed repair throws, carrying any partial progress in the
         // message, so the catch below reports it rather than the screen
         // quietly showing success.
-        const out = await healthFix(action, addr ?? undefined);
+        const out = await healthFix(
+          action,
+          probe.host ? mgmtAddr(probe.host) : undefined,
+        );
+        if (probe.isStale()) return;
         setNote(
           out.changed.length
             ? out.changed.join("; ")
@@ -137,25 +150,29 @@ export default function HealthScreen() {
         );
         await scan();
       } catch (e) {
+        if (probe.isStale()) return;
         setError(String(e));
       } finally {
         setFixing(null);
       }
     },
-    [addr, scan, tr],
+    [guard, scan, tr],
   );
 
   const openJunk = useCallback(async () => {
     setError(null);
+    const probe = guard.capture();
     try {
-      const r = await healthJunk(addr ?? undefined);
+      const r = await healthJunk(probe.host ? mgmtAddr(probe.host) : undefined);
+      if (probe.isStale()) return;
       setJunk(r.files);
       setJunkTotal(r.total_bytes);
       setJunkOpen(true);
     } catch (e) {
+      if (probe.isStale()) return;
       setError(String(e));
     }
-  }, [addr]);
+  }, [guard]);
 
   const onFix = useCallback(
     (action: HealthFixAction) => {

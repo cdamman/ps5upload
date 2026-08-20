@@ -1,4 +1,5 @@
 import { lazy, Suspense, type ReactNode } from "react";
+import { useConnectionStore } from "./state/connection";
 import { Navigate, Route, Routes } from "react-router";
 import AppShell from "./layout/AppShell";
 import { useRosterStore } from "./state/roster";
@@ -103,8 +104,23 @@ function NativeOnlyRoute({ children }: { children: ReactNode }) {
 }
 
 export default function App() {
+  // Screen state is per-console, and nothing from one console should
+  // ever be shown against another.
+  //
+  // Individual screens guard their own in-flight calls with
+  // useStaleHostGuard, but that only covers screens that remembered to
+  // use it -- most do not, and every new screen starts out not using
+  // it. Keying the whole route tree on the selected console closes the
+  // class instead of patching it site by site: on a switch, React
+  // unmounts every screen and remounts it fresh, so no cached list,
+  // scan result, or error message can survive the change, and a reply
+  // that arrives late lands on an unmounted component and is dropped.
+  //
+  // Transfers and queues are unaffected: they live in stores outside
+  // the React tree, not in screen state.
+  const host = useConnectionStore((s) => s.host);
   return (
-    <Routes>
+    <Routes key={host || "no-console"}>
       <Route element={<AppShell />}>
         {/* Landing: fresh installs go to Connection (see LandingRedirect);
          * returning users land on the changelog and route-restore takes
