@@ -4,6 +4,7 @@ pub mod backup;
 pub mod bps;
 pub mod cheats;
 pub mod cleanup;
+pub mod health;
 pub mod connection;
 pub mod diagnostics;
 pub mod download;

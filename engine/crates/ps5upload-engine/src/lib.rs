@@ -3165,6 +3165,84 @@ async fn ps5_status(
     }
 }
 
+/// GET /api/ps5/health/scan?addr=IP:MGMT_PORT
+///
+/// Runs every health check and returns the report. Slow by nature --
+/// it makes several round trips to the console -- so it is a blocking
+/// task, never called on the async runtime thread.
+async fn health_scan_handler(
+    State(state): State<AppState>,
+    Query(q): Query<AddrQuery>,
+) -> impl IntoResponse {
+    let addr = mgmt_addr_or_default(q.addr, &state.default_ps5_addr);
+    let result = tokio::task::spawn_blocking(move || {
+        ps5upload_core::health::run_health_scan(&addr, env!("CARGO_PKG_VERSION"))
+    })
+    .await;
+    match result {
+        Ok(report) => (StatusCode::OK, Json(report)).into_response(),
+        Err(e) => json_err(StatusCode::INTERNAL_SERVER_ERROR, format!("{e:#}")).into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+struct HealthFixReq {
+    addr: Option<String>,
+    action: ps5upload_core::health::FixAction,
+}
+
+/// POST /api/ps5/health/fix
+///
+/// Applies one named repair. `action` deserializes into a closed enum,
+/// so an unknown or arbitrary value is rejected by serde before any
+/// console operation runs.
+async fn health_fix_handler(
+    State(state): State<AppState>,
+    Json(req): Json<HealthFixReq>,
+) -> impl IntoResponse {
+    let addr = mgmt_addr_or_default(req.addr, &state.default_ps5_addr);
+    let action = req.action;
+    let result = tokio::task::spawn_blocking(move || {
+        ps5upload_core::health::apply_fix(&addr, &action, env!("CARGO_PKG_VERSION"))
+    })
+    .await;
+    match result {
+        Ok(outcome) => (StatusCode::OK, Json(outcome)).into_response(),
+        Err(e) => json_err(StatusCode::INTERNAL_SERVER_ERROR, format!("{e:#}")).into_response(),
+    }
+}
+
+/// GET /api/ps5/health/junk?addr=IP:MGMT_PORT
+///
+/// The exact files `CleanJunk` would delete. Shown to the user before
+/// anything is removed -- a cleanup button that does not say what it
+/// will destroy is not one users should trust.
+async fn health_junk_handler(
+    State(state): State<AppState>,
+    Query(q): Query<AddrQuery>,
+) -> impl IntoResponse {
+    let addr = mgmt_addr_or_default(q.addr, &state.default_ps5_addr);
+    let result = tokio::task::spawn_blocking(move || {
+        ps5upload_core::health::preview_junk(&addr)
+    })
+    .await;
+    match result {
+        Ok(items) => {
+            let total: u64 = items.iter().map(|(_, s)| s).sum();
+            let files: Vec<_> = items
+                .into_iter()
+                .map(|(path, size)| serde_json::json!({ "path": path, "size": size }))
+                .collect();
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({ "files": files, "total_bytes": total })),
+            )
+                .into_response()
+        }
+        Err(e) => json_err(StatusCode::INTERNAL_SERVER_ERROR, format!("{e:#}")).into_response(),
+    }
+}
+
 /// GET /api/ps5/readiness?addr=IP:MGMT_PORT
 ///
 /// Lightweight "is the console in a stable state to install a .pkg" probe. It
@@ -7497,6 +7575,9 @@ async fn run(cfg: EngineConfig) -> anyhow::Result<()> {
         .route("/", get(ui_handler))
         .route("/api/ps5/status", get(ps5_status))
         .route("/api/ps5/readiness", get(ps5_readiness))
+        .route("/api/ps5/health/scan", get(health_scan_handler))
+        .route("/api/ps5/health/junk", get(health_junk_handler))
+        .route("/api/ps5/health/fix", post(health_fix_handler))
         .route("/api/ps5/cleanup", post(ps5_cleanup))
         .route("/api/ps5/volumes", get(ps5_volumes))
         .route("/api/ps5/pkg/scan-external", get(ps5_pkg_scan_external))

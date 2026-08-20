@@ -400,15 +400,17 @@ fn parse_index_line(line: &str) -> Option<(String, String)> {
 /// limited (60 requests/hour unauthenticated) and each response covers
 /// thousands of files, so a listing is reused for an hour rather than
 /// refetched on every search.
+/// `(filename, format)` pairs for one repo, with the time they were
+/// fetched.
 #[cfg(not(target_os = "android"))]
-fn tree_cache() -> &'static std::sync::Mutex<
-    std::collections::HashMap<String, (std::time::Instant, Vec<(String, String)>)>,
-> {
-    static CACHE: std::sync::OnceLock<
-        std::sync::Mutex<
-            std::collections::HashMap<String, (std::time::Instant, Vec<(String, String)>)>,
-        >,
-    > = std::sync::OnceLock::new();
+type TreeListing = (std::time::Instant, Vec<(String, String)>);
+
+#[cfg(not(target_os = "android"))]
+type TreeCache = std::sync::Mutex<std::collections::HashMap<String, TreeListing>>;
+
+#[cfg(not(target_os = "android"))]
+fn tree_cache() -> &'static TreeCache {
+    static CACHE: std::sync::OnceLock<TreeCache> = std::sync::OnceLock::new();
     CACHE.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
 }
 
