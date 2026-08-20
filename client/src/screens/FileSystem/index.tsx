@@ -1712,24 +1712,28 @@ export default function FileSystemScreen() {
                   type="button"
                   onClick={() => setPath(v.path)}
                   title={`${v.path} · ${formatBytes(v.free_bytes)} ${tr("fs_free", "free")}`}
-                  // Every drive's path text is equally readable; ONLY the
-                  // border (+ the USB icon for external) signals which is
-                  // which. Previously internal /data used muted text while
-                  // external drives used full-colour text, so /data looked
-                  // dimmer/demoted than /mnt/ext1 — the inconsistent "highlight"
-                  // the user noticed. Active = accent border + filled bg;
-                  // external = ps4 border; internal = plain border.
-                  className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 font-mono text-[var(--color-text)] ${
+                  aria-current={active ? "true" : undefined}
+                  // Exactly ONE thing is highlighted: the drive you are
+                  // currently in. Nothing else competes for that meaning.
+                  //
+                  // Before, external drives carried a coloured (ps4) border
+                  // whether or not they were active, so /mnt/ext1 always
+                  // looked selected while /data lit up and dimmed as you
+                  // moved — two different signals wearing the same clothes.
+                  // Drive TYPE is now carried solely by the icon, leaving
+                  // border and background to mean "you are here".
+                  className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 font-mono ${
                     active
-                      ? "border-[var(--color-accent)] bg-[var(--color-surface)]"
-                      : external
-                        ? "border-[var(--color-ps4)] hover:bg-[var(--color-surface)]"
-                        : "border-[var(--color-border)] hover:bg-[var(--color-surface)]"
+                      ? "border-[var(--color-accent)] bg-[var(--color-accent)]/10 font-medium text-[var(--color-text)] ring-1 ring-[var(--color-accent)]"
+                      : "border-[var(--color-border)] text-[var(--color-text)] hover:bg-[var(--color-surface)]"
                   }`}
                 >
+                  {/* Type lives in the icon: USB glyph for removable
+                      drives, platter for internal. It stays tinted so the
+                      distinction survives, without implying selection. */}
                   <Icon
                     size={12}
-                    className={external ? "text-[var(--color-ps4)]" : undefined}
+                    className={external ? "text-[var(--color-ps4)]" : "text-[var(--color-muted)]"}
                   />
                   {v.path}
                   <span className="opacity-60">
