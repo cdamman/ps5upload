@@ -77,14 +77,8 @@
 #define ROUND_PG_DOWN(a) ((intptr_t)((a) & ~(intptr_t)(PAGE_SIZE_16K - 1)))
 #define ROUND_PG_UP(a)   ((intptr_t)(((a) + PAGE_SIZE_16K - 1) & ~(intptr_t)(PAGE_SIZE_16K - 1)))
 
-/* app_info_t — same layout as used in proc_list.c and wake_watchdog.c */
-typedef struct {
-    uint32_t app_id;
-    uint64_t unknown1;
-    char     title_id[14];
-    char     unknown2[0x3c];
-} cheat_app_info_t;
-extern int sceKernelGetAppInfo(pid_t pid, cheat_app_info_t *info);
+/* Canonical layout + title-id helpers. */
+#include "app_info.h"
 
 /* ── Engine state ────────────────────────────────────────────────── */
 
@@ -314,14 +308,16 @@ static pid_t find_running_game(char *title_out, size_t title_cap,
         if (ki_structsize < KINFO_STRUCT_MINSIZE ||
             (size_t)(ptr - buf) + (size_t)ki_structsize > buf_size) break;
         pid_t pid = *(pid_t *)&ptr[KINFO_PID_OFFSET];
-        cheat_app_info_t info;
+        app_info_t info;
         memset(&info, 0, sizeof(info));
+        char tid[10];
         if (sceKernelGetAppInfo(pid, &info) == 0 &&
             info.app_id != 0 &&
-            strncmp(info.title_id, "NPXS", 4) != 0) {
+            app_info_title_id(&info, tid, sizeof(tid)) &&
+            strncmp(tid, "NPXS", 4) != 0) {
             found = pid;
             if (title_out && title_cap > 0) {
-                snprintf(title_out, title_cap, "%s", info.title_id);
+                snprintf(title_out, title_cap, "%s", tid);
             }
             if (base_out) {
                 *base_out = kernel_dynlib_mapbase_addr(pid, 0);

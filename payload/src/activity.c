@@ -31,11 +31,9 @@
 #define KINFO_STRUCT_MINSIZE 448
 #define KINFO_PID_OFFSET     72
 
-typedef struct {
-    uint8_t  unk[0x40];
-    char     title_id[16];
-} activity_app_info_t;
-extern int sceKernelGetAppInfo(pid_t pid, activity_app_info_t *info);
+/* Canonical layout + title-id helpers. The previous local copy put
+ * title_id at offset 64, so play-time tracking never saw a game. */
+#include "app_info.h"
 
 typedef struct {
     char     title_id[TITLE_ID_LEN];
@@ -259,13 +257,16 @@ static int find_running_title(char *title_out, size_t cap) {
         if (ki_structsize < KINFO_STRUCT_MINSIZE ||
             (size_t)(ptr - buf) + (size_t)ki_structsize > buf_size) break;
         pid_t pid = *(pid_t *)&ptr[KINFO_PID_OFFSET];
-        activity_app_info_t info;
+        app_info_t info;
         memset(&info, 0, sizeof(info));
+        char tid[10];
+        /* app_info_title_id validates the shape before handing it over,
+         * so a struct-layout mistake yields "no game running" rather
+         * than a garbage title id recorded as play time. */
         if (sceKernelGetAppInfo(pid, &info) == 0 &&
-            info.title_id[0] &&
-            strncmp(info.title_id, "NPXS", 4) != 0) {
-            strncpy(title_out, info.title_id, cap - 1);
-            title_out[cap - 1] = '\0';
+            app_info_title_id(&info, tid, sizeof(tid)) &&
+            strncmp(tid, "NPXS", 4) != 0) {
+            snprintf(title_out, cap, "%s", tid);
             found = 1;
         }
         ptr += ki_structsize;

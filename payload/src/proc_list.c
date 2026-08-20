@@ -53,17 +53,9 @@
 _Static_assert(offsetof(struct kinfo_proc, ki_pid) == KINFO_PID_OFFSET,
                "kinfo_proc layout drift — re-verify ki_rssize/ki_numthreads");
 
-/* sceKernelGetAppInfo(pid) → app id + title id for app/game processes; a
- * non-zero return means the pid isn't a registered app (daemon/system), in
- * which case app_id stays 0 and title_id empty. Same shape the reference
- * (drakmor/ps5-payload-manager) and Sony's own tooling use. */
-typedef struct app_info {
-    uint32_t app_id;
-    uint64_t unknown1;
-    char     title_id[14];
-    char     unknown2[0x3c];
-} app_info_t;
-extern int sceKernelGetAppInfo(pid_t pid, app_info_t *info);
+/* Layout and the title-id helpers live in app_info.h — this struct was
+ * duplicated four times and every copy had the offset wrong. */
+#include "app_info.h"
 
 /* Classify a process for the manager UI's filter/guard:
  *   "app"     — a USER game/app: app_id != 0 with a real game title id

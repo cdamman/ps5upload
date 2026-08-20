@@ -4,6 +4,22 @@ What's new in ps5upload, written for humans.
 
 ---
 
+## 5.4.4
+
+**Fixes the console never reporting which game is running.**
+
+- **Play time, cheats and the process list can see your games again.** The
+  helper asked the console "which game is this?" using a slightly wrong
+  memory layout, and got an empty answer back every single time. Three
+  features quietly depended on that answer:
+  - **Game Activity** recorded nothing, because it never saw a game start.
+  - **Cheats** could not tell which game was running.
+  - **Processes** showed no game IDs.
+
+  All three share one cause and one fix.
+
+---
+
 ## 5.4.3
 
 **Game Metadata works again, and finding cheats is much easier.**

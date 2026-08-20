@@ -54,13 +54,7 @@
  *
  * sceKernelGetAppInfo is exported by libkernel_web and available on
  * every PS5 firmware. It's declared extern here (same as proc_list.c). */
-typedef struct {
-    uint32_t app_id;
-    uint64_t unknown1;
-    char     title_id[14];
-    char     unknown2[0x3c];
-} wake_app_info_t;
-extern int sceKernelGetAppInfo(pid_t pid, wake_app_info_t *info);
+#include "app_info.h"
 
 /* KINFO_PROC offsets — identical to proc_list.c (stable across all PS5
  * firmware revisions). We read the raw bytes directly instead of going
@@ -106,7 +100,7 @@ static int bigapp_running(void) {
         pid_t pid = *(pid_t *)&p[WAKE_KINFO_PID_OFFSET];
 
         /* Ask the kernel if this pid is a registered app. */
-        wake_app_info_t ai;
+        app_info_t ai;
         if (sceKernelGetAppInfo(pid, &ai) == 0 && ai.app_id != 0) {
             /* Got a registered app. Check if it's a real game (non-NPXS).
              * NPXS* = Sony system app (ShellUI, media player, etc.) —
