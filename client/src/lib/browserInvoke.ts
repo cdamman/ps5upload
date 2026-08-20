@@ -641,6 +641,22 @@ export async function browserInvoke<T>(
     case "path_kind":
       return getJson<T>(`/api/local/path-kind?path=${uenc(args["path"] as string)}`);
 
+    case "remoteplay_readiness":
+      return getJson<T>(
+        addrUrl("/api/ps5/remoteplay/readiness", args["addr"] as string | null),
+      );
+
+    case "remoteplay_devices":
+      return getJson<T>(
+        addrUrl("/api/ps5/remoteplay/devices", args["addr"] as string | null),
+      );
+
+    case "remoteplay_enable":
+      return postJson<T>(
+        addrUrl("/api/ps5/remoteplay/enable", args["addr"] as string | null),
+        { scope: args["scope"] },
+      );
+
     case "inspect_folder":
       return getJson<T>(
         `/api/local/inspect-folder?path=${uenc(args["path"] as string)}`,

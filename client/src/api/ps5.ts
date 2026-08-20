@@ -3988,6 +3988,54 @@ export async function remoteplayStatus(
   return invoke("remoteplay_status", { addr: addr ?? null });
 }
 
+/** Everything that decides whether Remote Play can work, read-only.
+ *
+ * The payload sends 0/1 integers rather than JSON booleans, so these are
+ * numbers. `registryErr` non-zero means the registry could not be READ —
+ * which is very different from a setting being off, and makes every other
+ * field here meaningless. */
+export interface RemotePlayReadiness {
+  fw_magic: number;
+  has_per_user: number;
+  foreground_uid: number;
+  user_slot: number;
+  account_id_b64: string;
+  account_id_raw: number;
+  account_type: string;
+  service_enabled: number;
+  user_enabled: number;
+  symbols_ok: number;
+  registry_err: number;
+}
+
+export interface RemotePlayDevice {
+  slot: number;
+  user_id: number;
+  client_type: number;
+}
+
+export async function remoteplayReadiness(
+  addr?: string,
+): Promise<RemotePlayReadiness> {
+  return invoke("remoteplay_readiness", { addr: addr ?? null });
+}
+
+export async function remoteplayDevices(
+  addr?: string,
+): Promise<{ devices: RemotePlayDevice[] }> {
+  return invoke("remoteplay_devices", { addr: addr ?? null });
+}
+
+/** Enable the system service or this user's permission (FW 10.00+).
+ *  Answers with the re-read readiness snapshot, so callers never have to
+ *  assume the write took. */
+export async function remoteplayEnable(
+  scope: "service" | "user",
+  addr?: string,
+): Promise<RemotePlayReadiness> {
+  return invoke("remoteplay_enable", { addr: addr ?? null, scope });
+}
+
 export async function remoteplayCancel(
   addr?: string,
 ): Promise<{ ok: boolean }> {

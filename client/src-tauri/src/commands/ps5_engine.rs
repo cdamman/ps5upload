@@ -881,6 +881,39 @@ pub async fn remoteplay_status(addr: Option<String>) -> Result<JsonValue, String
 }
 
 #[tauri::command]
+pub async fn remoteplay_readiness(addr: Option<String>) -> Result<JsonValue, String> {
+    let base = engine::url();
+    let mut url = format!("{base}/api/ps5/remoteplay/readiness");
+    if let Some(a) = addr {
+        url.push_str(&format!("?addr={}", urlencoding(&a)));
+    }
+    get_json(&url).await
+}
+
+#[tauri::command]
+pub async fn remoteplay_devices(addr: Option<String>) -> Result<JsonValue, String> {
+    let base = engine::url();
+    let mut url = format!("{base}/api/ps5/remoteplay/devices");
+    if let Some(a) = addr {
+        url.push_str(&format!("?addr={}", urlencoding(&a)));
+    }
+    get_json(&url).await
+}
+
+#[tauri::command]
+pub async fn remoteplay_enable(
+    addr: Option<String>,
+    scope: String,
+) -> Result<JsonValue, String> {
+    let base = engine::url();
+    let mut url = format!("{base}/api/ps5/remoteplay/enable");
+    if let Some(a) = addr {
+        url.push_str(&format!("?addr={}", urlencoding(&a)));
+    }
+    post_json(&url, &serde_json::json!({ "scope": scope })).await
+}
+
+#[tauri::command]
 pub async fn remoteplay_cancel(addr: Option<String>) -> Result<JsonValue, String> {
     let base = engine::url();
     let mut url = format!("{base}/api/ps5/remoteplay/cancel");
