@@ -34,8 +34,8 @@
 //!   GET  /api/ps5/list-dir?path=...   → list immediate children of a directory on PS5
 
 mod engine_log;
-mod log_dedup;
 mod local_fs;
+mod log_dedup;
 mod pkg_install;
 mod smb;
 #[cfg(feature = "webui")]

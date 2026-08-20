@@ -62,7 +62,10 @@ impl FailureLog {
                     // First failure for this endpoint — always say so.
                     self.seen.insert(
                         key.to_string(),
-                        FailState { suppressed: 0, last_logged: now },
+                        FailState {
+                            suppressed: 0,
+                            last_logged: now,
+                        },
                     );
                     LogAction::Warn { suppressed: 0 }
                 }
@@ -81,7 +84,9 @@ impl FailureLog {
         } else {
             // Success. Only interesting if it follows a failure.
             match self.seen.remove(key) {
-                Some(st) => LogAction::Recovered { suppressed: st.suppressed },
+                Some(st) => LogAction::Recovered {
+                    suppressed: st.suppressed,
+                },
                 None => LogAction::Quiet,
             }
         }
