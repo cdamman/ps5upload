@@ -346,6 +346,7 @@ fn format_from_index(index_name: &str) -> &'static str {
 /// of `json`, `shn` or `mc4` and the file's extension agrees with it.
 /// Anything else — a nested path, an unknown directory, a README —
 /// returns `None`.
+#[cfg(any(not(target_os = "android"), test))]
 fn tree_entry_from_path(path: &str, prefix: &str) -> Option<(String, &'static str)> {
     let rest = path.strip_prefix(prefix)?;
     let (dir, filename) = rest.split_once('/')?;
@@ -461,81 +462,94 @@ fn repo_tree_listing(repo: &CheatRepo) -> Result<Vec<(String, String)>> {
 /// `query` may match either the filename (e.g. a CUSA ID) or the game
 /// title. Matching is case-insensitive substring.
 pub fn cheats_repo_search(query: &str) -> Result<CheatRepoSearchResponse> {
+    // Android does its own HTTP via OkHttp, so none of the fetch path
+    // below is compiled there. Returning early keeps that a single
+    // statement instead of leaving a body whose locals are never
+    // mutated and whose helpers are dead -- which is what the Android
+    // build was warning about.
     #[cfg(target_os = "android")]
-    let _ = query;
-    let mut entries: Vec<CheatRepoEntry> = Vec::new();
-    // De-duplicate by filename across every repo. `Vec::dedup_by` only
-    // collapses *adjacent* duplicates, so it never caught the case it
-    // was written for: the same file listed by two different repos,
-    // whose entries are never adjacent because repos are walked in turn.
-    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
-    #[cfg(target_os = "android")]
-    let _ = &seen;
+    {
+        let _ = query;
+        eprintln!("[cheats] repo fetch not available on android");
+        return Ok(CheatRepoSearchResponse {
+            entries: Vec::new(),
+            error: None,
+        });
+    }
 
-    for repo in cheat_repos() {
-        #[cfg(not(target_os = "android"))]
-        {
-            let q = query.to_lowercase();
-            let repo_id = repo.id.clone();
-            let mut push = |filename: String, game_title: String, format: String| {
-                let matches = q.is_empty()
-                    || filename.to_lowercase().contains(&q)
-                    || game_title.to_lowercase().contains(&q);
-                if !matches || !seen.insert(filename.clone()) {
-                    return;
-                }
-                entries.push(CheatRepoEntry {
-                    filename,
-                    game_title,
-                    format,
-                    repo_id: repo_id.clone(),
-                });
-            };
+    #[cfg(not(target_os = "android"))]
+    {
+        let mut entries: Vec<CheatRepoEntry> = Vec::new();
+        // De-duplicate by filename across every repo. `Vec::dedup_by` only
+        // collapses *adjacent* duplicates, so it never caught the case it
+        // was written for: the same file listed by two different repos,
+        // whose entries are never adjacent because repos are walked in turn.
+        let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+        for repo in cheat_repos() {
+            #[cfg(not(target_os = "android"))]
+            {
+                let q = query.to_lowercase();
+                let repo_id = repo.id.clone();
+                let mut push = |filename: String, game_title: String, format: String| {
+                    let matches = q.is_empty()
+                        || filename.to_lowercase().contains(&q)
+                        || game_title.to_lowercase().contains(&q);
+                    if !matches || !seen.insert(filename.clone()) {
+                        return;
+                    }
+                    entries.push(CheatRepoEntry {
+                        filename,
+                        game_title,
+                        format,
+                        repo_id: repo_id.clone(),
+                    });
+                };
 
-            if repo.index_files.is_empty() {
-                // No index published — enumerate through the git tree.
-                // Game titles are not available this way, so these
-                // entries match on filename (the title id) only.
-                match repo_tree_listing(&repo) {
-                    Ok(listing) => {
-                        for (filename, format) in listing {
-                            push(filename, String::new(), format);
-                        }
-                    }
-                    Err(e) => {
-                        eprintln!("[cheats] tree listing failed for {}: {}", repo.id, e);
-                    }
-                }
-            } else {
-                for idx in &repo.index_files {
-                    let url = format!("{}{}", repo.raw_base, idx);
-                    match repo_fetch(&url) {
-                        Ok(bytes) => {
-                            let text = String::from_utf8_lossy(&bytes);
-                            for line in text.lines() {
-                                if let Some((filename, game_title)) = parse_index_line(line) {
-                                    push(filename, game_title, format_from_index(idx).into());
-                                }
+                if repo.index_files.is_empty() {
+                    // No index published — enumerate through the git tree.
+                    // Game titles are not available this way, so these
+                    // entries match on filename (the title id) only.
+                    match repo_tree_listing(&repo) {
+                        Ok(listing) => {
+                            for (filename, format) in listing {
+                                push(filename, String::new(), format);
                             }
                         }
                         Err(e) => {
-                            eprintln!("[cheats] fetch failed for {}/{}: {}", repo.id, idx, e);
+                            eprintln!("[cheats] tree listing failed for {}: {}", repo.id, e);
+                        }
+                    }
+                } else {
+                    for idx in &repo.index_files {
+                        let url = format!("{}{}", repo.raw_base, idx);
+                        match repo_fetch(&url) {
+                            Ok(bytes) => {
+                                let text = String::from_utf8_lossy(&bytes);
+                                for line in text.lines() {
+                                    if let Some((filename, game_title)) = parse_index_line(line) {
+                                        push(filename, game_title, format_from_index(idx).into());
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                eprintln!("[cheats] fetch failed for {}/{}: {}", repo.id, idx, e);
+                            }
                         }
                     }
                 }
             }
+            #[cfg(target_os = "android")]
+            {
+                let _ = &repo;
+                eprintln!("[cheats] repo fetch not available on android");
+            }
         }
-        #[cfg(target_os = "android")]
-        {
-            let _ = &repo;
-            eprintln!("[cheats] repo fetch not available on android");
-        }
-    }
 
-    Ok(CheatRepoSearchResponse {
-        entries,
-        error: None,
-    })
+        Ok(CheatRepoSearchResponse {
+            entries,
+            error: None,
+        })
+    }
 }
 
 /// Determine the on-PS5 install path for a cheat file.

@@ -969,6 +969,16 @@ pub async fn fan_curve_get(req: FanCurveGetReq) -> Result<JsonValue, String> {
 
 // ── Notifications ─────────────────────────────────────────────────────
 #[tauri::command]
+pub async fn activity_reset(addr: Option<String>) -> Result<JsonValue, String> {
+    let base = engine::url();
+    let mut url = format!("{base}/api/ps5/activity/reset");
+    if let Some(a) = addr {
+        url.push_str(&format!("?addr={}", urlencoding(&a)));
+    }
+    post_json(&url, &serde_json::json!({})).await
+}
+
+#[tauri::command]
 pub async fn notif_clear(addr: Option<String>) -> Result<JsonValue, String> {
     let base = engine::url();
     let mut url = format!("{base}/api/ps5/notif/clear");

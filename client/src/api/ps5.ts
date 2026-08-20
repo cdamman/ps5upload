@@ -4172,6 +4172,26 @@ export async function notifList(
   });
 }
 
+export interface ActivityResetResult {
+  ok: boolean;
+  removed: number;
+  error?: string | null;
+}
+
+/** Discard recorded play time on the console.
+ *
+ *  This is ps5upload's own tracking, not the console's own play-time
+ *  records, which are not writable -- so it resets exactly what the
+ *  Game Activity screen shows and nothing else. Guarded: an action. */
+export async function activityReset(
+  addr?: string,
+): Promise<ActivityResetResult> {
+  const resp: ActivityResetResult = await invoke("activity_reset", {
+    addr: addr ?? null,
+  });
+  return assertOk(resp, "Reset play time");
+}
+
 export interface NotifClearResult {
   ok: boolean;
   removed: number;

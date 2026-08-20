@@ -603,6 +603,10 @@ pub enum FrameType {
     /// Req: empty. Ack: `{"ok":bool,"removed":N}`.
     NotifClear = 251,
     NotifClearAck = 252,
+    /// Discard all recorded play time on the console.
+    /// Req: empty. Ack: `{"ok":bool,"removed":N}`.
+    ActivityReset = 253,
+    ActivityResetAck = 254,
     // ── Cheat engine (v4.2) ───────────────────────────────────────────
     /// List all titles that have cheat files installed.
     /// Req: empty. Ack: `{"titles":[{"title_id":"CUSA00000","name":"..",
@@ -880,6 +884,8 @@ impl FrameType {
             199 => Ok(Self::NotifListAck),
             251 => Ok(Self::NotifClear),
             252 => Ok(Self::NotifClearAck),
+            253 => Ok(Self::ActivityReset),
+            254 => Ok(Self::ActivityResetAck),
             200 => Ok(Self::CheatsList),
             201 => Ok(Self::CheatsListAck),
             202 => Ok(Self::CheatsGet),

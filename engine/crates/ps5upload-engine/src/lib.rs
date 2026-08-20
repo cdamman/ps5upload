@@ -5188,6 +5188,25 @@ async fn notif_list_handler(
     }
 }
 
+/// POST /api/ps5/activity/reset
+///
+/// Discards ps5upload's recorded play time on the console. This is our
+/// own tracking, not the console's own records, which are not writable.
+async fn activity_reset_handler(
+    State(state): State<AppState>,
+    Query(q): Query<AddrQuery>,
+) -> impl IntoResponse {
+    let addr = mgmt_addr_or_default(q.addr, &state.default_ps5_addr);
+    let r = tokio::task::spawn_blocking(move || ps5upload_core::activity::activity_reset(&addr))
+        .await
+        .map_err(anyhow::Error::from)
+        .and_then(|r| r);
+    match r {
+        Ok(result) => (StatusCode::OK, Json(result)).into_response(),
+        Err(e) => json_err(StatusCode::BAD_GATEWAY, format!("{e:#}")).into_response(),
+    }
+}
+
 /// POST /api/ps5/notif/clear
 ///
 /// Empties the payload's notification ring. These are messages
@@ -7665,6 +7684,7 @@ async fn run(cfg: EngineConfig) -> anyhow::Result<()> {
         .route("/api/ps5/hw/fan-curve/get", get(fan_curve_get_handler))
         .route("/api/ps5/notif/list", get(notif_list_handler))
         .route("/api/ps5/notif/clear", post(notif_clear_handler))
+        .route("/api/ps5/activity/reset", post(activity_reset_handler))
         .route("/api/ps5/cheats/list", get(cheats_list_handler))
         .route("/api/ps5/cheats/get", get(cheats_get_handler))
         .route("/api/ps5/cheats/toggle", post(cheats_toggle_handler))

@@ -54,4 +54,9 @@ export default defineConfig({
       },
     },
   },
+  test: {
+    // Fail any test that reaches the network. See src/test-setup.ts for
+    // why: unmocked API wrappers silently hit a running dev engine.
+    setupFiles: ["./src/test-setup.ts"],
+  },
 });

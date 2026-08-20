@@ -333,6 +333,27 @@ static void *watcher_thread(void *arg) {
  * The watcher only saves every 60s, and a payload swap or shutdown in
  * between silently loses the current session. Called from the shutdown
  * path so an orderly exit keeps what it counted. */
+/* Discard all recorded play time.
+ *
+ * Clears the in-memory table, the in-flight session and the on-disk
+ * file in one locked step, so a reset cannot be partially applied and
+ * the watcher cannot re-save the old totals underneath it. The current
+ * session is dropped too -- resetting and then having the game you are
+ * playing immediately re-appear with its old total would not read as a
+ * reset.
+ *
+ * Returns how many titles were removed. */
+int activity_reset(void) {
+    pthread_mutex_lock(&g_lock);
+    int removed = g_count;
+    memset(g_entries, 0, sizeof(g_entries));
+    g_count = 0;
+    g_current_title[0] = '\0';
+    save_state();
+    pthread_mutex_unlock(&g_lock);
+    return removed;
+}
+
 void activity_flush(void) {
     pthread_mutex_lock(&g_lock);
     /* Close out the in-flight session first, or the time between the last

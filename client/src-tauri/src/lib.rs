@@ -224,6 +224,7 @@ pub fn run() {
             commands::fan_curve_get,
             commands::notif_list,
             commands::notif_clear,
+            commands::activity_reset,
             commands::cheats_list,
             commands::cheats_get,
             commands::cheats_toggle,

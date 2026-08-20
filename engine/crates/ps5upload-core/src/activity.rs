@@ -96,6 +96,40 @@ pub fn activity_db_query(addr: &str, query: &str) -> Result<ActivityDbQueryRespo
     Ok(serde_json::from_slice(&resp)?)
 }
 
+/// Result of resetting recorded play time.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ActivityResetResult {
+    #[serde(default)]
+    pub ok: bool,
+    /// How many titles were removed.
+    #[serde(default)]
+    pub removed: u32,
+    #[serde(default)]
+    pub error: Option<String>,
+}
+
+/// Discard all recorded play time on the console.
+///
+/// This is ps5upload's own tracking, kept in its own file -- not the
+/// console's play-time records, which are not writable. So it resets
+/// exactly what the Game Activity screen shows and nothing else.
+pub fn activity_reset(addr: &str) -> Result<ActivityResetResult> {
+    let mut c = Connection::connect(addr)?;
+    c.send_frame(FrameType::ActivityReset, b"")?;
+    let (hdr, resp) = c.recv_frame()?;
+    let ft = hdr.frame_type().unwrap_or(FrameType::Error);
+    if ft == FrameType::Error {
+        bail!(
+            "payload rejected ACTIVITY_RESET: {}",
+            String::from_utf8_lossy(&resp)
+        );
+    }
+    if ft != FrameType::ActivityResetAck {
+        bail!("expected ACTIVITY_RESET_ACK, got {ft:?}");
+    }
+    Ok(serde_json::from_slice(&resp)?)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

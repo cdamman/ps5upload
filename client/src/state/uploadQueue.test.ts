@@ -18,6 +18,11 @@ vi.mock("../api/ps5", async (importOriginal) => {
     startTransferDirReconcile: vi.fn(async () => "job"),
     startTransferZip: vi.fn(async () => "job"),
     jobStatus: vi.fn(async () => ({ status: "running" })),
+    // Must be mocked: the real one falls through to an HTTP fetch
+    // whenever the app is not running inside Tauri, which is always
+    // true under vitest. Leaving it unmocked fired real cancel
+    // requests at whatever engine was listening.
+    jobCancel: vi.fn(async () => {}),
     fsMkdir: vi.fn(async () => {}),
     fsDelete: vi.fn(async () => {}),
     fsMount: vi.fn(async () => ({ mount_point: "/mnt/x", layout_valid: true })),
@@ -272,6 +277,29 @@ describe("upload runner concurrency (per-console, parallel)", () => {
     expect(useUploadQueueStore.getState().runningHosts).toEqual({
       "192.168.1.10": true,
     });
+  });
+
+  it("stopHost cancels the engine job for that console only", async () => {
+    // Stopping must actually abort the transfer on the engine, not just
+    // reset the row locally -- otherwise the upload keeps running on the
+    // console after the UI says it stopped. And it must not cancel a
+    // sibling console's job.
+    const { jobCancel } = await import("../api/ps5");
+    const mockedCancel = vi.mocked(jobCancel);
+    mockedCancel.mockClear();
+
+    addItem("192.168.1.10:9113", "A1");
+    addItem("192.168.1.20:9113", "B1");
+
+    void useUploadQueueStore.getState().start();
+    await vi.advanceTimersByTimeAsync(50);
+
+    useUploadQueueStore.getState().stopHost("192.168.1.10");
+    await vi.advanceTimersByTimeAsync(50);
+
+    expect(mockedCancel).toHaveBeenCalledTimes(1);
+    // Whatever id the started transfer returned is the one cancelled.
+    expect(mockedCancel).toHaveBeenCalledWith("job");
   });
 
   it("stopHost stops ONE console while siblings keep running", async () => {

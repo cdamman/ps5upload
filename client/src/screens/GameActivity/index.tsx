@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { Activity, RefreshCw, Database, Clock, TrendingUp } from "lucide-react";
-import { PageHeader, Button, ErrorCard, ConnectionGate, EmptyState, Card, Spinner } from "../../components";
+import { Activity, RefreshCw, Database, Clock, TrendingUp, Trash2 } from "lucide-react";
+import { PageHeader, Button, ErrorCard, ConnectionGate, EmptyState, Card, Spinner, Modal } from "../../components";
 import { useTr } from "../../state/lang";
 import { useConnectionStore } from "../../state/connection";
 import { transferAddr } from "../../lib/addr";
@@ -8,6 +8,7 @@ import { humanizePs5Error } from "../../lib/humanizeError";
 import {
   activityGet,
   activityDbQuery,
+  activityReset,
   type ActivityEntry,
   type ActivityDbRow,
 } from "../../api/ps5";
@@ -36,6 +37,8 @@ export default function GameActivityScreen() {
   const host = useConnectionStore((s) => s.host);
   const payloadStatus = useConnectionStore((s) => s.payloadStatus);
   const addr = host ? transferAddr(host) : "";
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
   const [entries, setEntries] = useState<ActivityEntry[]>([]);
   const [currentTitle, setCurrentTitle] = useState("");
@@ -66,6 +69,23 @@ export default function GameActivityScreen() {
     }
   }, [addr, payloadStatus, tab]);
 
+  const handleReset = useCallback(async () => {
+    if (!addr || payloadStatus !== "up") return;
+    setResetting(true);
+    setError(null);
+    try {
+      await activityReset(addr);
+      setEntries([]);
+      setCurrentTitle("");
+      await refresh();
+    } catch (e) {
+      setError(humanizePs5Error(String(e)));
+    } finally {
+      setResetting(false);
+      setResetOpen(false);
+    }
+  }, [addr, payloadStatus, refresh]);
+
   useEffect(() => {
     void refresh();
   }, [refresh]);
@@ -82,10 +102,20 @@ export default function GameActivityScreen() {
             "Play-time tracking and recently played titles",
           )}
           right={
-            <Button variant="ghost" onClick={() => void refresh()} disabled={loading}>
-              {loading ? <Spinner size={16} tone="inherit" /> : <RefreshCw size={16} />}
-              {tr("refresh", undefined, "Refresh")}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                onClick={() => setResetOpen(true)}
+                disabled={resetting || payloadStatus !== "up" || !addr}
+              >
+                <Trash2 size={16} />
+                {tr("game_activity_reset", undefined, "Reset play time")}
+              </Button>
+              <Button variant="ghost" onClick={() => void refresh()} disabled={loading}>
+                {loading ? <Spinner size={16} tone="inherit" /> : <RefreshCw size={16} />}
+                {tr("refresh", undefined, "Refresh")}
+              </Button>
+            </div>
           }
         />
 
@@ -194,6 +224,34 @@ export default function GameActivityScreen() {
             ))}
           </div>
         )}
+      
+        <Modal
+          open={resetOpen}
+          onClose={() => setResetOpen(false)}
+          title={tr("game_activity_reset_title", undefined, "Reset play time?")}
+        >
+          <p className="text-sm text-[var(--color-muted)]">
+            {tr(
+              "game_activity_reset_explain",
+              undefined,
+              "This permanently deletes the play time ps5upload has recorded on this console. It cannot be undone, and past sessions cannot be recovered. Your console's own records are not affected \u2014 this only clears what this screen shows.",
+            )}
+          </p>
+          <div className="mt-4 flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setResetOpen(false)}>
+              {tr("cancel", undefined, "Cancel")}
+            </Button>
+            <Button
+              variant="danger"
+              disabled={resetting}
+              onClick={() => void handleReset()}
+            >
+              {resetting
+                ? tr("game_activity_resetting", undefined, "Resetting\u2026")
+                : tr("game_activity_reset_confirm", undefined, "Reset")}
+            </Button>
+          </div>
+        </Modal>
       </ConnectionGate>
     </div>
   );

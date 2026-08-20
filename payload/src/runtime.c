@@ -425,6 +425,8 @@ extern int posix_fallocate(int fd, off_t offset, off_t len);
 #define FTX2_FRAME_ACTIVITY_GET_ACK      193u
 #define FTX2_FRAME_ACTIVITY_DB_QUERY     194u
 #define FTX2_FRAME_ACTIVITY_DB_QUERY_ACK 195u
+#define FTX2_FRAME_ACTIVITY_RESET        253u
+#define FTX2_FRAME_ACTIVITY_RESET_ACK    254u
 /* v4.3: SDK version changer */
 #define FTX2_FRAME_SDK_SCAN              214u
 #define FTX2_FRAME_SDK_SCAN_ACK          215u
@@ -10428,6 +10430,26 @@ static int handle_notif_list(runtime_state_t *state, int client_fd,
     return rc;
 }
 
+/* ── Activity reset handler ─────────────────────────────────────────── */
+static int handle_activity_reset(runtime_state_t *state, int client_fd,
+                                 uint64_t trace_id) {
+    if (!state) return -1;
+    int removed = activity_reset();
+    pthread_mutex_lock(&state->state_mtx);
+    state->command_count += 1;
+    pthread_mutex_unlock(&state->state_mtx);
+    char body[64];
+    int n = snprintf(body, sizeof(body),
+                     "{\"ok\":true,\"removed\":%d}", removed);
+    if (n < 0 || (size_t)n >= sizeof(body)) {
+        const char *e = "{\"ok\":false,\"error\":\"format\"}";
+        return send_frame(client_fd, FTX2_FRAME_ACTIVITY_RESET_ACK, 0,
+                          trace_id, e, strlen(e));
+    }
+    return send_frame(client_fd, FTX2_FRAME_ACTIVITY_RESET_ACK, 0, trace_id,
+                      body, (uint64_t)n);
+}
+
 /* ── Notification clear handler ─────────────────────────────────────── */
 static int handle_notif_clear(runtime_state_t *state, int client_fd,
                               uint64_t trace_id) {
@@ -15836,6 +15858,9 @@ static int handle_binary_frame(runtime_state_t *state, int client_fd,
     }
     if (hdr.frame_type == FTX2_FRAME_NOTIF_LIST) {
         return handle_notif_list(state, client_fd, hdr.trace_id, request_body);
+    }
+    if (hdr.frame_type == FTX2_FRAME_ACTIVITY_RESET) {
+        return handle_activity_reset(state, client_fd, hdr.trace_id);
     }
     if (hdr.frame_type == FTX2_FRAME_NOTIF_CLEAR) {
         return handle_notif_clear(state, client_fd, hdr.trace_id);
