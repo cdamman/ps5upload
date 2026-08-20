@@ -1316,6 +1316,14 @@ errorboundary_show_stack: "Show stack trace",
 errorboundary_try_again: "Try again",
 errorboundary_reload_window: "Reload window",
 shortcuts_title: "Keyboard shortcuts",
+about_disclaimer_title: "Disclaimer",
+about_disclaimer_purpose:
+  "ps5upload is provided for research, educational, interoperability, and homebrew development purposes only. It is not affiliated with, endorsed by, or connected to Sony Interactive Entertainment Inc. \u201cPlayStation\u201d and \u201cPS5\u201d are trademarks of Sony Interactive Entertainment Inc., used here for identification only.",
+about_disclaimer_risk:
+  "This software is provided \u201cas is\u201d, without warranty of any kind. Operating a modified console can permanently damage it, irreversibly destroy saves and licences, and get your account or console banned. You use it entirely at your own risk and accept full responsibility for the consequences. Back up anything you cannot afford to lose before you begin.",
+about_disclaimer_piracy:
+  "Use it only with hardware you own and content you lawfully own. It must not be used to copy, distribute, or run software you do not have the right to use.",
+about_disclaimer_read_full: "Read the full terms",
 about_made_with: "Made with",
 about_for_the_ps5_scene: "for the PS5 scene.",
 connection_rebuild_shell_in: "in",

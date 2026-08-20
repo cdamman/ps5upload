@@ -524,10 +524,20 @@ port 9021 — a third-party component, not part of ps5upload.
 
 ## Disclaimer
 
+> **ps5upload is provided for research, educational, interoperability,
+> and homebrew development purposes only.** It is not affiliated with,
+> endorsed by, or connected to Sony Interactive Entertainment Inc.
+> "PlayStation", "PS4" and "PS5" are trademarks of Sony Interactive
+> Entertainment Inc., used here for identification only.
+>
 > **Use this software entirely at your own risk.** It is provided
 > "as is", without warranty of any kind, express or implied,
 > including but not limited to warranties of merchantability, fitness
 > for a particular purpose, and non-infringement.
+
+**➡ Full terms: [DISCLAIMER.md](DISCLAIMER.md).** By downloading,
+building, installing, or using this software you accept them in full.
+If you do not agree, do not use it.
 
 You are solely responsible for how, where, and on what hardware you
 use this tool. By downloading, installing, or running it, you
@@ -556,6 +566,17 @@ acknowledge and accept that:
   tool. The author may answer questions on Discord but is under no
   obligation to provide fixes, updates, or compensation if anything
   goes wrong.
+- **No piracy.** This tool must not be used to copy, distribute, or
+  run software you do not lawfully own or are licensed to use. The
+  authors do not condone or assist with piracy in any form, and
+  requests for such help will be refused.
+- **You accept the real risks.** Operating a modified console can
+  permanently damage it, irreversibly destroy saves and licences, and
+  get your account or console banned from online services. Back up
+  anything you cannot afford to lose *before* you begin.
+- **Indemnity.** You agree to hold the authors, contributors, and
+  distributors harmless from any claim arising out of your use or
+  misuse of this software.
 
 If any of the above is not acceptable to you, do not use this
 software.

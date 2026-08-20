@@ -8,6 +8,7 @@ import {
   Radio,
   Cpu,
   Sparkles,
+  ShieldAlert,
 } from "lucide-react";
 import { openExternalUrl as openExternal } from "../../lib/openExternalUrl";
 import { getAppVersion } from "../../lib/appVersion";
@@ -22,6 +23,7 @@ const URLS = {
   issues: "https://github.com/phantomptr/ps5upload/issues",
   license: "https://github.com/phantomptr/ps5upload/blob/main/LICENSE",
   changelog: "https://github.com/phantomptr/ps5upload/blob/main/CHANGELOG.md",
+  disclaimer: "https://github.com/phantomptr/ps5upload/blob/main/DISCLAIMER.md",
   author: "https://x.com/phantomptr",
   coffee: "https://ko-fi.com/B0B81S0WUA",
   email: `mailto:${AUTHOR_EMAIL}`,
@@ -184,6 +186,49 @@ export default function AboutScreen() {
               className="shrink-0"
             >
               {AUTHOR_EMAIL}
+            </Button>
+          </div>
+        </Card>
+      </section>
+
+      {/* Research-purpose notice. This tool drives a jailbroken console;
+          the risks are real and the user carries them, so state that
+          plainly in the app rather than only in the repo. Full terms
+          live in DISCLAIMER.md. */}
+      <section className="mb-8">
+        <SectionTitle icon={ShieldAlert}>
+          {tr("about_disclaimer_title", undefined, "Disclaimer")}
+        </SectionTitle>
+        <Card className="p-4">
+          <p className="text-sm leading-relaxed text-[var(--color-muted)]">
+            {tr(
+              "about_disclaimer_purpose",
+              undefined,
+              "ps5upload is provided for research, educational, interoperability, and homebrew development purposes only. It is not affiliated with, endorsed by, or connected to Sony Interactive Entertainment Inc. \u201cPlayStation\u201d and \u201cPS5\u201d are trademarks of Sony Interactive Entertainment Inc., used here for identification only.",
+            )}
+          </p>
+          <p className="mt-3 text-sm leading-relaxed text-[var(--color-muted)]">
+            {tr(
+              "about_disclaimer_risk",
+              undefined,
+              "This software is provided \u201cas is\u201d, without warranty of any kind. Operating a modified console can permanently damage it, irreversibly destroy saves and licences, and get your account or console banned. You use it entirely at your own risk and accept full responsibility for the consequences. Back up anything you cannot afford to lose before you begin.",
+            )}
+          </p>
+          <p className="mt-3 text-sm leading-relaxed text-[var(--color-muted)]">
+            {tr(
+              "about_disclaimer_piracy",
+              undefined,
+              "Use it only with hardware you own and content you lawfully own. It must not be used to copy, distribute, or run software you do not have the right to use.",
+            )}
+          </p>
+          <div className="mt-4">
+            <Button
+              variant="secondary"
+              size="sm"
+              leftIcon={<ShieldAlert size={12} />}
+              onClick={() => openExternal(URLS.disclaimer)}
+            >
+              {tr("about_disclaimer_read_full", undefined, "Read the full terms")}
             </Button>
           </div>
         </Card>
