@@ -529,6 +529,31 @@ jobs:
           key: ${{ runner.os }}-android-cargo-${{ hashFiles('client/src-tauri/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-android-cargo-
 
+      # Gradle's dependency cache.
+      #
+      # v5.4.5's CI failed here: Maven Central answered 403 for
+      # kotlin-stdlib and Gradle could not configure the project, so the
+      # build died before compiling anything of ours. Nothing was wrong
+      # with the code -- the publish workflow built the same commit
+      # minutes later.
+      #
+      # gen/android is scaffolded fresh every run, so the Gradle project
+      # is new each time, but ~/.gradle/caches persists across runs when
+      # cached. With the artifacts already local, a transient Maven
+      # outage stops being a build failure.
+      #
+      # Keyed loosely on purpose: the generated project pins its own
+      # versions, so any recent cache is a useful starting point and a
+      # miss only costs a download.
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-android-gradle-${{ hashFiles('client/src-tauri/tauri.conf.json') }}
+          restore-keys: ${{ runner.os }}-android-gradle-
+
       - name: Install client deps
         working-directory: client
         run: npm ci --no-audit --no-fund

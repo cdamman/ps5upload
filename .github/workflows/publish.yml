@@ -511,6 +511,19 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      # Gradle's dependency cache. The release APK build has the same
+      # exposure that failed CI on v5.4.5: Maven Central answered 403
+      # for kotlin-stdlib and Gradle could not configure the project.
+      # That run happened to succeed here; caching removes the luck.
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-android-gradle-${{ hashFiles('client/src-tauri/tauri.conf.json') }}
+          restore-keys: ${{ runner.os }}-android-gradle-
+
       - name: Setup Rust + Android targets
         uses: dtolnay/rust-toolchain@stable
         with:
