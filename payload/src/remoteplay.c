@@ -39,10 +39,18 @@ extern int sceUserServiceGetForegroundUser(int *user_id);
  * payload on firmwares where the module is absent), so we dlopen it once
  * and dlsym each symbol. NULL after resolve means "not available on this
  * firmware" — callers surface a clean error instead of crashing. */
-typedef int (*rp_init_fn)(void);
+/* Arity confirmed against three independent implementations (linkdev,
+ * ps5-remoteplay-get-pin, ActRemoteLink) and verified on hardware: the
+ * previous `(void)` declaration made every call fail 0x80FC0001, because
+ * the callee read whatever happened to be in the argument registers.
+ * That is why Remote Play never worked. */
+typedef int (*rp_init_fn)(void *opt, size_t opt_size);
 typedef int (*rp_get_op_status_fn)(int32_t user_id);
 typedef int (*rp_get_conn_status_fn)(void);
-typedef int (*rp_gen_pin_fn)(int32_t user_id, char *pin, size_t pin_size);
+/* Writes the PIN through its ONLY argument. The previous
+ * `(user_id, char*, size_t)` form passed an integer where the callee
+ * performs a pointer store — a wild write, not a PIN. */
+typedef int (*rp_gen_pin_fn)(uint32_t *out_pin);
 typedef int (*rp_is_playing_fn)(void);
 typedef int (*rp_get_mode_fn)(void);
 typedef int (*rp_disconnect_fn)(void);
@@ -50,7 +58,7 @@ typedef int (*rp_disconnect_fn)(void);
  *   status 2 = paired, 3/4 = failed (with errcode for diagnostics).
  * NotifyPinCodeError clears stale PIN-error state from a prior session. */
 typedef int (*rp_confirm_regist_fn)(uint32_t *status, uint32_t *errcode);
-typedef int (*rp_notify_pin_err_fn)(void);
+typedef int (*rp_notify_pin_err_fn)(int errcode);
 
 static rp_init_fn           g_init         = NULL;
 static rp_get_op_status_fn  g_op_status    = NULL;
@@ -323,12 +331,12 @@ int remoteplay_request(const char *manual_account_id) {
     rp_ensure_enabled();
 
     /* Clear stale PIN-error state from any prior session. */
-    if (g_notify_pin_err) (void)g_notify_pin_err();
+    if (g_notify_pin_err) (void)g_notify_pin_err(1);
 
     /* Initialize the Remoteplay module. Sony's init is idempotent — a
      * second call returns a benign "already initialised" code which we
      * treat as success. */
-    int rc = g_init();
+    int rc = g_init(0, 0);
     if (rc != 0) {
         pthread_mutex_lock(&g_rp_mtx);
         g_rp_state = RP_STATE_FAILED;
@@ -354,9 +362,11 @@ int remoteplay_request(const char *manual_account_id) {
 
     /* Generate the pairing PIN. The caller enters this in the Remote
      * Play client to pair with this console. */
-    char pin[16] = {0};
-    rc = g_gen_pin((int32_t)uid, pin, sizeof(pin));
-    if (rc != 0 || !pin[0]) {
+    uint32_t pin_raw = 0;
+    rc = g_gen_pin(&pin_raw);
+    char pin[16];
+    snprintf(pin, sizeof(pin), "%08u", (unsigned)pin_raw);
+    if (rc != 0) {
         pthread_mutex_lock(&g_rp_mtx);
         g_rp_state = RP_STATE_FAILED;
         snprintf(g_rp_err, sizeof(g_rp_err),
@@ -431,7 +441,7 @@ int remoteplay_get_status(char *buf, size_t cap) {
             if (time(NULL) >= g_rp_deadline) {
                 g_rp_state = RP_STATE_TIMEOUT;
                 s = RP_STATE_TIMEOUT;
-                if (g_notify_pin_err) (void)g_notify_pin_err();
+                if (g_notify_pin_err) (void)g_notify_pin_err(1);
                 notif_send("[ps5upload] Remote Play PIN timed out",
                            NOTIF_LEVEL_WARN);
             }
