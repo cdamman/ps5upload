@@ -803,6 +803,18 @@ supported (Windows's "Send to → Compressed (zipped) folder" always does
 the right thing). Deflate64, LZMA, BZip2, Zstd and AES-encrypted zips are
 rejected with a clear message.
 
+**Q: If I set a 4 GB batch size, what happens to files bigger than 4 GB?**
+They still arrive intact. A file is never split across batches — one
+larger than the batch size is simply extracted whole, on its own, and
+sent. Nothing is truncated, and every file is checksummed on the way to
+the console.
+
+The catch is disk space, not corruption: that one file needs to fit on
+your PC in full. So with a 4 GB batch size and a 30 GB file inside the
+archive, you still need 30 GB free at that moment. ps5upload accounts for
+this before it starts and will tell you if the biggest single file won't
+fit, rather than failing part-way.
+
 **Q: My `.rar` upload failed with "not enough space" or "Write error".**
 A `.rar` is extracted on your PC before anything is sent, so you need room
 for the *extracted* game as well as the archive itself. A 180 GB game

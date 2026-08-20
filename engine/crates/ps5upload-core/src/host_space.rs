@@ -101,11 +101,19 @@ pub const STAGING_MARGIN_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 /// Unbatched (`budget == 0`) stages the whole archive. Batched stages at most
 /// one batch — and never more than the archive itself, so a small archive
 /// isn't reported as needing a large budget's worth of room.
-pub fn staging_requirement(total_uncompressed: u64, budget: u64) -> u64 {
+///
+/// `largest_file` is the floor, and it matters: a single file cannot be split
+/// across batches, so one bigger than the budget is extracted whole and the
+/// disk has to hold all of it. PS5 dumps regularly carry single files far
+/// larger than any sensible budget (a 50 GB `.exfat` image, say), and
+/// reporting just the budget there would wave through an upload that then
+/// fills the disk mid-extraction — the very failure this check exists to
+/// prevent.
+pub fn staging_requirement(total_uncompressed: u64, largest_file: u64, budget: u64) -> u64 {
     if budget == 0 {
         total_uncompressed
     } else {
-        budget.min(total_uncompressed)
+        budget.min(total_uncompressed).max(largest_file)
     }
 }
 
@@ -146,17 +154,38 @@ mod tests {
 
     #[test]
     fn unbatched_needs_the_whole_archive() {
-        assert_eq!(staging_requirement(180 * GB, 0), 180 * GB);
+        assert_eq!(staging_requirement(180 * GB, 9 * GB, 0), 180 * GB);
     }
 
     #[test]
     fn batched_needs_only_one_batch() {
-        assert_eq!(staging_requirement(180 * GB, 4 * GB), 4 * GB);
+        assert_eq!(staging_requirement(180 * GB, 2 * GB, 4 * GB), 4 * GB);
     }
 
     #[test]
     fn a_budget_larger_than_the_archive_needs_only_the_archive() {
-        assert_eq!(staging_requirement(2 * GB, 64 * GB), 2 * GB);
+        assert_eq!(staging_requirement(2 * GB, 1 * GB, 64 * GB), 2 * GB);
+    }
+
+    #[test]
+    fn a_single_file_larger_than_the_budget_sets_the_floor() {
+        // A file cannot be split across batches, so it is extracted whole and
+        // the disk must hold all of it. Reporting only the budget here would
+        // wave through an upload that then fills the disk part-way — the
+        // exact failure the pre-flight check exists to prevent. PS5 dumps
+        // routinely contain single files far bigger than a sane budget.
+        assert_eq!(staging_requirement(180 * GB, 20 * GB, 4 * GB), 20 * GB);
+    }
+
+    #[test]
+    fn the_largest_file_does_not_inflate_an_unbatched_requirement() {
+        // Unbatched already stages everything; the largest file is a subset.
+        assert_eq!(staging_requirement(180 * GB, 20 * GB, 0), 180 * GB);
+    }
+
+    #[test]
+    fn a_largest_file_under_the_budget_changes_nothing() {
+        assert_eq!(staging_requirement(180 * GB, 1 * GB, 4 * GB), 4 * GB);
     }
 
     #[test]

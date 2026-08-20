@@ -4610,9 +4610,15 @@ FTX2_ARCHIVE_STAGE_MB on the engine to extract and send it in batches."
         // refusing a transfer because a stat failed would be worse than the
         // problem this prevents.
         {
-            let (total_uncompressed, _) = rar_plan_preview(archive_path, password, &cfg.excludes)?;
+            let (total_uncompressed, files) =
+                rar_plan_preview(archive_path, password, &cfg.excludes)?;
+            // The biggest single entry is the floor for a batched run: a file
+            // is never split across batches, so the disk must hold all of it
+            // even when it dwarfs the budget.
+            let largest_file = files.iter().map(|(_, size)| *size).max().unwrap_or(0);
             let required = crate::host_space::staging_requirement(
                 total_uncompressed,
+                largest_file,
                 cfg.archive_stage_budget_bytes,
             );
             let available = crate::host_space::available_bytes(&base);
@@ -4628,13 +4634,24 @@ FTX2_ARCHIVE_STAGE_MB on the engine to extract and send it in batches."
 instead of all {}: set FTX2_ARCHIVE_STAGE_MB (e.g. 4096) on the engine.",
                         hb(total_uncompressed)
                     )
+                } else if largest_file > cfg.archive_stage_budget_bytes {
+                    // Don't suggest lowering a budget that is already being
+                    // overridden: one entry is bigger than it, and a file is
+                    // never split across batches, so this is the floor no
+                    // matter how small the budget gets.
+                    format!(
+                        " Note the batch size is not the limit here: one file in \
+the archive is {}, and a single file is always extracted whole, so that much \
+must fit regardless of FTX2_ARCHIVE_STAGE_MB.",
+                        hb(largest_file)
+                    )
                 } else {
                     String::new()
                 };
                 bail!(
                     "rar_staging_no_space: extracting this archive needs {} free in {}, \
-but only {} is available ({} short). Free up space, move the .rar to a drive \
-with more room, or reduce what is staged at once.{}",
+but only {} is available ({} short). Free up space, or move the .rar to a \
+drive with more room.{}",
                     hb(required),
                     base.display(),
                     hb(available.unwrap_or(0)),
