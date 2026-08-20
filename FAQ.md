@@ -803,57 +803,15 @@ supported (Windows's "Send to → Compressed (zipped) folder" always does
 the right thing). Deflate64, LZMA, BZip2, Zstd and AES-encrypted zips are
 rejected with a clear message.
 
-**Q: If I set a 4 GB batch size, what happens to files bigger than 4 GB?**
-They still arrive intact. A file is never split across batches — one
-larger than the batch size is simply extracted whole, on its own, and
-sent. Nothing is truncated, and every file is checksummed on the way to
-the console.
+**Q: Does a `.rar` upload need free space on my PC?**
+No. `.zip`, `.7z` and `.rar` are all decompressed and sent at the same
+time, so nothing is written to your disk — you only need room for the
+archive you already have.
 
-The catch is disk space, not corruption: that one file needs to fit on
-your PC in full. So with a 4 GB batch size and a 30 GB file inside the
-archive, you still need 30 GB free at that moment. ps5upload accounts for
-this before it starts and will tell you if the biggest single file won't
-fit, rather than failing part-way.
-
-**Q: My `.rar` upload failed with "not enough space" or "Write error".**
-A `.rar` is extracted on your PC before anything is sent, so you need room
-for the *extracted* game as well as the archive itself. A 180 GB game
-needs 180 GB free on top of the `.rar` — which catches people out, because
-uploading a `.exfat` image of the same size needs no extra space at all.
-
-ps5upload now checks before it starts and tells you how much is needed
-versus how much you have. Three ways to fix it:
-
-1. **Free up space**, or move the `.rar` to a drive that has room — the
-   temporary folder is created next to the archive, so the drive holding
-   the `.rar` is the one that needs to be free.
-2. **Extract in batches** so the full size is never needed at once — see
-   the next question.
-3. **Extract the `.rar` yourself** and upload the resulting folder.
-
-If a transfer failed part-way, check for a folder named
-`.ps5upload-rar-…` next to your archive. It normally cleans itself up, but
-if something on your PC had a file open it can be left behind holding a
-lot of space — it is safe to delete.
-
-**Q: A big `.rar` upload fills up my PC's disk. Can I avoid that?**
-Yes. By default a `.rar` is extracted in full before anything is sent, so
-a 100 GB game needs 100 GB free on your PC.
-
-Set this on the engine to send it in batches instead:
-
-```
-FTX2_ARCHIVE_STAGE_MB=4096
-```
-
-That keeps at most ~4 GB on your PC at a time — pick whatever number your
-free space allows. Unset (or `0`) restores the default.
-
-It is off by default for a reason: batched mode can only resume within
-the batch it was sending when a transfer drops, whereas the default can
-resume anywhere in the archive. A RAR archive can't be read backwards, so
-this is a genuine trade-off, not an oversight. If you have the disk space
-and a flaky connection, leave it off.
+This changed in a recent version. Older builds extracted a `.rar` in full
+first, which meant a 180 GB game needed 180 GB free on top of the archive.
+If you set `FTX2_ARCHIVE_STAGE_MB` to work around that, you can remove it —
+it no longer does anything.
 
 **Q: Why does the Library sometimes show a game twice?**
 If the same title is present both as a folder on disk and inside a

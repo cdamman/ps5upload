@@ -4,6 +4,20 @@ What's new in ps5upload, written for humans.
 
 ---
 
+## Unreleased
+
+- **`.rar` uploads no longer need free space on your PC.** A `.rar` used to
+  be extracted in full before anything was sent, so a 180 GB game needed
+  180 GB free on top of the archive. It is now decompressed and sent at the
+  same time, exactly like `.zip` and `.7z` — nothing is written to your disk
+  at all.
+- Because of that, the `FTX2_ARCHIVE_STAGE_MB` setting is gone. It is no
+  longer needed; you can delete it if you set it.
+- A failed `.rar` upload can no longer leave a part-extracted folder behind,
+  because there is no longer anywhere for one to be left.
+
+---
+
 ## 5.3.3
 
 **Fixes the Docker images, which 5.3.2 broke.**

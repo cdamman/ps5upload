@@ -37,9 +37,11 @@
   extracted** on the PS5 — no manual unpack, no temp copy of the whole
   game. The Upload screen previews the expansion (`zipped → extracted`,
   file count, space saved) and detects the embedded game. Decompresses
-  one file at a time (large files spill to a temp file), so a 100 GB
-  archive doesn't need 100 GB of RAM. `.rar` is desktop-only (the UnRAR
-  C dep is excluded from the Android build).
+  one file at a time, so a 100 GB archive doesn't need 100 GB of RAM.
+  `.7z` and `.rar` stream straight into the pipeline and write nothing to
+  your disk at all; `.zip` spills large entries to a temp file because its
+  format needs random access. `.rar` is desktop-only (the UnRAR C dep is
+  excluded from the Android build).
 - **Native image mount** — attach `.exfat` and `.ffpkg` images on
   the PS5 (MDIOCATTACH + nmount) with no third-party helper. Every
   mount survives payload restarts and auto-reconciles on startup.
