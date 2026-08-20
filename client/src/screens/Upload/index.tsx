@@ -19,7 +19,7 @@ import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { isAndroid } from "../../lib/platform";
 import { pickLocalPath } from "../../state/localPicker";
 import { isTauriEnv, safeUnlisten } from "../../lib/tauriEnv";
-import { convertFileSrc } from "@tauri-apps/api/core";
+import { localFileSrc } from "../../lib/fileSrc";
 import { useShallow } from "zustand/react/shallow";
 
 import {
@@ -2009,10 +2009,13 @@ function GameMetaCard({
   };
 }) {
   const tr = useTr();
-  const coverSrc = useMemo(
-    () => (meta.icon0_path ? convertFileSrc(meta.icon0_path) : null),
-    [meta.icon0_path],
-  );
+  // localFileSrc returns null outside Tauri instead of throwing on a
+  // missing global (#271: this took down the whole upload flow in the
+  // web UI the instant a folder was picked). The fallback below already
+  // renders for a missing icon.
+  const coverSrc = useMemo(() => localFileSrc(meta.icon0_path), [
+    meta.icon0_path,
+  ]);
   const [coverFailed, setCoverFailed] = useState(false);
 
   return (

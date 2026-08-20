@@ -4,6 +4,18 @@ What's new in ps5upload, written for humans.
 
 ---
 
+## 5.4.2
+
+**Fixes uploading from a folder in the browser / Docker version.**
+
+- **Choosing a folder no longer breaks the upload screen.** In the web UI
+  and Docker builds, picking a folder failed with an error and stopped the
+  upload before it started. The screen was trying to show the game's cover
+  image using a feature that only exists in the desktop app. It now simply
+  leaves the cover out there, and the upload works normally.
+
+---
+
 ## 5.4.1
 
 **Clearing things out, and a quieter, cleaner build.**
