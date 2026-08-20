@@ -176,3 +176,57 @@ fn a_missing_password_still_reports_a_password_error() {
     let msg = format!("{err:#}");
     assert!(msg.contains("rar_password"), "got {msg}");
 }
+
+#[test]
+fn resuming_skips_shards_the_console_already_has() {
+    // Streaming cannot seek backwards, so a resume re-decompresses from the
+    // start and simply does not re-send what is already committed. This is
+    // the rule the 7z path uses, and it is only sound because shard numbers
+    // ascend in send order — see rar_plan_entries.
+    use ps5upload_core::transfer::TX_FLAG_RESUME;
+
+    // A tiny shard size turns the fixture's single entry into several
+    // shards, so "skipped some but not all" is actually observable.
+    let fresh = {
+        let srv = MockServer::start();
+        let cfg = TransferConfig {
+            shard_size: 4,
+            ..TransferConfig::new(&srv.addr)
+        };
+        transfer_rar_streaming(
+            &cfg,
+            tx_id(0x77),
+            "/data/g",
+            &fixture("crypted.rar"),
+            Some("unrar"),
+            0,
+        )
+        .expect("fresh")
+        .shards_sent
+    };
+    assert!(fresh > 2, "need several shards for this to mean anything");
+
+    let srv = MockServer::start();
+    let cfg = TransferConfig {
+        shard_size: 4,
+        ..TransferConfig::new(&srv.addr)
+    };
+    // Pretend the console already acked the first two shards.
+    srv.plant_interrupted_tx(tx_id(0x77), "/data/g", fresh, 2);
+    let resumed = transfer_rar_streaming(
+        &cfg,
+        tx_id(0x77),
+        "/data/g",
+        &fixture("crypted.rar"),
+        Some("unrar"),
+        TX_FLAG_RESUME,
+    )
+    .expect("resumed")
+    .shards_sent;
+
+    assert_eq!(
+        resumed,
+        fresh - 2,
+        "a resume should send every shard except the two already acked"
+    );
+}
