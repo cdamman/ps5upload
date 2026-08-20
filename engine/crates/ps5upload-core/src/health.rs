@@ -772,6 +772,21 @@ mod tests {
     }
 
     #[test]
+    fn tool_dirs_stay_inside_our_own_folder() {
+        // CleanJunk deletes `{TOOL_DIR}/{name}` for names readdir
+        // returned. That is only safe while every TOOL_DIR is ours --
+        // adding a directory outside this prefix would turn the
+        // cleanup button into a way to delete user content.
+        for d in TOOL_DIRS {
+            assert!(
+                d.starts_with("/data/ps5upload/"),
+                "{d} is outside the tool's own folder"
+            );
+            assert!(!d.contains(".."), "{d} must not contain a parent traversal");
+        }
+    }
+
+    #[test]
     fn summarize_counts_each_status() {
         let checks = vec![
             HealthCheck::new("a", "A", CheckCategory::Runtime, CheckStatus::Pass, ""),

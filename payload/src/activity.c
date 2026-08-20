@@ -177,8 +177,30 @@ static void save_state(void) {
         first = 0;
     }
     fprintf(f, "}");
-    fclose(f);
-    rename(tmp, ACTIVITY_FILE);
+
+    /* Atomic replace, done properly.
+     *
+     * fprintf() buffers, so a full disk or an I/O error does not
+     * surface until the stream is flushed. Renaming without checking
+     * would publish a truncated file over the good one and lose every
+     * play-time total we had -- and a console low on space is exactly
+     * when this fires. ferror() catches the buffered write failures,
+     * fsync() gets the bytes down before the rename makes them
+     * visible, and any failure leaves the previous file untouched.
+     *
+     * notif.c, cheats.c and the ownership writer in runtime.c all do
+     * this; this function was the one that did not. */
+    int failed = ferror(f) != 0;
+    if (!failed) {
+        int fd = fileno(f);
+        if (fd >= 0) (void)fsync(fd);
+    }
+    if (fclose(f) != 0) failed = 1;
+    if (failed) {
+        (void)unlink(tmp);
+        return;
+    }
+    (void)rename(tmp, ACTIVITY_FILE);
 }
 
 static void record_launch(const char *title_id) {
