@@ -8,6 +8,7 @@
 #include <pthread.h>
 #include <dlfcn.h>
 #include <ps5/kernel.h>
+#include "activity.h"
 #include "config.h"
 #include "runtime.h"
 #include "register.h"
@@ -554,6 +555,11 @@ int main(void) {
      * an uninterruptible Sony API). A lingering process is exactly what the
      * next resend would duplicate. Healthy shutdown exits via the return
      * below long before this fires. */
+    /* Persist tracked play time before we go. The watcher only saves every
+     * 60s, so a payload swap in between would otherwise drop the current
+     * session — which is most of what a short session IS. */
+    activity_flush();
+
     runtime_arm_shutdown_watchdog(rc == 0 ? 0 : 1);
 
     /* Ask the mgmt thread to exit by closing its listener. accept()

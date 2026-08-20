@@ -6,6 +6,9 @@
 
 void activity_init(void);
 
+/* Persist tracked play time now (called on orderly shutdown). */
+void activity_flush(void);
+
 int activity_get_json(char *buf, size_t cap, size_t *written);
 
 int activity_db_query_json(const char *query, char *buf, size_t cap,

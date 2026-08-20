@@ -306,6 +306,26 @@ static void *watcher_thread(void *arg) {
     return NULL;
 }
 
+/* Flush tracked play time to disk.
+ *
+ * The watcher only saves every 60s, and a payload swap or shutdown in
+ * between silently loses the current session. Called from the shutdown
+ * path so an orderly exit keeps what it counted. */
+void activity_flush(void) {
+    pthread_mutex_lock(&g_lock);
+    /* Close out the in-flight session first, or the time between the last
+     * poll and shutdown is dropped. */
+    if (g_current_title[0]) {
+        entry_t *e = find_entry(g_current_title);
+        if (e && e->session_started_ts > 0) {
+            int64_t now = now_ts();
+            if (now > e->last_seen_ts) e->last_seen_ts = now;
+        }
+    }
+    save_state();
+    pthread_mutex_unlock(&g_lock);
+}
+
 void activity_init(void) {
     mkdir(ACTIVITY_DIR, 0755);
     load_state();
