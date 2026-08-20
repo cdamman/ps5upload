@@ -17,6 +17,7 @@ import {
   type CheatRepoEntry,
 } from "../../api/ps5";
 import { humanizePs5Error } from "../../lib/humanizeError";
+import { appsInstalled, type InstalledTitle } from "../../api/ps5";
 
 interface RepoBrowserProps {
   addr: string;
@@ -50,6 +51,8 @@ export function RepoBrowser({ addr, onDownloaded, onClose }: RepoBrowserProps) {
   const [downloading, setDownloading] = useState<string | null>(null);
   const [downloaded, setDownloaded] = useState<Set<string>>(new Set());
   const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [games, setGames] = useState<InstalledTitle[]>([]);
+  const [loadingGames, setLoadingGames] = useState(false);
 
   useEffect(() => {
     void (async () => {
@@ -60,6 +63,47 @@ export function RepoBrowser({ addr, onDownloaded, onClose }: RepoBrowserProps) {
         setError(humanizePs5Error(String(e)));
       }
     })();
+  }, []);
+
+  // The installed games, so the common case is "click your game"
+  // rather than "know its title id or guess its spelling".
+  useEffect(() => {
+    void (async () => {
+      if (!addr) return;
+      setLoadingGames(true);
+      try {
+        const r = await appsInstalled(addr);
+        setGames(r.titles.filter((t) => !t.system));
+      } catch {
+        // Non-fatal: search by hand still works, so a failed listing
+        // degrades instead of blocking the dialog.
+        setGames([]);
+      } finally {
+        setLoadingGames(false);
+      }
+    })();
+  }, [addr]);
+
+  /* Search for one installed game by its title id.
+   *
+   * Cheat files are named after the title id, so this is the reliable
+   * way to find them -- far better than typing a game's name and hoping
+   * the repo spells it the same way. Takes the id explicitly so a click
+   * searches immediately instead of waiting a render for setQuery. */
+  const searchFor = useCallback(async (q: string) => {
+    setQuery(q);
+    setSearching(true);
+    setError(null);
+    setDownloadError(null);
+    try {
+      const r = await cheatsReposSearch(q);
+      setEntries(r.entries ?? []);
+      if (r.error) setError(r.error);
+    } catch (e) {
+      setError(humanizePs5Error(String(e)));
+    } finally {
+      setSearching(false);
+    }
   }, []);
 
   const handleSearch = useCallback(async () => {
@@ -83,7 +127,10 @@ export function RepoBrowser({ addr, onDownloaded, onClose }: RepoBrowserProps) {
     try {
       const titleId = entry.filename.split(/[._]/)[0] || entry.filename;
       const r = await cheatsReposDownload(
-        "etahen",
+        // Ask the repo the entry actually came from. This was hardcoded
+        // to "etahen", so anything found only in one of the other repos
+        // was fetched from the wrong place and could not be found.
+        entry.repo_id,
         entry.filename,
         titleId,
         addr,
@@ -135,6 +182,48 @@ export function RepoBrowser({ addr, onDownloaded, onClose }: RepoBrowserProps) {
                   {r.name}
                 </a>
               ))}
+            </div>
+          )}
+
+          {/* Your installed games. Cheat files are named by title id, so
+              clicking a game searches by the thing the repos actually
+              key on -- no need to know or guess an id. */}
+          {games.length > 0 && (
+            <div className="mb-3">
+              <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
+                {tr("cheats_your_games", undefined, "Your games")}
+              </div>
+              <div className="max-h-48 overflow-auto rounded border border-[var(--color-border)]">
+                {games.map((g) => (
+                  <button
+                    key={g.titleId}
+                    type="button"
+                    onClick={() => void searchFor(g.titleId)}
+                    className="flex w-full items-center justify-between gap-3 border-b border-[var(--color-border)] px-3 py-2 text-left last:border-b-0 hover:bg-[var(--color-surface-2)]"
+                  >
+                    <span className="min-w-0 flex-1 truncate text-sm">
+                      {g.titleName || g.titleId}
+                    </span>
+                    <code className="shrink-0 font-mono text-xs text-[var(--color-muted)]">
+                      {g.titleId}
+                    </code>
+                  </button>
+                ))}
+              </div>
+              <p className="mt-1.5 text-xs text-[var(--color-muted)]">
+                {tr(
+                  "cheats_your_games_hint",
+                  undefined,
+                  "Click a game to find cheats for it, or search below.",
+                )}
+              </p>
+            </div>
+          )}
+
+          {loadingGames && games.length === 0 && (
+            <div className="mb-3 flex items-center gap-2 text-xs text-[var(--color-muted)]">
+              <Spinner size={12} />
+              {tr("cheats_loading_games", undefined, "Loading your games\u2026")}
             </div>
           )}
 

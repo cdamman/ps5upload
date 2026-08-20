@@ -4,6 +4,23 @@ What's new in ps5upload, written for humans.
 
 ---
 
+## 5.4.3
+
+**Game Metadata works again, and finding cheats is much easier.**
+
+- **Game Metadata: fixed "Invalid format".** Picking one of your installed
+  games looked up an ID one part short of what the console wanted, so every
+  lookup failed. Both the app and the console now accept the shorter form.
+- **Cheats: pick your game from a list.** The cheat browser now shows the
+  games installed on your console. Click one and it finds cheats for it —
+  no need to know or type a game ID.
+- **Cheats: fixed downloads from two of the three sources.** Every download
+  was requested from the first source regardless of where the cheat was
+  found, so anything only available in the other two could not be
+  installed.
+
+---
+
 ## 5.4.2
 
 **Fixes uploading from a folder in the browser / Docker version.**

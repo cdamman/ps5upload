@@ -38,12 +38,27 @@ static int is_valid_title_id(const char *s) {
     return 1;
 }
 
-/* Accepts title_id (12 chars) or content_id (36 chars). Extracts the
-   12-char title_id from a content_id for use as cache key. Returns 1
-   on success, 0 on invalid input. */
+/* Accepts a bare title id (9 chars, e.g. CUSA12345), a full title id
+   (12 chars, CUSA12345_00) or a content id (36 chars). Extracts the
+   12-char title id for use as the cache key. Returns 1 on success, 0
+   on invalid input.
+
+   The 9-char form matters: enumerating /user/appmeta -- which is how
+   the app lists installed games -- yields bare title ids, so every
+   lookup started from an installed game arrived here 9 characters long
+   and was rejected as malformed. `_00` is the standard first-release
+   suffix and is what that enumeration implies. */
 static int normalize_id(const char *input, char *title_id_out, size_t out_sz) {
     if (!input || !title_id_out || out_sz < 13) return 0;
     size_t len = strlen(input);
+    if (len == 9) {
+        char padded[13];
+        memcpy(padded, input, 9);
+        memcpy(padded + 9, "_00", 4);   /* includes the NUL */
+        if (!is_valid_title_id(padded)) return 0;
+        memcpy(title_id_out, padded, 13);
+        return 1;
+    }
     if (len == 12) {
         if (!is_valid_title_id(input)) return 0;
         memcpy(title_id_out, input, 12);

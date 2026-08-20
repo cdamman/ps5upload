@@ -686,6 +686,10 @@ test-payload: payload
 		}; \
 	done
 	@echo "✓ Main payload and DPI installer are PS5 ELFs with gzip resources"
+	@echo "Running metadata title-id normalizer self-test (host build)..."
+	@cc -O2 -Wall -Wextra -Werror -o /tmp/ps5upload-tmdb-id-selftest \
+		$(PAYLOAD_DIR)/tests/tmdb_id_selftest.c
+	@/tmp/ps5upload-tmdb-id-selftest
 	@echo "Checking Sony-API lock coverage..."
 	@./scripts/check-sony-api-lock.sh $(PAYLOAD_DIR)/src
 	@echo "✓ every sceUserService/sceRegMgr caller is serialized"

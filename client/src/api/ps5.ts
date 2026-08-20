@@ -4317,6 +4317,10 @@ export interface CheatRepoEntry {
   filename: string;
   game_title: string;
   format: string;
+  /** Which repo this entry came from. The engine has always returned
+   *  it; the type omitted it, so the download call hardcoded "etahen"
+   *  and could not fetch anything found only in another repo. */
+  repo_id: string;
 }
 
 export interface CheatRepoSearchResponse {

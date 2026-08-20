@@ -5,6 +5,7 @@ import { useTr } from "../../state/lang";
 import { useConnectionStore } from "../../state/connection";
 import { transferAddr } from "../../lib/addr";
 import { humanizePs5Error } from "../../lib/humanizeError";
+import { normalizeTitleId } from "../../lib/titleId";
 import {
   tmdbFetch,
   appsInstalled,
@@ -62,7 +63,10 @@ export default function TmdbScreen() {
     setResult(null);
     try {
       const resp = await tmdbFetch(
-        id.toUpperCase(),
+        // Installed-game listings report a bare title id (CUSA12345);
+        // the lookup wants the full form. Expanding here means clicking
+        // a game works even against a payload predating the fix.
+        normalizeTitleId(id),
         refresh,
         addr,
         region.trim() || undefined,
