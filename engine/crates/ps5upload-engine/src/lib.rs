@@ -4978,6 +4978,71 @@ async fn remoteplay_status_handler(
     }
 }
 
+#[derive(serde::Deserialize)]
+struct RemotePlayEnableBody {
+    /// "service" (system toggle) or "user" (per-user permission, FW 10.00+).
+    scope: String,
+}
+
+async fn remoteplay_readiness_handler(
+    State(state): State<AppState>,
+    Query(q): Query<AddrQuery>,
+) -> impl IntoResponse {
+    let addr = mgmt_addr_or_default(q.addr, &state.default_ps5_addr);
+    let r = tokio::task::spawn_blocking(move || {
+        ps5upload_core::remoteplay::remoteplay_readiness(&addr)
+    })
+    .await
+    .map_err(anyhow::Error::from)
+    .and_then(|r| r);
+    match r {
+        Ok(result) => (StatusCode::OK, Json(result)).into_response(),
+        Err(e) => json_err(StatusCode::BAD_GATEWAY, format!("{e:#}")).into_response(),
+    }
+}
+
+async fn remoteplay_enable_handler(
+    State(state): State<AppState>,
+    Query(q): Query<AddrQuery>,
+    Json(body): Json<RemotePlayEnableBody>,
+) -> impl IntoResponse {
+    let addr = mgmt_addr_or_default(q.addr, &state.default_ps5_addr);
+    if body.scope != "service" && body.scope != "user" {
+        return json_err(
+            StatusCode::BAD_REQUEST,
+            "scope must be \"service\" or \"user\"".to_string(),
+        )
+        .into_response();
+    }
+    let scope = body.scope.clone();
+    let r = tokio::task::spawn_blocking(move || {
+        ps5upload_core::remoteplay::remoteplay_enable(&addr, &scope)
+    })
+    .await
+    .map_err(anyhow::Error::from)
+    .and_then(|r| r);
+    match r {
+        Ok(result) => (StatusCode::OK, Json(result)).into_response(),
+        Err(e) => json_err(StatusCode::BAD_GATEWAY, format!("{e:#}")).into_response(),
+    }
+}
+
+async fn remoteplay_devices_handler(
+    State(state): State<AppState>,
+    Query(q): Query<AddrQuery>,
+) -> impl IntoResponse {
+    let addr = mgmt_addr_or_default(q.addr, &state.default_ps5_addr);
+    let r =
+        tokio::task::spawn_blocking(move || ps5upload_core::remoteplay::remoteplay_devices(&addr))
+            .await
+            .map_err(anyhow::Error::from)
+            .and_then(|r| r);
+    match r {
+        Ok(result) => (StatusCode::OK, Json(result)).into_response(),
+        Err(e) => json_err(StatusCode::BAD_GATEWAY, format!("{e:#}")).into_response(),
+    }
+}
+
 async fn remoteplay_cancel_handler(
     State(state): State<AppState>,
     Query(q): Query<AddrQuery>,
@@ -7481,6 +7546,18 @@ async fn run(cfg: EngineConfig) -> anyhow::Result<()> {
             post(remoteplay_request_handler),
         )
         .route("/api/ps5/remoteplay/status", get(remoteplay_status_handler))
+        .route(
+            "/api/ps5/remoteplay/readiness",
+            get(remoteplay_readiness_handler),
+        )
+        .route(
+            "/api/ps5/remoteplay/enable",
+            post(remoteplay_enable_handler),
+        )
+        .route(
+            "/api/ps5/remoteplay/devices",
+            get(remoteplay_devices_handler),
+        )
         .route(
             "/api/ps5/remoteplay/cancel",
             post(remoteplay_cancel_handler),

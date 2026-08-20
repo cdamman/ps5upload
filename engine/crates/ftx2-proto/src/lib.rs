@@ -569,6 +569,12 @@ pub enum FrameType {
     /// Ack: `{"ok":bool}`.
     RemotePlayCancel = 190,
     RemotePlayCancelAck = 191,
+    /// Read-only snapshot of every Remote Play precondition.
+    RemotePlayReadiness = 248,
+    /// Enable the service or per-user permission; answers with readiness.
+    RemotePlayEnable = 249,
+    /// Paired devices from the 32-slot registration table.
+    RemotePlayDevices = 250,
 
     // ── Fan Curve Editor (v4.1) ────────────────────────────────────────
     /// Set a multi-point fan curve.
@@ -861,6 +867,9 @@ impl FrameType {
             189 => Ok(Self::RemotePlayStatus),
             190 => Ok(Self::RemotePlayCancel),
             191 => Ok(Self::RemotePlayCancelAck),
+            248 => Ok(Self::RemotePlayReadiness),
+            249 => Ok(Self::RemotePlayEnable),
+            250 => Ok(Self::RemotePlayDevices),
             196 => Ok(Self::HwFanCurveSet),
             197 => Ok(Self::HwFanCurveSetAck),
             198 => Ok(Self::NotifList),

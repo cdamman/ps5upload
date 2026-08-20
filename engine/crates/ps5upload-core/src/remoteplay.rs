@@ -86,3 +86,153 @@ pub fn remoteplay_cancel(addr: &str) -> Result<()> {
     }
     Ok(())
 }
+
+/// Everything that decides whether Remote Play can work on this console.
+///
+/// The payload sends 0/1 integers for the flags rather than JSON booleans,
+/// so these are `u8` and converted by the helpers below. Do not "simplify"
+/// them to `bool` and expect serde to coerce — it will not, and the frame
+/// will fail to parse. See the payload↔engine key contract note.
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+pub struct RemotePlayReadiness {
+    #[serde(default)]
+    pub fw_magic: u32,
+    #[serde(default)]
+    pub has_per_user: u8,
+    #[serde(default)]
+    pub foreground_uid: i64,
+    #[serde(default)]
+    pub user_slot: i32,
+    #[serde(default)]
+    pub account_id_b64: String,
+    #[serde(default)]
+    pub account_id_raw: u64,
+    #[serde(default)]
+    pub account_type: String,
+    #[serde(default)]
+    pub service_enabled: u8,
+    #[serde(default)]
+    pub user_enabled: u8,
+    #[serde(default)]
+    pub symbols_ok: u8,
+    /// Non-zero means the registry could not be READ — which is very
+    /// different from "the setting is off". Everything else in this struct
+    /// is meaningless when it is set.
+    #[serde(default)]
+    pub registry_err: u32,
+}
+
+impl RemotePlayReadiness {
+    /// Firmware as (major, minor), e.g. 9.60 -> (9, 60).
+    ///
+    /// The magic carries low-order bits past the version (5.10 reads as
+    /// 0x05100023), so mask them off rather than showing the raw number.
+    pub fn firmware(&self) -> Option<(u8, u8)> {
+        if self.fw_magic == 0 {
+            return None;
+        }
+        let major = ((self.fw_magic >> 24) & 0xFF) as u8;
+        let minor_bcd = ((self.fw_magic >> 16) & 0xFF) as u8;
+        Some((major, minor_bcd))
+    }
+
+    pub fn registry_ok(&self) -> bool {
+        self.registry_err == 0
+    }
+    pub fn service_on(&self) -> bool {
+        self.service_enabled != 0
+    }
+    pub fn user_on(&self) -> bool {
+        self.user_enabled != 0
+    }
+    pub fn needs_per_user(&self) -> bool {
+        self.has_per_user != 0
+    }
+    /// An account exists and has been activated.
+    pub fn activated(&self) -> bool {
+        self.account_id_raw != 0 && self.account_type == "np"
+    }
+    /// Everything Remote Play needs is in place.
+    pub fn ready_to_pair(&self) -> bool {
+        self.registry_ok()
+            && self.symbols_ok != 0
+            && self.foreground_uid != 0
+            && self.activated()
+            && self.service_on()
+            && (!self.needs_per_user() || self.user_on())
+    }
+}
+
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+pub struct RemotePlayDevice {
+    #[serde(default)]
+    pub slot: u32,
+    #[serde(default)]
+    pub user_id: i64,
+    #[serde(default)]
+    pub client_type: i32,
+}
+
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+pub struct RemotePlayDevices {
+    #[serde(default)]
+    pub devices: Vec<RemotePlayDevice>,
+}
+
+/// Read the readiness snapshot. Performs no writes on the console.
+pub fn remoteplay_readiness(addr: &str) -> Result<RemotePlayReadiness> {
+    let mut c = Connection::connect(addr)?;
+    c.send_frame(FrameType::RemotePlayReadiness, &[])?;
+    let (hdr, resp) = c.recv_frame()?;
+    let ft = hdr.frame_type().unwrap_or(FrameType::Error);
+    if ft == FrameType::Error {
+        bail!(
+            "payload rejected RemotePlayReadiness: {}",
+            String::from_utf8_lossy(&resp)
+        );
+    }
+    if ft != FrameType::RemotePlayReadiness {
+        bail!("unexpected reply to RemotePlayReadiness: {ft:?}");
+    }
+    Ok(serde_json::from_slice(&resp)?)
+}
+
+/// Enable Remote Play. `scope` is "service" or "user".
+///
+/// Returns the re-read readiness snapshot, so the caller never has to
+/// assume the write took effect.
+pub fn remoteplay_enable(addr: &str, scope: &str) -> Result<RemotePlayReadiness> {
+    let mut c = Connection::connect(addr)?;
+    let body = serde_json::json!({ "scope": scope });
+    c.send_frame(FrameType::RemotePlayEnable, &serde_json::to_vec(&body)?)?;
+    let (hdr, resp) = c.recv_frame()?;
+    let ft = hdr.frame_type().unwrap_or(FrameType::Error);
+    if ft == FrameType::Error {
+        bail!(
+            "payload rejected RemotePlayEnable: {}",
+            String::from_utf8_lossy(&resp)
+        );
+    }
+    if ft != FrameType::RemotePlayEnable {
+        bail!("unexpected reply to RemotePlayEnable: {ft:?}");
+    }
+    Ok(serde_json::from_slice(&resp)?)
+}
+
+/// Devices this console has been paired with.
+pub fn remoteplay_devices(addr: &str) -> Result<RemotePlayDevices> {
+    let mut c = Connection::connect(addr)?;
+    c.send_frame(FrameType::RemotePlayDevices, &[])?;
+    let (hdr, resp) = c.recv_frame()?;
+    let ft = hdr.frame_type().unwrap_or(FrameType::Error);
+    if ft == FrameType::Error {
+        bail!(
+            "payload rejected RemotePlayDevices: {}",
+            String::from_utf8_lossy(&resp)
+        );
+    }
+    if ft != FrameType::RemotePlayDevices {
+        bail!("unexpected reply to RemotePlayDevices: {ft:?}");
+    }
+    Ok(serde_json::from_slice(&resp)?)
+}
