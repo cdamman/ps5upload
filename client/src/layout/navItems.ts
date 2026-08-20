@@ -20,7 +20,6 @@ import {
   Gamepad2,
   LibraryBig,
   Search,
-  HardDrive,
   FolderTree,
   Cpu,
   CircleUserRound,
@@ -53,6 +52,7 @@ import {
   Server,
   Network,
   Stethoscope,
+  HardDrive,
 } from "lucide-react";
 
 export interface NavItem {
@@ -185,6 +185,12 @@ export const NAV_ITEMS: NavItem[] = [
     icon: CircleUserRound,
   },
   { to: "/fan-curve", key: "fan_curve", fallback: "Fan Curve", icon: Fan },
+  {
+    to: "/local-image",
+    key: "local_image",
+    fallback: "Edit Game Image",
+    icon: HardDrive,
+  },
   {
     to: "/health",
     key: "health",

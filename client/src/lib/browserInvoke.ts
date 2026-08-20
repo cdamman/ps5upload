@@ -641,6 +641,15 @@ export async function browserInvoke<T>(
     case "path_kind":
       return getJson<T>(`/api/local/path-kind?path=${uenc(args["path"] as string)}`);
 
+    case "local_image_attach":
+      return postJson<T>("/api/local/image/attach", { path: args["path"] });
+
+    case "local_image_detach":
+      return postJson<T>("/api/local/image/detach", { device: args["device"] });
+
+    case "local_image_status":
+      return getJson<T>("/api/local/image/status");
+
     case "activity_reset":
       return postJson<T>(
         addrUrl("/api/ps5/activity/reset", args["addr"] as string | null),

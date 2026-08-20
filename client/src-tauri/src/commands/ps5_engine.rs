@@ -969,6 +969,32 @@ pub async fn fan_curve_get(req: FanCurveGetReq) -> Result<JsonValue, String> {
 
 // ── Notifications ─────────────────────────────────────────────────────
 #[tauri::command]
+pub async fn local_image_attach(path: String) -> Result<JsonValue, String> {
+    let base = engine::url();
+    post_json(
+        &format!("{base}/api/local/image/attach"),
+        &serde_json::json!({ "path": path }),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn local_image_detach(device: String) -> Result<JsonValue, String> {
+    let base = engine::url();
+    post_json(
+        &format!("{base}/api/local/image/detach"),
+        &serde_json::json!({ "device": device }),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn local_image_status() -> Result<JsonValue, String> {
+    let base = engine::url();
+    get_json(&format!("{base}/api/local/image/status")).await
+}
+
+#[tauri::command]
 pub async fn activity_reset(addr: Option<String>) -> Result<JsonValue, String> {
     let base = engine::url();
     let mut url = format!("{base}/api/ps5/activity/reset");

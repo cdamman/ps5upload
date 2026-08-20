@@ -4,6 +4,21 @@ What's new in ps5upload, written for humans.
 
 ---
 
+## 5.4.5
+
+**A new screen for editing game images, and a quieter log.**
+
+- **New: Edit Game Image.** Open a `.exfat` or `.img` game image as a drive
+  on your computer, so you can replace patch files or change details inside
+  it with your normal tools, then eject it when you're done. Your operating
+  system does all the writing — ps5upload never modifies the image itself.
+  macOS and Linux for now; Windows needs an extra driver and says so.
+- **The log no longer fills up when a console is off.** A console that isn't
+  switched on was reported once a second, forever, burying everything else.
+  It now reports once, stays quiet, and says when the console comes back.
+
+---
+
 ## 5.4.4
 
 **Fixes the console never reporting which game is running.**

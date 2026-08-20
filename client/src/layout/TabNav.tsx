@@ -99,6 +99,7 @@ const TABS: TabDef[] = [
       "/fan-curve",
       "/profile",
       "/backup",
+      "/local-image",
       "/health",
       "/remote-play",
       "/notifications",

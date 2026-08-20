@@ -4172,6 +4172,37 @@ export async function notifList(
   });
 }
 
+/** ── Opening a game image on this computer ────────────────────────
+ *
+ *  Attaches a raw exFAT image so the OS mounts it, and the user edits
+ *  its files with their normal tools. We never implement exFAT or write
+ *  to the image ourselves — the OS driver does every write. */
+export interface AttachedImage {
+  image: string;
+  device: string;
+  /** Empty when the image attached but nothing was mounted — a real
+   *  state (unformatted or unsupported image), not a failure. */
+  mount_point: string;
+}
+
+export interface LocalImageStatus {
+  attached: AttachedImage[];
+  supported: boolean;
+  unsupported_reason?: string | null;
+}
+
+export async function localImageAttach(path: string): Promise<AttachedImage> {
+  return invoke("local_image_attach", { path });
+}
+
+export async function localImageDetach(device: string): Promise<void> {
+  await invoke("local_image_detach", { device });
+}
+
+export async function localImageStatus(): Promise<LocalImageStatus> {
+  return invoke("local_image_status");
+}
+
 export interface ActivityResetResult {
   ok: boolean;
   removed: number;
