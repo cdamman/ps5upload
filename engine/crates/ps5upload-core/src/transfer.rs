@@ -4670,11 +4670,17 @@ FTX2_ARCHIVE_STAGE_MB on the engine to extract and send it in batches."
 
                 let sink = StreamSink::new(chunk_tx);
                 let result = header.read_to_sink(sink);
-                let alive = fwd.join().unwrap_or(false);
 
                 match result {
                     Ok((sink, next)) => {
-                        if sink.disconnected() || !alive {
+                        // Drop the sink BEFORE joining: it still owns the
+                        // chunk sender, and the forwarder's `for c in
+                        // chunk_rx` only ends when every sender is gone.
+                        // Joining first deadlocks.
+                        let disconnected = sink.disconnected();
+                        drop(sink);
+                        let alive = fwd.join().unwrap_or(false);
+                        if disconnected || !alive {
                             return; // consumer went away
                         }
                         if tx.send(StreamMsg::EntryEnd).is_err() {
@@ -4683,6 +4689,9 @@ FTX2_ARCHIVE_STAGE_MB on the engine to extract and send it in batches."
                         open = next;
                     }
                     Err(e) => {
+                        // The sink was consumed (and its sender dropped)
+                        // inside the failed call, so the forwarder can finish.
+                        let _ = fwd.join();
                         fail(&tx, format!("{:#}", map_rar_err("extract rar entry", e)));
                         return;
                     }
