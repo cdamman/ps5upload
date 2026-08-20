@@ -35,6 +35,20 @@
  * Makefile) so a plain extern declaration is enough; dlsym(RTLD_DEFAULT)
  * resolves it at runtime. Same pattern as runtime.c line 9516. */
 extern int sceUserServiceGetForegroundUser(int *user_id);
+/* Must be called before any other user-service query, or
+ * GetForegroundUser fails 0x80960002 even with a user logged in. Other
+ * call sites in this tree already do it; Remote Play did not, which is
+ * why it could never see the signed-in user. Idempotent. */
+extern int sceUserServiceInitialize(void *params);
+
+/* Idempotent wrapper so every entry point into this file is safe to call
+ * without knowing whether something else initialised the service. */
+static void rp_user_service_ready(void) {
+    static int done = 0;
+    if (done) return;
+    (void)sceUserServiceInitialize(NULL);
+    done = 1;
+}
 
 /* libSceRemoteplay function pointer types. The library is NOT link-time
  * bound (it's an optional SPRX; adding a DT_NEEDED entry would brick the
@@ -189,6 +203,7 @@ static void rp_get_account_id(char *out, size_t out_sz) {
     out[0] = '\0';
 
     int uid = 0;
+    rp_user_service_ready();
     if (sceUserServiceGetForegroundUser(&uid) != 0 || uid <= 0) return;
 
     int slot = rp_slot_for_user(uid);
@@ -233,6 +248,7 @@ int remoteplay_readiness_json(char *out, size_t out_size) {
     char acct_type[24] = "";
     char acct_type_esc[64] = "";
 
+    rp_user_service_ready();
     if (sceUserServiceGetForegroundUser(&uid) != 0) uid = 0;
     int slot = rp_slot_for_user(uid);
 
@@ -252,7 +268,13 @@ int remoteplay_readiness_json(char *out, size_t out_size) {
                                    acct_type, sizeof(acct_type), NULL);
     }
 
-    (void)sys_registry_get_int(rp_key_service_enable(), &svc, NULL);
+    /* Keep the registry error code. Passing NULL here is how a TOTAL
+     * registry failure hid for so long: every read returned 0 and the
+     * snapshot reported a perfectly plausible "nothing is enabled",
+     * when in truth no read had succeeded at all. A non-zero
+     * registry_err means "could not read", not "disabled". */
+    uint32_t svc_ec = 0;
+    (void)sys_registry_get_int(rp_key_service_enable(), &svc, &svc_ec);
     if (slot > 0 && has_per_user) {
         (void)sys_registry_get_int(rp_key_user_enable((uint32_t)slot), &usr,
                                    NULL);
@@ -265,10 +287,10 @@ int remoteplay_readiness_json(char *out, size_t out_size) {
                     "\"foreground_uid\":%d,\"user_slot\":%d,"
                     "\"account_id_b64\":\"%s\",\"account_id_raw\":%llu,"
                     "\"account_type\":\"%s\",\"service_enabled\":%d,"
-                    "\"user_enabled\":%d,\"symbols_ok\":%d}",
+                    "\"user_enabled\":%d,\"symbols_ok\":%d,\"registry_err\":%u}",
                     fw, has_per_user, uid, slot, acct_b64,
                     (unsigned long long)acct_raw, acct_type_esc,
-                    svc ? 1 : 0, usr ? 1 : 0, g_resolved ? 1 : 0);
+                    svc ? 1 : 0, usr ? 1 : 0, g_resolved ? 1 : 0, svc_ec);
 }
 
 static void rp_json_escape(const char *src, char *dst, size_t dst_cap) {
@@ -425,6 +447,7 @@ int remoteplay_request(const char *manual_account_id) {
      * link-time bound via -lSceUserService, so the extern declaration
      * above resolves directly. A uid <= 0 means no user is logged in. */
     int uid = 0;
+    rp_user_service_ready();
     rc = sceUserServiceGetForegroundUser(&uid);
     if (rc != 0 || uid <= 0) {
         pthread_mutex_lock(&g_rp_mtx);

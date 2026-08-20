@@ -56,8 +56,17 @@ CFLAGS := -Wall -Wextra -Werror -g $(INCLUDES)
 # power-off). Direct compile-time linkage gives stable per-call sensor reads
 # with no ptrace dance. libkernel_sys.sprx is part of every supported PS5
 # firmware so adding the DT_NEEDED entry is safe.
+#
+# libSceRegMgr is linked for the same reason. sys_registry.c resolves the
+# sceRegMgr* symbols with dlsym(RTLD_DEFAULT), and on a payload that does
+# NOT link the library those lookups all return NULL — every registry read
+# and write failed with SYS_REGISTRY_ERR_NO_SYMBOL (0xE0003002), silently,
+# because the callers passed NULL for the error code. Verified on hardware:
+# the user-slot table read back empty and Remote Play could never find the
+# logged-in user. The registry is core to the system (unlike the optional
+# libSceRemoteplay), so the DT_NEEDED entry is safe.
 LIBS := -lSceSystemService -lSceUserService -lSceAppInstUtil -lSceNotification \
-        -lkernel_sys
+        -lSceRegMgr -lkernel_sys
 
 SRCS := src/main.c src/runtime.c src/shell_builtin.c src/takeover.c src/register.c src/hw_info.c \
         src/drive_sensors.c \
