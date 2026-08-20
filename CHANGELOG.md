@@ -4,6 +4,29 @@ What's new in ps5upload, written for humans.
 
 ---
 
+## 5.4.1
+
+**Clearing things out, and a quieter, cleaner build.**
+
+- **Clear your PS5 notifications.** The Notifications screen now has a
+  Clear all button. These are messages ps5upload put on your TV and keeps
+  its own list of, so clearing really does empty it.
+- **Reset recorded play time.** Game Activity can now be reset, with a
+  confirmation that says plainly it cannot be undone. Your console's own
+  records are not touched.
+- **Cheats are easier to use.** The download button was a tiny unlabelled
+  icon that was easy to miss. It is now a clear Install button that says
+  what it does, and shows Installed when it is done. Entries from one
+  source were also showing a blank name; they now show the title id.
+- **Switching consoles no longer carries anything across.** Picking a
+  different PS5 now starts every screen fresh, so one console's results
+  can never appear under another's name.
+- Fixed build warnings in the Android app.
+- Fixed a problem where running the tests could send requests to a
+  running console helper.
+
+---
+
 ## 5.4.0
 
 **A new Health Check screen, and a fix for a crash that could shut your
