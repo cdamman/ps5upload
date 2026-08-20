@@ -32,6 +32,27 @@ heap read, on **every volume transition**.
 The fix scans for the NUL first (still capped at UnRAR's 2048) and copies
 only what is actually there.
 
+### Second change: a streaming sink mode
+
+`StreamSink`, `ReadToSink`, `process_file_raw_seeded` and `read_to_sink` are
+local additions (all marked `ps5upload local addition` in the source).
+
+Upstream's only way to get an entry's bytes without writing them to disk is
+`read()`, which returns a `Vec<u8>` — the whole entry in memory. PS5 game
+dumps carry single entries of 30 GB and more, so ps5upload needs the chunks
+as UnRAR produces them.
+
+The C API already delivers data incrementally through `UCM_PROCESSDATA`;
+upstream's `ReadToVec` just accumulates it. `ReadToSink` forwards each chunk
+to a bounded channel instead, under the same `Operation::Test` that
+`ReadToVec` uses — which decompresses *without* writing files. Sending on a
+full channel blocks, which is exactly the backpressure that keeps peak
+memory at a few chunks.
+
+`process_file_raw_seeded` exists because `process_file_raw` builds its
+`Output` with `Default::default()`, and a channel cannot be conjured from
+`Default`.
+
 ## Why vendored rather than upgraded
 
 `0.5.8` is the latest release; there is no upstream fix to take. The

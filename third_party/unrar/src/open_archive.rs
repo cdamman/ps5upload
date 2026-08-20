@@ -385,6 +385,33 @@ impl OpenArchive<Process, CursorBeforeFile> {
         Ok(self.process_file_x::<ReadToVec>(None, None)?)
     }
 
+    /// ps5upload local addition: decompress this entry straight into `sink`.
+    ///
+    /// Returns the sink (so the caller can check `disconnected`) and the
+    /// archive positioned at the next header. Unlike `read`, nothing is
+    /// buffered: chunks leave through the sink as UnRAR produces them.
+    pub fn read_to_sink(
+        self,
+        sink: StreamSink,
+    ) -> UnrarResult<(StreamSink, OpenArchive<Process, CursorBeforeHeader>)> {
+        let out = Internal::<ReadToSink>::process_file_raw_seeded(
+            &self.handle,
+            None,
+            None,
+            sink,
+        )?;
+        Ok((
+            out,
+            OpenArchive {
+                extra: CursorBeforeHeader,
+                damaged: self.damaged,
+                handle: self.handle,
+                flags: self.flags,
+                marker: std::marker::PhantomData,
+            },
+        ))
+    }
+
     /// Test the file without extracting it
     pub fn test(self) -> UnrarResult<OpenArchive<Process, CursorBeforeHeader>> {
         Ok(self.process_file::<Test>(None, None)?)
@@ -483,6 +510,74 @@ impl ProcessMode for ReadToVec {
         my.extend_from_slice(other);
     }
 }
+/// ps5upload local addition: stream decompressed bytes to a channel instead
+/// of accumulating them in a `Vec`.
+///
+/// Upstream offers `ReadToVec`, which buffers a whole entry in memory. PS5
+/// game dumps carry single entries of 30 GB and more, so ps5upload needs the
+/// chunks as they arrive. `Operation::Test` is what makes this possible: it
+/// decompresses through the callback WITHOUT writing files to disk.
+pub struct StreamSink {
+    tx: Option<std::sync::mpsc::SyncSender<Box<[u8]>>>,
+    disconnected: bool,
+}
+
+impl core::fmt::Debug for StreamSink {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("StreamSink")
+            .field("disconnected", &self.disconnected)
+            .finish()
+    }
+}
+
+impl Default for StreamSink {
+    fn default() -> Self {
+        Self {
+            tx: None,
+            disconnected: false,
+        }
+    }
+}
+
+impl StreamSink {
+    /// Build a sink that forwards each decompressed chunk to `tx`.
+    pub fn new(tx: std::sync::mpsc::SyncSender<Box<[u8]>>) -> Self {
+        Self {
+            tx: Some(tx),
+            disconnected: false,
+        }
+    }
+
+    /// True once the receiving end went away. The caller stops the walk; we
+    /// cannot return an error from inside the C callback.
+    pub fn disconnected(&self) -> bool {
+        self.disconnected
+    }
+}
+
+#[derive(Debug)]
+struct ReadToSink;
+
+impl ProcessMode for ReadToSink {
+    const OPERATION: private::Operation = private::Operation::Test;
+    type Output = StreamSink;
+
+    fn process_data(sink: &mut Self::Output, data: &[u8]) {
+        if sink.disconnected {
+            return;
+        }
+        let Some(tx) = sink.tx.as_ref() else {
+            sink.disconnected = true;
+            return;
+        };
+        // Blocks while the consumer is busy — this IS the backpressure that
+        // keeps peak memory at a few chunks instead of a whole entry.
+        if tx.send(data.to_vec().into_boxed_slice()).is_err() {
+            sink.disconnected = true;
+        }
+    }
+}
+
 impl ProcessMode for Extract {
     const OPERATION: private::Operation = private::Operation::Extract;
     type Output = ();
@@ -564,6 +659,37 @@ impl<M: ProcessMode> Internal<M> {
                 0
             }
             _ => 0,
+        }
+    }
+
+    /// ps5upload local addition: like `process_file_raw`, but starts from a
+    /// caller-supplied `Output` instead of `Default::default()`. `StreamSink`
+    /// has to carry a channel in, which `Default` cannot express.
+    fn process_file_raw_seeded(
+        handle: &Handle,
+        path: Option<&pathed::RarStr>,
+        file: Option<&pathed::RarStr>,
+        seed: M::Output,
+    ) -> UnrarResult<M::Output> {
+        // `Userdata<T>` is a type alias for `(T, Option<WideCString>)`.
+        let mut user_data: Userdata<M::Output> = (seed, None);
+        unsafe {
+            native::RARSetCallback(
+                handle.0.as_ptr(),
+                Some(Self::callback),
+                &mut user_data as *mut _ as native::LPARAM,
+            );
+        }
+        let process_result = Code::from(pathed::process_file(
+            handle.0.as_ptr(),
+            M::OPERATION as i32,
+            path,
+            file,
+        ))
+        .unwrap();
+        match process_result {
+            Code::Success => Ok(user_data.0),
+            _ => Err(UnrarError::from(process_result, When::Process)),
         }
     }
 
@@ -706,5 +832,26 @@ mod tests {
         use super::unpack_unp_size;
         let (high, low) = (1u32, 1464303715u32);
         assert_eq!(unpack_unp_size(low, high), 5759271011);
+    }
+}
+
+#[cfg(test)]
+mod sink_tests {
+    use super::*;
+
+    #[test]
+    fn sink_forwards_chunks_and_flags_disconnect() {
+        let (tx, rx) = std::sync::mpsc::sync_channel::<Box<[u8]>>(4);
+        let mut sink = StreamSink::new(tx);
+        ReadToSink::process_data(&mut sink, b"hello ");
+        ReadToSink::process_data(&mut sink, b"world");
+        assert!(!sink.disconnected());
+        let got: Vec<u8> = rx.try_iter().flat_map(|c| c.into_vec()).collect();
+        assert_eq!(got, b"hello world");
+
+        // Consumer gone: must flag, never panic — this runs inside a C callback.
+        drop(rx);
+        ReadToSink::process_data(&mut sink, b"more");
+        assert!(sink.disconnected());
     }
 }
