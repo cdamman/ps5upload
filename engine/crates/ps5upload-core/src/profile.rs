@@ -463,6 +463,10 @@ pub struct ProfileSlot {
     pub id: String,
     #[serde(default)]
     pub activated: bool,
+    /// Activated by OUR offline flow (flags == 0x1002) rather than by a
+    /// real PSN link. `activated` says it works; this says how it got there.
+    #[serde(default)]
+    pub offline_activated: bool,
 }
 
 /// A local console user (from `/user/home` enumeration).

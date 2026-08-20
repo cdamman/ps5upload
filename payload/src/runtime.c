@@ -13887,12 +13887,25 @@ static int handle_profile_info(int client_fd, uint64_t trace_id) {
         char tesc[PROFILE_TYPE_MAX * 2 + 2];
         json_escape_into(name, nesc, sizeof(nesc));
         json_escape_into(type, tesc, sizeof(tesc));
-        int activated = (id != 0 && flags == PROFILE_DEFAULT_FLAGS);
+        /* Activated means the account can be used — it has an id and an
+         * "np" type. It does NOT mean "activated by us".
+         *
+         * PROFILE_DEFAULT_FLAGS (0x1002) is what our own offline
+         * activation writes; a legitimately PSN-linked account carries
+         * different flags entirely (6, on a real console). Requiring our
+         * exact value told those users they were "not activated" — which
+         * invites them to run activation on a perfectly good account, and
+         * rewriting the account id of a working profile is how save data
+         * gets orphaned. `offline` reports HOW it was activated, which is
+         * the genuinely useful distinction. */
+        int activated = (id != 0 && strcmp(type, "np") == 0);
+        int offline_act = (id != 0 && flags == PROFILE_DEFAULT_FLAGS);
         int n = snprintf(body + len, sizeof(body) - len,
             "%s{\"slot\":%d,\"name\":\"%s\",\"type\":\"%s\",\"flags\":%d,"
-            "\"id\":\"0x%016llx\",\"activated\":%s}",
+            "\"id\":\"0x%016llx\",\"activated\":%s,\"offline_activated\":%s}",
             first ? "" : ",", s, nesc, tesc, flags,
-            (unsigned long long)id, activated ? "true" : "false");
+            (unsigned long long)id, activated ? "true" : "false",
+            offline_act ? "true" : "false");
         if (n <= 0 || n >= (int)(sizeof(body) - len)) break;
         len += n;
         first = 0;
