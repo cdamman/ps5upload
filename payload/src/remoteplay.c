@@ -220,6 +220,47 @@ static void rp_get_account_id(char *out, size_t out_sz) {
     snprintf(out, out_sz, "%s", b64);
 }
 
+/* Turn Remote Play on.
+ *
+ * Two scopes, because FW 10.00 split them: the system-wide service
+ * toggle, and per-user permission ("select which users can access your
+ * console"). A console can have the service on while the account being
+ * used is not permitted — pairing succeeds and every session is refused.
+ *
+ * Returns the re-read readiness snapshot rather than a bare ok, so the
+ * caller never has to assume the write stuck.
+ *
+ * Return: >=0 length written, -1 write failed, -2 firmware has no
+ * per-user setting, -3 no foreground user to apply it to. */
+int remoteplay_enable(int user_scope, char *out, size_t out_size) {
+    unsigned int fw = fw_safe_kernel_version();
+
+    if (!user_scope) {
+        uint32_t ec = 0;
+        if (sys_registry_set_int(rp_key_service_enable(), 1, &ec) != 0) {
+            return -1;
+        }
+    } else {
+        /* Refuse rather than write a key that may not exist on this
+         * firmware. rp_fw_has_per_user_enable() also returns 0 when the
+         * version could not be read at all, so an unidentified console
+         * fails closed. */
+        if (!rp_fw_has_per_user_enable(fw)) return -2;
+
+        int uid = 0;
+        rp_user_service_ready();
+        if (sceUserServiceGetForegroundUser(&uid) != 0 || uid <= 0) return -3;
+        int slot = rp_slot_for_user(uid);
+        if (slot < 1) return -3;
+
+        uint32_t ec = 0;
+        if (sys_registry_set_int(rp_key_user_enable((uint32_t)slot), 1, &ec) != 0) {
+            return -1;
+        }
+    }
+    return remoteplay_readiness_json(out, out_size);
+}
+
 static void rp_json_escape(const char *src, char *dst, size_t dst_cap);
 
 /* Read-only snapshot of everything that decides whether Remote Play can

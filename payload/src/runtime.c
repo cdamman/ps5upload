@@ -391,6 +391,7 @@ extern int posix_fallocate(int fd, off_t offset, off_t len);
 #define FTX2_FRAME_REMOTEPLAY_CANCEL_ACK 191u
 /* Read-only readiness snapshot — every precondition Remote Play needs. */
 #define FTX2_FRAME_REMOTEPLAY_READINESS  248u
+#define FTX2_FRAME_REMOTEPLAY_ENABLE     249u
 /* v4.1: Fan curve editor (set + get) */
 #define FTX2_FRAME_HW_FAN_CURVE_SET      196u
 #define FTX2_FRAME_HW_FAN_CURVE_SET_ACK  197u
@@ -793,10 +794,21 @@ static void extract_json_string_field(const char *json, const char *field,
     const char *end = NULL;
     if (!json || !field || !out || out_len == 0) return;
     out[0] = '\0';
-    snprintf(needle, sizeof(needle), "\"%s\":\"", field);
+    /* Match `"field":` and then skip whitespace before the opening quote.
+     *
+     * The old needle spliced the quote on (`"field":"`), so a body with a
+     * space after the colon — which any pretty-printer emits, and which
+     * is perfectly legal JSON — silently produced an EMPTY field instead
+     * of an error. Callers then acted on "" as though the client had sent
+     * it. Our engine happens to emit compact JSON, which is the only
+     * reason this never bit us. */
+    snprintf(needle, sizeof(needle), "\"%s\":", field);
     pos = strstr(json, needle);
     if (!pos) return;
-    start = pos + strlen(needle);
+    pos += strlen(needle);
+    while (*pos == ' ' || *pos == '\t' || *pos == '\n' || *pos == '\r') pos++;
+    if (*pos != '"') return; /* present but not a string value */
+    start = pos + 1;
     end = json_string_end(start, NULL);
     if (!end) return;
     if (json_copy_unescaped_string(start, end, out, out_len) != 0) out[0] = '\0';
@@ -15745,6 +15757,26 @@ static int handle_binary_frame(runtime_state_t *state, int client_fd,
                               "readiness_overflow", 18);
         }
         return send_frame(client_fd, FTX2_FRAME_REMOTEPLAY_READINESS, 0,
+                          hdr.trace_id, body, (uint64_t)n);
+    }
+    if (hdr.frame_type == FTX2_FRAME_REMOTEPLAY_ENABLE) {
+        char scope[16] = "";
+        extract_json_string_field(request_body, "scope", scope, sizeof(scope));
+        char body[640];
+        int n = remoteplay_enable(strcmp(scope, "user") == 0, body, sizeof(body));
+        if (n == -2) {
+            return send_frame(client_fd, FTX2_FRAME_ERROR, 0, hdr.trace_id,
+                              "rp_enable_unsupported_fw", 24);
+        }
+        if (n == -3) {
+            return send_frame(client_fd, FTX2_FRAME_ERROR, 0, hdr.trace_id,
+                              "rp_enable_no_user", 17);
+        }
+        if (n < 0 || (size_t)n >= sizeof(body)) {
+            return send_frame(client_fd, FTX2_FRAME_ERROR, 0, hdr.trace_id,
+                              "rp_enable_write_failed", 22);
+        }
+        return send_frame(client_fd, FTX2_FRAME_REMOTEPLAY_ENABLE, 0,
                           hdr.trace_id, body, (uint64_t)n);
     }
     if (hdr.frame_type == FTX2_FRAME_REMOTEPLAY_STATUS) {

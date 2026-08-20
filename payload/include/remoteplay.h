@@ -16,4 +16,10 @@ int remoteplay_cancel(void);
  * negative on error. Performs no writes. */
 int remoteplay_readiness_json(char *out, size_t out_size);
 
+/* Enable Remote Play. user_scope=0 is the system service toggle,
+ * user_scope=1 is per-user permission (FW 10.00+). Writes the re-read
+ * readiness snapshot to `out`. Returns >=0 on success, -1 write failed,
+ * -2 no per-user setting on this firmware, -3 no foreground user. */
+int remoteplay_enable(int user_scope, char *out, size_t out_size);
+
 #endif
