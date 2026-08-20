@@ -928,10 +928,7 @@ pub async fn remoteplay_devices(addr: Option<String>) -> Result<JsonValue, Strin
 }
 
 #[tauri::command]
-pub async fn remoteplay_enable(
-    addr: Option<String>,
-    scope: String,
-) -> Result<JsonValue, String> {
+pub async fn remoteplay_enable(addr: Option<String>, scope: String) -> Result<JsonValue, String> {
     let base = engine::url();
     let mut url = format!("{base}/api/ps5/remoteplay/enable");
     if let Some(a) = addr {

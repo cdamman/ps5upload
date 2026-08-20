@@ -4,8 +4,32 @@ What's new in ps5upload, written for humans.
 
 ---
 
-## Unreleased
+## 5.4.0
 
+**A new Health Check screen, and a fix for a crash that could shut your
+console down.**
+
+- **New: Health Check.** One screen that tells you whether your console and
+  this app are set up correctly and working. It checks the connection, the
+  helper, storage, system settings and Remote Play, and puts a Fix button
+  next to anything it can repair for you. Where something genuinely cannot
+  be checked on your firmware, it says so rather than pretending it passed
+  or failed.
+- **Clean up leftover files.** Health Check finds unfinished files left
+  behind by interrupted transfers and offers to delete them. It shows you
+  the exact list and total size first, and only ever touches its own
+  folders.
+- **Fixed a crash that could shut the console down.** Opening the Profile
+  screen while Remote Play was being checked in the background could crash
+  the console and force a restart. Two things were talking to the same part
+  of the system at once; they now take turns.
+- **Play-time totals can no longer be lost.** If the console ran out of
+  space while saving, the file was replaced with an incomplete one and every
+  recorded total was gone. It now leaves the previous file alone if the save
+  does not fully succeed.
+- **One of the built-in cheat sources returned nothing.** It was looking in
+  the wrong place, so it silently contributed no results. It now works, and
+  roughly doubles the number of cheats you can find.
 - **Remote Play works.** It never has: the helper called one of Sony's
   functions the wrong way and gave up before it started. You can now pair
   a device from the Remote Play screen and get a PIN.
@@ -16,7 +40,6 @@ What's new in ps5upload, written for humans.
 - **Date and time settings work again.** The console's timezone and clock
   format were always blank. Same underlying cause as Remote Play: the
   helper could not read the console's settings at all.
-
 - **`.rar` uploads no longer need free space on your PC.** A `.rar` used to
   be extracted in full before anything was sent, so a 180 GB game needed
   180 GB free on top of the archive. It is now decompressed and sent at the
@@ -26,11 +49,13 @@ What's new in ps5upload, written for humans.
   longer needed; you can delete it if you set it.
 - A failed `.rar` upload can no longer leave a part-extracted folder behind,
   because there is no longer anywhere for one to be left.
+- **Added a disclaimer.** This is research and homebrew software for
+  consoles you own, provided as is, and you take responsibility for what you
+  do with it. See DISCLAIMER.md.
 
-Verified on a real 9-volume, 127 GB password-protected archive (181 files,
-every name and size matching) and by uploading a real game's files to two
-PS5s — firmware 5.10 and 9.60 — reading them back off each console to
-confirm.
+Verified on two consoles — firmware 5.10 and 9.60 — including the crash
+fix, the health checks, and a real 9-volume, 127 GB password-protected
+archive (181 files, every name and size matching).
 
 ---
 

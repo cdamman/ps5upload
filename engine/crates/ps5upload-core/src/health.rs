@@ -360,8 +360,7 @@ pub fn run_health_scan(addr: &str, engine_version: &str) -> HealthReport {
                     "Firmware detected",
                     CheckCategory::Runtime,
                     CheckStatus::Skip,
-                    "The console did not report a readable firmware version."
-                        .to_string(),
+                    "The console did not report a readable firmware version.".to_string(),
                 )),
             }
 
@@ -371,7 +370,11 @@ pub fn run_health_scan(addr: &str, engine_version: &str) -> HealthReport {
                 "rp_service_enabled",
                 "Remote Play is enabled",
                 CheckCategory::RemotePlay,
-                if svc { CheckStatus::Pass } else { CheckStatus::Warn },
+                if svc {
+                    CheckStatus::Pass
+                } else {
+                    CheckStatus::Warn
+                },
                 if svc {
                     "Remote Play is switched on.".to_string()
                 } else {
@@ -483,7 +486,11 @@ pub fn run_health_scan(addr: &str, engine_version: &str) -> HealthReport {
         "tool_dirs_present",
         "Tool folders exist",
         CheckCategory::Storage,
-        if missing.is_empty() { CheckStatus::Pass } else { CheckStatus::Warn },
+        if missing.is_empty() {
+            CheckStatus::Pass
+        } else {
+            CheckStatus::Warn
+        },
         if missing.is_empty() {
             "All folders ps5upload needs are present.".to_string()
         } else {
@@ -504,15 +511,18 @@ pub fn run_health_scan(addr: &str, engine_version: &str) -> HealthReport {
             "Leftover files",
             CheckCategory::Hygiene,
             CheckStatus::Skip,
-            "Could not read every tool folder, so leftovers were not counted."
-                .to_string(),
+            "Could not read every tool folder, so leftovers were not counted.".to_string(),
         )
     } else {
         HealthCheck::new(
             "junk_files",
             "Leftover files",
             CheckCategory::Hygiene,
-            if junk_files.is_empty() { CheckStatus::Pass } else { CheckStatus::Warn },
+            if junk_files.is_empty() {
+                CheckStatus::Pass
+            } else {
+                CheckStatus::Warn
+            },
             if junk_files.is_empty() {
                 "No leftover files from interrupted transfers.".to_string()
             } else {
@@ -543,7 +553,11 @@ pub fn run_health_scan(addr: &str, engine_version: &str) -> HealthReport {
                     let skew = (console_unix - host).abs();
                     // Five minutes: past normal drift, short of anything
                     // that breaks licence checks on its own.
-                    let status = if skew > 300 { CheckStatus::Warn } else { CheckStatus::Pass };
+                    let status = if skew > 300 {
+                        CheckStatus::Warn
+                    } else {
+                        CheckStatus::Pass
+                    };
                     let mut c = HealthCheck::new(
                         "clock_sane",
                         "Console clock",
@@ -565,8 +579,7 @@ pub fn run_health_scan(addr: &str, engine_version: &str) -> HealthReport {
                     "Console clock",
                     CheckCategory::System,
                     CheckStatus::Skip,
-                    "The console reported a date that could not be interpreted."
-                        .to_string(),
+                    "The console reported a date that could not be interpreted.".to_string(),
                 )),
             }
         }
@@ -763,8 +776,8 @@ mod tests {
             "CUSA00002_01.00.json",
             "backup.zip",
             "important.txt",
-            "partition",   // starts with "part" but is not a suffix
-            "tmpfile",     // contains "tmp" but is not a suffix
+            "partition", // starts with "part" but is not a suffix
+            "tmpfile",   // contains "tmp" but is not a suffix
             "notes.partly",
         ] {
             assert!(!is_junk_entry(name), "{name} must not be treated as junk");
@@ -796,7 +809,15 @@ mod tests {
             HealthCheck::new("e", "E", CheckCategory::System, CheckStatus::Pass, ""),
         ];
         let s = summarize(&checks);
-        assert_eq!(s, HealthSummary { pass: 2, warn: 1, fail: 1, skip: 1 });
+        assert_eq!(
+            s,
+            HealthSummary {
+                pass: 2,
+                warn: 1,
+                fail: 1,
+                skip: 1
+            }
+        );
     }
 
     #[test]

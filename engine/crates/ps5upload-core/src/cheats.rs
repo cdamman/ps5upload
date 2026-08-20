@@ -795,13 +795,19 @@ mod tests {
 
     #[test]
     fn tree_entry_from_path_rejects_nested() {
-        assert_eq!(tree_entry_from_path("cheats/json/sub/a.json", "cheats/"), None);
+        assert_eq!(
+            tree_entry_from_path("cheats/json/sub/a.json", "cheats/"),
+            None
+        );
     }
 
     #[test]
     fn tree_entry_from_path_rejects_mismatched_extension() {
         // A README or image sitting inside a format directory.
-        assert_eq!(tree_entry_from_path("cheats/json/README.md", "cheats/"), None);
+        assert_eq!(
+            tree_entry_from_path("cheats/json/README.md", "cheats/"),
+            None
+        );
         assert_eq!(tree_entry_from_path("cheats/json/noext", "cheats/"), None);
     }
 
@@ -821,7 +827,11 @@ mod tests {
                 "repo {} has no enumeration strategy",
                 r.id
             );
-            assert!(!r.content_base.is_empty(), "repo {} has no content_base", r.id);
+            assert!(
+                !r.content_base.is_empty(),
+                "repo {} has no content_base",
+                r.id
+            );
             assert!(
                 r.content_base.ends_with('/'),
                 "repo {} content_base must end in / so URLs join correctly",
@@ -835,8 +845,15 @@ mod tests {
         // Regression: this entry used to point at `main/` (the repo is
         // on `master`) and at the repo root (cheats live under
         // `cheats/`), so every lookup 404'd.
-        let r = cheat_repos().into_iter().find(|r| r.id == "henmix").unwrap();
-        assert!(r.content_base.ends_with("/master/cheats/"), "{}", r.content_base);
+        let r = cheat_repos()
+            .into_iter()
+            .find(|r| r.id == "henmix")
+            .unwrap();
+        assert!(
+            r.content_base.ends_with("/master/cheats/"),
+            "{}",
+            r.content_base
+        );
         assert!(r.tree_api.contains("/git/trees/master"), "{}", r.tree_api);
         assert!(r.index_files.is_empty());
     }

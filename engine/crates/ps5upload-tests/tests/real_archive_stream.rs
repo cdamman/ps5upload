@@ -66,7 +66,7 @@ fn real_archive_streams_every_entry_at_its_declared_size() {
         }
         streamed += got;
         seen += 1;
-        if seen % 30 == 0 {
+        if seen.is_multiple_of(30) {
             println!(
                 "  {seen}/{} entries, {streamed} bytes, {:?}",
                 expected.len(),

@@ -3222,10 +3222,8 @@ async fn health_junk_handler(
     Query(q): Query<AddrQuery>,
 ) -> impl IntoResponse {
     let addr = mgmt_addr_or_default(q.addr, &state.default_ps5_addr);
-    let result = tokio::task::spawn_blocking(move || {
-        ps5upload_core::health::preview_junk(&addr)
-    })
-    .await;
+    let result =
+        tokio::task::spawn_blocking(move || ps5upload_core::health::preview_junk(&addr)).await;
     match result {
         Ok(items) => {
             let total: u64 = items.iter().map(|(_, s)| s).sum();
