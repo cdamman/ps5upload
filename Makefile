@@ -686,6 +686,9 @@ test-payload: payload
 		}; \
 	done
 	@echo "✓ Main payload and DPI installer are PS5 ELFs with gzip resources"
+	@echo "Checking Sony-API lock coverage..."
+	@./scripts/check-sony-api-lock.sh $(PAYLOAD_DIR)/src
+	@echo "✓ every sceUserService/sceRegMgr caller is serialized"
 	@echo "Running hw-guard fault-recovery self-test (host build)..."
 	@cc -O2 -Wall -Wextra -Werror -o /tmp/ps5upload-hw-guard-selftest \
 		$(PAYLOAD_DIR)/tests/hw_guard_selftest.c
