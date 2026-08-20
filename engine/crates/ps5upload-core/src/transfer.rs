@@ -3890,8 +3890,8 @@ pub fn transfer_7z_resumable(
 // ═══════════════════════════════════════════════════════════════════════════
 #[cfg(not(target_os = "android"))]
 pub use rar_support::{
-    inspect_rar, rar_plan_preview, spawn_rar_worker_for_test, transfer_rar_resumable,
-    transfer_rar_streaming,
+    inspect_rar, rar_plan_entries_for_test, rar_plan_preview, spawn_rar_worker_for_test,
+    transfer_rar_resumable, transfer_rar_streaming,
 };
 
 #[cfg(not(target_os = "android"))]
@@ -4362,6 +4362,17 @@ mod rar_support {
         });
 
         (rx, handle)
+    }
+
+    /// Test-only shim: archive-order entries, for harnesses that need to
+    /// check the streaming manifest rather than the sorted preview.
+    #[doc(hidden)]
+    pub fn rar_plan_entries_for_test(
+        archive_path: &Path,
+        password: Option<&str>,
+        excludes: &[String],
+    ) -> Result<(u64, Vec<(String, u64)>)> {
+        rar_plan_entries(archive_path, password, excludes)
     }
 
     /// Test-only shim so an out-of-crate harness can drive the worker
