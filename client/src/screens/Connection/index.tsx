@@ -7,7 +7,7 @@ import {
   PS5_LOADER_PORT,
 } from "../../state/connection";
 import {
-  portCheck,
+  portProbe,
   payloadCheck,
   sendPayload,
   bundledPayloadPath,
@@ -328,22 +328,23 @@ export default function ConnectionScreen() {
     settleStep2("idle", tr("connection_payload_not_loaded", undefined, "Helper not loaded yet"));
     setTransientStep2(null);
     setTransientStep2Msg(null);
-    const ok = await portCheck(target, PS5_LOADER_PORT);
-    if (ok) {
+    const probe = await portProbe(target, PS5_LOADER_PORT);
+    if (probe.open) {
       settleStep1("ok", tr(
           "connection_port_open",
           { port: PS5_LOADER_PORT, host: target },
           `Port ${PS5_LOADER_PORT} is open on ${target}`,
         ));
     } else {
-      settleStep1(
-        "fail",
-        tr(
-          "connection_port_closed",
-          { port: PS5_LOADER_PORT, host: target },
-          "Port {port} is not open on {host}",
-        ),
+      // Append the probe's own reason. Without it a name that simply didn't
+      // resolve reads identically to a console that isn't jailbroken yet,
+      // and the user has no way to tell the two apart (#272).
+      const base = tr(
+        "connection_port_closed",
+        { port: PS5_LOADER_PORT, host: target },
+        "Port {port} is not open on {host}",
       );
+      settleStep1("fail", probe.error ? `${base} — ${probe.error}` : base);
     }
   }
 
@@ -1054,6 +1055,11 @@ function CompanionStrip({ host }: { host: string }) {
 
   useEffect(() => {
     let cancelled = false;
+    // Drop the previous host's rows immediately. Without this the strip kept
+    // rendering the OLD console's chips under the NEW host's heading until
+    // the first probe answered — which is how #272's reporter (reasonably)
+    // concluded that name resolution was working for FTP but not for us.
+    setRows(null);
     // In-flight guard so the 30 s interval doesn't fire a second probe
     // while the first is still running. On a slow LAN the per-port TCP
     // probes can take 6 × 1.5 s = 9 s each; without this, a 30 s tick

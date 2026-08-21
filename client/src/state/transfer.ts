@@ -401,7 +401,18 @@ export const useTransferStore = create<TransferState>((set) => {
         setPhase(key, { kind: "failed", error: msg });
         return;
       }
-      if (!isLive()) return;
+      // A Cancel that lands while the start request is still in flight has no
+      // job id to act on — it can only bump the generation. The engine's
+      // answer arrives after that, and dropping the id here would leave the
+      // transfer running with nothing able to stop it short of killing the
+      // app. Widest for .rar, whose route plans the whole archive inside the
+      // request handler before minting the id (user report, 5.4.7).
+      if (!isLive()) {
+        void jobCancel(jobId).catch(() => {
+          /* engine gone — the transfer dies with it either way */
+        });
+        return;
+      }
 
       const startedAtMs = Date.now();
       setPhase(key, {

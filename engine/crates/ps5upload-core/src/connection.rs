@@ -8,7 +8,7 @@
 //! `drain_body` rather than `recv_frame`, which buffers the full body.
 
 use std::io::{self, IoSlice, Read, Write};
-use std::net::TcpStream;
+use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
 use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
@@ -218,12 +218,44 @@ fn write_all_parts<W: Write>(stream: &mut W, parts: &[&[u8]]) -> io::Result<()> 
     Ok(())
 }
 
+/// Resolve a `host:port` string into the concrete socket addresses to try.
+///
+/// `SocketAddr`'s `FromStr` is a pure literal parser — it never consults the
+/// resolver — so parsing straight into a `SocketAddr` (what this function
+/// replaced) rejected every DNS name outright. Consoles reached by hostname
+/// (`ps5.lan:9114`) failed at `Connection::connect` before any packet left the
+/// host, which is issue #272.
+///
+/// Order matters: candidates are returned IPv4-first. The PS5's LAN listeners
+/// are IPv4 in practice, and a name that also carries an unreachable AAAA
+/// would otherwise burn a full `DEFAULT_CONNECT_TIMEOUT` on IPv6 before
+/// falling back on every single frame.
+///
+/// The IP-literal fast path is kept ahead of `to_socket_addrs` so the common
+/// case (the address the app stores after discovery) never touches the
+/// resolver at all.
+fn resolve_connect_targets(addr: &str) -> Result<Vec<SocketAddr>> {
+    if let Ok(sa) = addr.parse::<SocketAddr>() {
+        return Ok(vec![sa]);
+    }
+    let mut out: Vec<SocketAddr> = addr
+        .to_socket_addrs()
+        .with_context(|| format!("resolve addr: {addr}"))?
+        .collect();
+    if out.is_empty() {
+        bail!("resolve addr: {addr} resolved to no addresses");
+    }
+    out.sort_by_key(|sa| !sa.is_ipv4());
+    Ok(out)
+}
+
 impl Connection {
     /// Open a connection to the payload runtime control port.
+    ///
+    /// `addr` is `host:port`, where `host` is either an IP literal or a DNS
+    /// name — see `resolve_connect_targets`.
     pub fn connect(addr: &str) -> Result<Self> {
-        let sock_addr = addr
-            .parse()
-            .with_context(|| format!("parse addr: {addr}"))?;
+        let targets = resolve_connect_targets(addr)?;
         // Retry transient *local* resource-exhaustion failures (Windows
         // WSAENOBUFS 10055 under multi-stream churn) with a short backoff.
         // These are not a dead peer — the host stack is momentarily out of
@@ -231,29 +263,47 @@ impl Connection {
         // ms. A genuinely unreachable PS5 fails with ConnectionRefused/TimedOut
         // (not a transient-resource code), so it still fast-fails here.
         let mut attempt = 0u32;
-        let stream = loop {
-            match TcpStream::connect_timeout(&sock_addr, DEFAULT_CONNECT_TIMEOUT) {
-                Ok(s) => break s,
-                Err(e)
-                    if is_transient_local_resource_error(&e)
-                        && attempt < MAX_CONNECT_RESOURCE_RETRIES =>
-                {
-                    // 100, 200, 400, 800, 1600, 3200 ms.
-                    let backoff = Duration::from_millis(100u64 << attempt.min(5));
-                    crate::core_log!(
-                        "connection: connect to {} hit transient local resource error \
-                         ({}); retry {}/{} after {} ms",
-                        addr,
-                        e,
-                        attempt + 1,
-                        MAX_CONNECT_RESOURCE_RETRIES,
-                        backoff.as_millis(),
-                    );
-                    std::thread::sleep(backoff);
-                    attempt += 1;
+        let stream = 'connected: loop {
+            // Try every address the name resolved to before giving up. A
+            // dual-stack host whose AAAA is dead must still reach the PS5 on
+            // its A record; `resolve_connect_targets` puts IPv4 first so the
+            // common case doesn't pay an IPv6 connect timeout to get there.
+            let mut last_err: Option<io::Error> = None;
+            for sa in &targets {
+                match TcpStream::connect_timeout(sa, DEFAULT_CONNECT_TIMEOUT) {
+                    Ok(s) => break 'connected s,
+                    Err(e) => last_err = Some(e),
                 }
-                Err(e) => return Err(e).with_context(|| format!("connect to {addr}")),
             }
+            // `resolve_connect_targets` guarantees a non-empty list, so the
+            // loop above always ran at least once and set `last_err`.
+            let e = match last_err {
+                Some(e) => e,
+                None => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::AddrNotAvailable,
+                        format!("no addresses to connect to for {addr}"),
+                    )
+                    .into())
+                }
+            };
+            if is_transient_local_resource_error(&e) && attempt < MAX_CONNECT_RESOURCE_RETRIES {
+                // 100, 200, 400, 800, 1600, 3200 ms.
+                let backoff = Duration::from_millis(100u64 << attempt.min(5));
+                crate::core_log!(
+                    "connection: connect to {} hit transient local resource error \
+                     ({}); retry {}/{} after {} ms",
+                    addr,
+                    e,
+                    attempt + 1,
+                    MAX_CONNECT_RESOURCE_RETRIES,
+                    backoff.as_millis(),
+                );
+                std::thread::sleep(backoff);
+                attempt += 1;
+                continue;
+            }
+            return Err(e).with_context(|| format!("connect to {addr}"));
         };
         stream.set_read_timeout(Some(DEFAULT_IO_TIMEOUT))?;
         stream.set_write_timeout(Some(DEFAULT_IO_TIMEOUT))?;
@@ -712,5 +762,82 @@ mod write_all_parts_tests {
         let mut expected = hdr.clone();
         expected.extend_from_slice(&body);
         assert_eq!(w.out, expected);
+    }
+}
+
+#[cfg(test)]
+mod addr_resolution_tests {
+    //! Pin hostname support in `Connection::connect`.
+    //!
+    //! Regression guard for #272: `connect` used `addr.parse()`, which
+    //! infers `SocketAddr` — and `SocketAddr`'s `FromStr` is a pure
+    //! literal parser that never consults the resolver. Every FTX2 frame
+    //! goes through here, so a console entered by DNS name (`ps5.lan:9114`)
+    //! failed with "invalid socket address syntax" before a single packet
+    //! left the host, while unrelated probes that use a resolving connect
+    //! (the scene-tool port strip) lit up green — which is exactly the
+    //! confusing split the reporter saw.
+    use super::*;
+    use std::net::{Ipv4Addr, SocketAddr, TcpListener};
+
+    #[test]
+    fn literal_socket_addrs_resolve_to_themselves() {
+        let out = resolve_connect_targets("192.168.1.131:9114").unwrap();
+        assert_eq!(
+            out,
+            vec!["192.168.1.131:9114".parse::<SocketAddr>().unwrap()]
+        );
+    }
+
+    #[test]
+    fn bracketed_ipv6_literals_still_parse() {
+        let out = resolve_connect_targets("[::1]:9114").unwrap();
+        assert_eq!(out, vec!["[::1]:9114".parse::<SocketAddr>().unwrap()]);
+    }
+
+    #[test]
+    fn hostnames_are_resolved() {
+        // `localhost` is the one name every CI box resolves. It may map to
+        // both ::1 and 127.0.0.1; we only assert that resolution happened
+        // and produced something usable.
+        let out = resolve_connect_targets("localhost:9114").unwrap();
+        assert!(
+            !out.is_empty(),
+            "localhost must resolve to at least one addr"
+        );
+        assert!(out.iter().all(|sa| sa.port() == 9114));
+    }
+
+    #[test]
+    fn ipv4_candidates_are_tried_first() {
+        // A dual-stack name whose AAAA is unreachable would otherwise burn a
+        // full connect timeout before falling back. The PS5's LAN listener is
+        // IPv4 in practice, so IPv4 leads.
+        let mixed = resolve_connect_targets("localhost:9114").unwrap();
+        if mixed.iter().any(|sa| sa.is_ipv4()) && mixed.iter().any(|sa| sa.is_ipv6()) {
+            assert!(mixed[0].is_ipv4(), "IPv4 must sort first: {mixed:?}");
+        }
+    }
+
+    #[test]
+    fn unresolvable_names_report_the_name() {
+        let err = resolve_connect_targets("no-such-host.invalid:9114").unwrap_err();
+        let msg = format!("{err:#}");
+        assert!(
+            msg.contains("no-such-host.invalid:9114"),
+            "error must name the address the user typed: {msg}"
+        );
+    }
+
+    #[test]
+    fn connect_accepts_a_hostname() {
+        // The end-to-end shape of the bug: a real listener, reached by name.
+        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let h = std::thread::spawn(move || {
+            let _ = listener.accept();
+        });
+        Connection::connect(&format!("localhost:{port}")).expect("connect by hostname must work");
+        let _ = h.join();
     }
 }

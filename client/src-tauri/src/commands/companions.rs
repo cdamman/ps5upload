@@ -116,30 +116,46 @@ pub async fn companion_probe(host: String) -> Vec<CompanionStatus> {
     // results in index order so the UI sees a stable list.
     let mut handles = Vec::with_capacity(COMPANIONS.len());
     for c in COMPANIONS.iter().copied() {
-        let addr = format!("{}:{}", host, c.port);
+        let host = host.clone();
         handles.push(tokio::spawn(async move {
-            match timeout(PROBE_TIMEOUT, TcpStream::connect(&addr)).await {
-                Ok(Ok(_)) => CompanionStatus {
-                    name: c.name,
-                    role: c.role,
-                    port: c.port,
-                    reachable: true,
-                    error: None,
-                },
-                Ok(Err(e)) => CompanionStatus {
-                    name: c.name,
-                    role: c.role,
-                    port: c.port,
-                    reachable: false,
-                    error: Some(e.to_string()),
-                },
-                Err(_) => CompanionStatus {
-                    name: c.name,
-                    role: c.role,
-                    port: c.port,
-                    reachable: false,
-                    error: Some("timeout".to_string()),
-                },
+            // Resolve through the shared helper so a hostname gets its own
+            // (longer) lookup budget instead of having to resolve AND connect
+            // inside PROBE_TIMEOUT — a slow first lookup used to render as
+            // "this tool isn't running" (#272).
+            let targets = match crate::commands::probes::resolve_targets(&host, c.port).await {
+                Ok(t) => t,
+                Err(e) => {
+                    return CompanionStatus {
+                        name: c.name,
+                        role: c.role,
+                        port: c.port,
+                        reachable: false,
+                        error: Some(e),
+                    }
+                }
+            };
+            let mut last = String::from("no addresses to try");
+            for sa in targets {
+                match timeout(PROBE_TIMEOUT, TcpStream::connect(sa)).await {
+                    Ok(Ok(_)) => {
+                        return CompanionStatus {
+                            name: c.name,
+                            role: c.role,
+                            port: c.port,
+                            reachable: true,
+                            error: None,
+                        }
+                    }
+                    Ok(Err(e)) => last = e.to_string(),
+                    Err(_) => last = "timeout".to_string(),
+                }
+            }
+            CompanionStatus {
+                name: c.name,
+                role: c.role,
+                port: c.port,
+                reachable: false,
+                error: Some(last),
             }
         }));
     }

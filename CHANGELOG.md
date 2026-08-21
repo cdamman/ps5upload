@@ -4,6 +4,30 @@ What's new in ps5upload, written for humans.
 
 ---
 
+## 5.4.8
+
+**Cancel really cancels, and a console can be reached by name.**
+
+- **Cancelling an upload stops it.** If you hit Cancel while the upload was
+  still being set up — the window is longest for a `.rar`, where the whole
+  archive is read through before the transfer starts — the transfer went
+  ahead anyway. Free space on the console kept shrinking, and closing the
+  app was the only way to stop it. Cancel now takes effect no matter when
+  you press it, and a cancelled upload is never quietly retried.
+- **You can use a host name instead of an IP address.** Typing something
+  like `ps5.lan` never worked: the address was only ever read as a literal
+  IP, so nothing could connect and the app reported the console as not
+  running the helper. Names now resolve, and IPv4 is preferred so a stale
+  IPv6 record doesn't slow every connection down.
+- **A failed connection check says why.** "Port 9021 is not open" now comes
+  with the actual reason, so a name that didn't resolve reads differently
+  from a console that isn't ready yet.
+- **The scene-tools strip no longer shows the previous console's tools.**
+  After switching address it kept the old results on screen until the new
+  check finished.
+
+---
+
 ## 5.4.7
 
 **Play time is counted more honestly.**

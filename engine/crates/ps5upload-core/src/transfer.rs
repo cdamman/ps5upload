@@ -378,6 +378,15 @@ fn is_cancel_err(err: &anyhow::Error) -> bool {
 /// not on protocol errors like `direct_tx_corrupt` (the payload has
 /// already aborted the tx — a retry can't help).
 pub fn is_retryable_transfer_error(err: &anyhow::Error) -> bool {
+    // A cancelled transfer is never retried. The user asked for it to stop —
+    // resuming would put bytes back on the wire after the UI said "cancelled",
+    // which is the exact symptom reported in 5.4.7. Today's cancel sentinel
+    // carries no io::Error so it would fall through to `false` anyway; this
+    // makes the guarantee explicit rather than incidental, so a future cancel
+    // path that wraps an io::Error (a killed socket, say) can't reintroduce it.
+    if is_cancel_err(err) {
+        return false;
+    }
     // Walk the chain looking for std::io::Error with a retryable kind.
     // Covers: mid-transfer TCP resets (ConnectionReset/ConnectionAborted/
     // BrokenPipe), server-side hang on shutdown (UnexpectedEof), wifi
@@ -4947,6 +4956,27 @@ mod retry_classification_tests {
 
     fn ioerr(kind: std::io::ErrorKind) -> anyhow::Error {
         anyhow::Error::from(std::io::Error::new(kind, "test"))
+    }
+
+    #[test]
+    fn never_retries_a_cancelled_transfer() {
+        // Cancel means stop. A retry here would put bytes back on the wire
+        // after the UI reported the upload cancelled — the 5.4.7 symptom.
+        let bare = anyhow::anyhow!("transfer_cancelled");
+        assert!(!is_retryable_transfer_error(&bare));
+
+        // Wrapped in the context the streaming paths add on the way out.
+        let wrapped = bare.context("transfer_rar attempt 0");
+        assert!(!is_retryable_transfer_error(&wrapped));
+
+        // And it must win even when a retryable io::Error rides along — a
+        // cancelled transfer whose socket also died is still cancelled.
+        let with_io = anyhow::Error::from(std::io::Error::new(
+            std::io::ErrorKind::ConnectionReset,
+            "peer went away",
+        ))
+        .context("transfer_cancelled");
+        assert!(!is_retryable_transfer_error(&with_io));
     }
 
     #[test]

@@ -522,6 +522,19 @@ export const useUploadQueueStore = create<QueueState>((set, get) => {
       );
     }
 
+    // A Stop / Cancel that lands while the start request is still in flight
+    // has no job id to act on, so it can only bump the generation. By the
+    // time the engine answers, this loop is already dead — and without the
+    // cancel below the transfer would run to completion with nothing able to
+    // stop it but killing the app. The window is widest for .rar, whose route
+    // plans the whole archive inside the request handler before minting the
+    // id (user report, 5.4.7).
+    if (!isLive()) {
+      void jobCancel(jobId).catch(() => {
+        /* engine gone — the transfer dies with it either way */
+      });
+      throw new Error("queue stopped");
+    }
     // Record the live job id for this console so stopHost/stop can ask the
     // engine to truly cancel the transfer (overwritten by the next item;
     // staleness is harmless — cancelling a finished job is a server no-op).

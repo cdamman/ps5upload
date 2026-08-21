@@ -302,6 +302,45 @@ describe("upload runner concurrency (per-console, parallel)", () => {
     expect(mockedCancel).toHaveBeenCalledWith("job");
   });
 
+  it("cancels a job whose start was still in flight when Stop was clicked", async () => {
+    // The window this covers: POST /api/transfer/{...} has been sent but has
+    // not answered yet, so the UI holds no job id. The engine's .rar route is
+    // the worst case — it plans the entire archive inside the request handler
+    // before minting the job id, so a large .rar sits in that call for
+    // seconds. A user who hits Cancel during that window used to orphan the
+    // transfer: the store's generation was bumped, the late-arriving job id
+    // was dropped on the floor, and the engine happily uploaded the whole
+    // archive with nothing left able to cancel it. Killing the app was the
+    // only way to stop it (user report, 5.4.7).
+    const { jobCancel } = await import("../api/ps5");
+    const mockedCancel = vi.mocked(jobCancel);
+    mockedCancel.mockClear();
+
+    let release!: (jobId: string) => void;
+    mockedStartFile.mockImplementationOnce(
+      () =>
+        new Promise<string>((resolve) => {
+          release = resolve;
+        }),
+    );
+
+    addItem("192.168.1.10:9113", "A1");
+    void useUploadQueueStore.getState().startHost("192.168.1.10");
+    await vi.advanceTimersByTimeAsync(50);
+
+    // Cancel lands mid-flight: there is genuinely nothing to cancel yet.
+    useUploadQueueStore.getState().stopHost("192.168.1.10");
+    await vi.advanceTimersByTimeAsync(50);
+    expect(mockedCancel).not.toHaveBeenCalled();
+
+    // The engine finally answers. That job is live on the wire right now, so
+    // the late id must be cancelled rather than discarded.
+    release("late-job");
+    await vi.advanceTimersByTimeAsync(50);
+
+    expect(mockedCancel).toHaveBeenCalledWith("late-job");
+  });
+
   it("stopHost stops ONE console while siblings keep running", async () => {
     addItem("192.168.1.10:9113", "A1");
     addItem("192.168.1.20:9113", "B1");

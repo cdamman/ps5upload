@@ -3831,11 +3831,27 @@ export async function bundledPayloadInfo(): Promise<BundledPayloadInfo> {
  * string, call `invoke("port_check", ...)` directly.
  */
 export async function portCheck(ip: string, port: number): Promise<boolean> {
+  return (await portProbe(ip, port)).open;
+}
+
+/**
+ * Like `portCheck` but keeps the reason a probe failed.
+ *
+ * The Connection screen needs it: collapsing to a boolean turned every
+ * failure into "Port 9021 is not open", which reads as "your PS5 isn't
+ * jailbroken" even when the real cause was that the host name never
+ * resolved. The Rust side now classifies the two separately (#272), so the
+ * step-1 message can say which one happened.
+ */
+export async function portProbe(
+  ip: string,
+  port: number,
+): Promise<{ open: boolean; error: string | null }> {
   const resp = await invoke<{ open?: boolean; error?: string }>("port_check", {
     ip,
     port,
   });
-  return !!resp?.open;
+  return { open: !!resp?.open, error: resp?.error ?? null };
 }
 
 /**

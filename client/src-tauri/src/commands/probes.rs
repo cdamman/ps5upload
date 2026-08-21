@@ -3,6 +3,7 @@
 //! `stream the file + half-close` for payload_send, and a thin wrapper
 //! around the engine's FS_LIST_DIR for manage_list.
 
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -20,6 +21,17 @@ const PS5_LOADER_PORT: u16 = 9021;
 /// from the renderer, which supplies :9113 directly.
 const PS5_MGMT_PORT: u16 = 9114;
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(3);
+/// Name resolution gets its own, longer budget — separate from the connect
+/// budget above.
+///
+/// Folding DNS into `CONNECT_TIMEOUT` meant a console entered by hostname had
+/// to resolve AND complete a TCP handshake inside 3 s. A cold cache on a name
+/// the resolver has to walk a suffix search list for (Windows and a `.lan`
+/// name being the reported case, #272) can spend most of that budget on
+/// resolution alone, and the probe then reports "port not open" for what is
+/// really a slow lookup. Resolving separately also lets the error say which
+/// of the two actually failed.
+const RESOLVE_TIMEOUT: Duration = Duration::from_secs(10);
 const SEND_TIMEOUT: Duration = Duration::from_secs(60);
 const PAYLOAD_SEND_MAX_BYTES: u64 = 128 * 1024 * 1024;
 const EMBEDDED_PAYLOAD_MAX_BYTES: u64 = 128 * 1024 * 1024;
@@ -29,12 +41,58 @@ const EMBEDDED_PAYLOAD_MAX_BYTES: u64 = 128 * 1024 * 1024;
 /// reachable on a given service port.
 #[tauri::command]
 pub async fn port_check(ip: String, port: u16) -> serde_json::Value {
-    let addr = format!("{ip}:{port}");
-    match timeout(CONNECT_TIMEOUT, TcpStream::connect(&addr)).await {
-        Ok(Ok(_)) => serde_json::json!({ "open": true }),
-        Ok(Err(e)) => serde_json::json!({ "open": false, "error": e.to_string() }),
-        Err(_) => serde_json::json!({ "open": false, "error": "timeout" }),
+    match connect_probe(&ip, port).await {
+        Ok(()) => serde_json::json!({ "open": true }),
+        Err(e) => serde_json::json!({ "open": false, "error": e }),
     }
+}
+
+/// Resolve `host` (IP literal or DNS name) into the addresses to try, IPv4
+/// first. Shared with the scene-tool strip so both surfaces classify a
+/// hostname failure the same way — the split where one lit up green and the
+/// other said "not open" is what made #272 so hard to read.
+///
+/// The returned `Err` is a user-facing string: it names the host and says
+/// resolution, not connection, is what failed.
+pub(crate) async fn resolve_targets(host: &str, port: u16) -> Result<Vec<SocketAddr>, String> {
+    let addr = format!("{host}:{port}");
+    if let Ok(sa) = addr.parse::<SocketAddr>() {
+        return Ok(vec![sa]);
+    }
+    let resolved = match timeout(RESOLVE_TIMEOUT, tokio::net::lookup_host(addr)).await {
+        Ok(Ok(it)) => it,
+        Ok(Err(e)) => return Err(format!("cannot resolve \"{host}\": {e}")),
+        Err(_) => {
+            return Err(format!(
+                "cannot resolve \"{host}\": name lookup timed out after {}s",
+                RESOLVE_TIMEOUT.as_secs()
+            ))
+        }
+    };
+    let mut out: Vec<SocketAddr> = resolved.collect();
+    if out.is_empty() {
+        return Err(format!("cannot resolve \"{host}\": no addresses"));
+    }
+    // IPv4 first: the PS5's LAN listeners are IPv4 in practice, and a name
+    // carrying a dead AAAA would otherwise burn the whole connect budget on
+    // IPv6 before falling back.
+    out.sort_by_key(|sa| !sa.is_ipv4());
+    Ok(out)
+}
+
+/// Resolve then TCP-connect, reporting which step failed. `Ok(())` means the
+/// port accepted a connection.
+pub(crate) async fn connect_probe(host: &str, port: u16) -> Result<(), String> {
+    let targets = resolve_targets(host, port).await?;
+    let mut last = String::from("no addresses to try");
+    for sa in targets {
+        match timeout(CONNECT_TIMEOUT, TcpStream::connect(sa)).await {
+            Ok(Ok(_)) => return Ok(()),
+            Ok(Err(e)) => last = e.to_string(),
+            Err(_) => last = "timeout".to_string(),
+        }
+    }
+    Err(last)
 }
 
 /// Full payload probe. Before, this was a shallow TCP reachability
