@@ -686,6 +686,10 @@ test-payload: payload
 		}; \
 	done
 	@echo "✓ Main payload and DPI installer are PS5 ELFs with gzip resources"
+	@echo "Running play-time launch/resume self-test (host build)..."
+	@cc -O2 -Wall -Wextra -Werror -o /tmp/ps5upload-activity-selftest \
+		$(PAYLOAD_DIR)/tests/activity_launch_selftest.c
+	@/tmp/ps5upload-activity-selftest
 	@echo "Running app-info layout self-test (host build)..."
 	@cc -O2 -Wall -Wextra -Werror -o /tmp/ps5upload-app-info-selftest \
 		$(PAYLOAD_DIR)/tests/app_info_selftest.c

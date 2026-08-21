@@ -4,6 +4,20 @@ What's new in ps5upload, written for humans.
 
 ---
 
+## 5.4.7
+
+**Play time is counted more honestly.**
+
+- **"Times played" no longer climbs on its own.** Reloading the helper while
+  a game was running counted as a fresh launch, so the number crept up with
+  no relation to how often you actually started the game. It now counts only
+  launches it saw happen.
+- **A game already running when the helper starts is shown.** It appears
+  straight away with its time counting up, instead of being invisible until
+  you quit it.
+
+---
+
 ## 5.4.6
 
 **Fixes game detection, which 5.4.5 broke — and makes Game Activity work.**

@@ -159,7 +159,10 @@ static void save_state(void) {
     int first = 1;
     for (int i = 0; i < g_count; i++) {
         entry_t *e = &g_entries[i];
-        if (e->launches == 0 && e->total_seconds == 0) continue;
+        if (e->launches == 0 && e->total_seconds == 0 &&
+            e->session_started_ts == 0) {
+            continue;
+        }
         char esc_tid[32];
         json_escape(e->title_id, esc_tid, sizeof(esc_tid));
         if (!first) fprintf(f, ",");
@@ -199,6 +202,31 @@ static void save_state(void) {
         return;
     }
     (void)rename(tmp, ACTIVITY_FILE);
+}
+
+/* Adopt a game that was already running when we started watching.
+ *
+ * Counting it as a launch would be a guess, and a wrong one: reloading
+ * the helper mid-session made "times played" climb every time, so the
+ * number drifted upward with no relation to how often the game was
+ * actually started. We only count launches we witnessed.
+ *
+ * The session clock starts now rather than at the real launch, because
+ * we genuinely do not know when that was -- better to under-count the
+ * current session than to invent time the user may not have played. */
+static void record_resume(const char *title_id) {
+    pthread_mutex_lock(&g_lock);
+    entry_t *e = find_or_create(title_id);
+    if (!e) { pthread_mutex_unlock(&g_lock); return; }
+    int64_t now = now_ts();
+    /* A session left open by an unclean shutdown is closed out first,
+     * so its time is banked rather than double-counted from `now`. */
+    if (e->session_started_ts > 0 && e->last_seen_ts > e->session_started_ts) {
+        e->total_seconds += (uint64_t)(e->last_seen_ts - e->session_started_ts);
+    }
+    e->session_started_ts = now;
+    e->last_seen_ts = now;
+    pthread_mutex_unlock(&g_lock);
 }
 
 static void record_launch(const char *title_id) {
@@ -278,6 +306,10 @@ static int find_running_title(char *title_out, size_t cap) {
 static char g_current_title[TITLE_ID_LEN];
 static pid_t g_current_pid;
 
+/* Cleared once the first poll has run. Until then we cannot tell a
+ * game that just launched from one that was already playing. */
+static int g_first_poll = 1;
+
 static void detect_and_track(void) {
     char title[TITLE_ID_LEN] = "";
 
@@ -309,7 +341,12 @@ static void detect_and_track(void) {
     g_current_title[TITLE_ID_LEN - 1] = '\0';
     g_current_pid = 1; /* marker: a game is running */
 
-    record_launch(title);
+    if (g_first_poll) {
+        /* Already running when we arrived: resume, do not count it. */
+        record_resume(title);
+    } else {
+        record_launch(title);
+    }
 }
 
 static void *watcher_thread(void *arg) {
@@ -317,6 +354,9 @@ static void *watcher_thread(void *arg) {
     for (;;) {
         sleep(POLL_INTERVAL_SEC);
         detect_and_track();
+        /* After one full poll we have a baseline, so anything new
+         * from here really is a launch we witnessed. */
+        g_first_poll = 0;
 
         time_t now = time(NULL);
         if (now - g_last_save > 60) {
@@ -405,7 +445,18 @@ int activity_get_json(char *buf, size_t cap, size_t *written) {
     int first = 1;
     for (int i = 0; i < g_count; i++) {
         entry_t *e = &g_entries[i];
-        if (e->launches == 0 && e->total_seconds == 0) continue;
+        /* Skip entries with nothing to report — but never skip one with
+         * a session open right now.
+         *
+         * A game adopted at startup (running before we began watching)
+         * has no launches and no banked seconds yet, because both are
+         * only written when a session ends. Filtering on the stored
+         * values alone hid the game the user was actually playing: it
+         * appeared as current_title with no row to show for it. */
+        if (e->launches == 0 && e->total_seconds == 0 &&
+            e->session_started_ts == 0) {
+            continue;
+        }
 
         char esc[32];
         json_escape(e->title_id, esc, sizeof(esc));
