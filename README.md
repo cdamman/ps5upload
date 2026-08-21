@@ -127,7 +127,7 @@
 
 ## A quick look
 
-<img width="2560" height="1411" alt="Screenshot 2026-04-24 at 00 26 13" src="https://github.com/user-attachments/assets/b72b65b5-a0d4-4e63-aa79-8b5ed2246f43" />
+<img width="1790" height="1425" alt="image" src="https://github.com/user-attachments/assets/a455f9b6-a7d4-49c2-a127-bf923c61d901" />
 
 ## Install
 
