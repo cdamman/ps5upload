@@ -71,6 +71,17 @@ import { getAppVersion } from "../lib/appVersion";
  *  reflected within ~20s, while a single jittery/busy poll is absorbed. */
 const PROBE_MISS_THRESHOLD = 2;
 
+/** Same debounce, but while an upload to that console is in flight.
+ *
+ *  A saturating transfer starves the console's network stack: the mgmt-port
+ *  poll starts timing out, and at the normal threshold two consecutive
+ *  timeouts (20 s) are enough to declare a perfectly healthy helper "down".
+ *  A user bundle showed this happening repeatedly at ~150 MB/s — even :9021,
+ *  served by the ELF loader rather than our helper, timed out under the same
+ *  load. Missed polls during a big upload are expected, not evidence of a
+ *  dead helper, so require a full minute of silence before believing it. */
+const PROBE_MISS_THRESHOLD_DURING_TRANSFER = 6;
+
 /** Minimum gap between auto-loader fires for the same console. The auto-run
  *  playlist sends ELFs to the loader, which briefly drops the helper (a
  *  down→up flap); this window swallows that self-induced edge so the
@@ -117,6 +128,10 @@ function useStatusPolling() {
   // scan, momentary network jitter) shouldn't flash "Helper isn't running"
   // when the helper is actually alive. Require N misses in a row first.
   const missCountRef = useRef<Record<string, number>>({});
+  /** Last `bytesSent` seen for each console's in-flight upload.
+   *  Lets the poller use transfer progress as a liveness signal instead
+   *  of competing with the very upload it is trying to monitor. */
+  const transferProgressRef = useRef<Record<string, number>>({});
   // Last transfer-port (:9113) liveness result per host. Used to log the
   // up→down TRANSITION only (not every poll) when the transfer listener
   // dies while mgmt stays up — the "uploads fail but the dot is green"
@@ -190,6 +205,7 @@ function useStatusPolling() {
     for (const ref of [
       autoLoaderFiredAtRef,
       missCountRef,
+      transferProgressRef,
       transferAliveRef,
       warnedMismatchRef,
       warnedNoUcredRef,
@@ -202,6 +218,40 @@ function useStatusPolling() {
       key === (hostOf(useConnectionStore.getState().host) || "_");
     const probeOne = async (probedHost: string) => {
       const key = hostOf(probedHost) || "_";
+      // ── Transfer progress IS the liveness signal ────────────────────
+      //
+      // While an upload to this console is moving bytes, polling it is both
+      // redundant and harmful. Redundant because shards landing on :9113
+      // prove the helper is alive far better than a probe does. Harmful
+      // because a saturating upload starves the console's network stack —
+      // a user bundle showed a 150 MB/s upload making even :9021 (the ELF
+      // loader, a different program) time out — so the probe times out,
+      // the helper is wrongly declared "down", and a redeploy lands on top
+      // of a perfectly healthy transfer and kills it.
+      //
+      // So: if the byte count advanced since the last tick, mark the host
+      // up and skip the probe entirely. That removes the probe's own
+      // contention during exactly the window where the console can least
+      // afford it. If the count has NOT advanced, the transfer may
+      // genuinely be stuck, and we fall through to a real probe.
+      if (transferScreenBusy(probedHost)) {
+        const phase = useTransferStore.getState().phasesByHost[key];
+        const sent =
+          phase && phase.kind === "running" ? phase.bytesSent : null;
+        const prevSent = transferProgressRef.current[key];
+        // Any CHANGE counts as proof of life, not just an increase: a
+        // resumed attempt restarts the byte count lower, and that still
+        // means the console is receiving.
+        if (sent !== null && sent !== prevSent) {
+          transferProgressRef.current[key] = sent;
+          missCountRef.current[key] = 0;
+          setHostStatus(probedHost, { payloadStatus: "up" });
+          if (isActive(key)) setStatus({ payloadProbing: false });
+          return;
+        }
+      } else {
+        delete transferProgressRef.current[key];
+      }
       try {
         const s = await payloadCheck(probedHost);
         if (cancelled) return;
@@ -221,10 +271,11 @@ function useStatusPolling() {
         } else {
           const misses = (missCountRef.current[key] ?? 0) + 1;
           missCountRef.current[key] = misses;
+          const threshold = transferScreenBusy(probedHost)
+            ? PROBE_MISS_THRESHOLD_DURING_TRANSFER
+            : PROBE_MISS_THRESHOLD;
           newStatus =
-            prev.payloadStatus === "up" && misses < PROBE_MISS_THRESHOLD
-              ? "up"
-              : "down";
+            prev.payloadStatus === "up" && misses < threshold ? "up" : "down";
         }
         // Log only on an up<->down TRANSITION (not every poll).
         if (
@@ -371,10 +422,11 @@ function useStatusPolling() {
         // single transient error doesn't flip a live helper to "down".
         const misses = (missCountRef.current[key] ?? 0) + 1;
         missCountRef.current[key] = misses;
+        const threshold = transferScreenBusy(probedHost)
+          ? PROBE_MISS_THRESHOLD_DURING_TRANSFER
+          : PROBE_MISS_THRESHOLD;
         const newStatus =
-          prev.payloadStatus === "up" && misses < PROBE_MISS_THRESHOLD
-            ? "up"
-            : "down";
+          prev.payloadStatus === "up" && misses < threshold ? "up" : "down";
         if (prev.payloadStatus === "up" && newStatus === "down") {
           log.warn(
             "connection",
@@ -473,7 +525,21 @@ function useAutoRedeployDownHelpers() {
         // handles the threshold. "unknown" (never seen) is left to the manual
         // Connect flow / bringUp so we don't push to a console the user just
         // typed in but hasn't deliberately connected to yet.
-        if (rt?.payloadStatus === "down") {
+        // NEVER redeploy over a live transfer. Pushing a fresh ELF makes
+        // the new instance take over and the old one shut down, which kills
+        // the upload mid-flight. A user bundle showed this as an unbreakable
+        // loop: a saturating upload made the mgmt poll time out, the helper
+        // was declared "down", the redeploy landed and killed the transfer,
+        // the transfer restarted from scratch — 33 redeploys, 23 helper
+        // shutdowns, and 132 GB re-sent for a 20 GB archive that never
+        // finished. The transfer-port liveness probe was already gated on
+        // this (issue #164); the redeploy never was.
+        //
+        // If the helper really has died, the transfer is already lost and
+        // the redeploy can wait for it to settle — nothing is gained by
+        // racing it, and a healthy upload must not be destroyed on the
+        // strength of a missed poll.
+        if (rt?.payloadStatus === "down" && !transferScreenBusy(h)) {
           void tryRedeploy(h);
         }
       }

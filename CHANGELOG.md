@@ -4,6 +4,28 @@ What's new in ps5upload, written for humans.
 
 ---
 
+## 5.4.13
+
+**Big uploads no longer get killed by the app's own reconnect.**
+
+- **A large upload could restart forever and never finish.** While an upload
+  is saturating the console, the app's background health check can start
+  timing out — the console is too busy to answer. The app took that as "the
+  helper has died", pushed a fresh helper to the console, and that in turn
+  killed the upload that was running perfectly well. The upload started over,
+  saturated the console again, and the whole thing repeated. One report
+  showed 132 GB sent for a 20 GB game that never arrived. The app now never
+  reloads the helper while an upload to that console is in progress.
+- **The health check no longer competes with your upload.** While files are
+  moving, the app takes that as proof the console is alive instead of
+  interrupting to ask — so it stops adding traffic to a console that is
+  already busy. If the transfer genuinely stalls, it checks properly again.
+- **A busy console is no longer mistaken for a missing one.** During an
+  upload the app now waits a full minute of silence before reporting the
+  helper as down, instead of twenty seconds.
+
+---
+
 ## 5.4.12
 
 **When the console refuses an uninstall, the app now says so.**
