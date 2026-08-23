@@ -223,3 +223,38 @@ describe("multi-part archives land in ONE folder", () => {
     ).toBe("/data/homebrew");
   });
 });
+
+// The whole point of the "Add all N parts to the queue" button: every part
+// of a set has to resolve to ONE destination, or the parts land in six
+// sibling folders and the game is unusable. Verified end-to-end against a
+// real PS5, but pinned here so a future change to the `.partN` peel can't
+// silently reintroduce the split.
+describe("multi-part sets share one destination", () => {
+  const dir = "C:\\Users\\Majid\\Downloads\\Black Myth Wukong";
+  const parts = [
+    `${dir}\\[DLPSGAME.COM]- 01.021 PPSA23226.part01.zip`,
+    `${dir}\\[DLPSGAME.COM]- 01.021 PPSA23226.part02.zip`,
+    `${dir}\\[DLPSGAME.COM]- 01.021 PPSA23226.part06.zip`,
+  ];
+
+  it("resolves every part to the same folder", () => {
+    const dests = parts.map(
+      (p) => resolveUploadDest("/data", "homebrew", p, true, true).dest,
+    );
+    expect(new Set(dests).size).toBe(1);
+    expect(dests[0]).toBe("/data/homebrew/[DLPSGAME.COM]- 01.021 PPSA23226");
+  });
+
+  it("peels .partN for 7z and rar too", () => {
+    for (const ext of ["zip", "7z", "rar"]) {
+      const { dest } = resolveUploadDest(
+        "/data",
+        "homebrew",
+        `/dl/Game.part03.${ext}`,
+        true,
+        true,
+      );
+      expect(dest).toBe("/data/homebrew/Game");
+    }
+  });
+});
