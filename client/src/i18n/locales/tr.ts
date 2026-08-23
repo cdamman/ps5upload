@@ -2632,6 +2632,10 @@ tmdb_show_manual: "Bunun yerine elle kimlik gir",
 upload_multipart_title: "Bu, {total} parçadan {index}. parça",
 upload_multipart_body: "Her parça farklı dosyalar içeren ayrı bir arşivdir; bu nedenle yalnızca bu parçanın dosyaları gönderilir. Tüm parçaları AYNI hedefe yükleyin; tek bir klasörde birleşecekler.",
 
+
+// --- added v5.4.9: previously untranslated keys ---
+upload_multipart_queue_all: "{count} parçanın tamamını kuyruğa ekle",
+
 };
 
 export default tr;

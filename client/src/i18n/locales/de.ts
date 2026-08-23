@@ -2633,6 +2633,10 @@ tmdb_show_manual: "Stattdessen eine ID von Hand eingeben",
 upload_multipart_title: "Dies ist Teil {index} von {total}",
 upload_multipart_body: "Jeder Teil ist ein eigenes Archiv mit anderen Dateien – es werden also nur die Dateien dieses Teils gesendet. Laden Sie jeden Teil in dasselbe Ziel hoch; sie werden dann in einem Ordner zusammengeführt.",
 
+
+// --- added v5.4.9: previously untranslated keys ---
+upload_multipart_queue_all: "Alle {count} Teile zur Warteschlange hinzufügen",
+
 };
 
 export default de;

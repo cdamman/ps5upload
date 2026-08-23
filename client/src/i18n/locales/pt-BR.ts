@@ -2660,6 +2660,10 @@ tmdb_show_manual: "Digitar um ID manualmente",
 upload_multipart_title: "Esta é a parte {index} de {total}",
 upload_multipart_body: "Cada parte é um arquivo próprio com arquivos diferentes, então só os desta parte são enviados. Envie todas as partes para o MESMO destino e elas serão mescladas em uma única pasta.",
 
+
+// --- added v5.4.9: previously untranslated keys ---
+upload_multipart_queue_all: "Adicionar todas as {count} partes à fila",
+
 };
 
 export default pt_BR;

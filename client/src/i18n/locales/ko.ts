@@ -2663,6 +2663,10 @@ tmdb_show_manual: "대신 ID를 직접 입력",
 upload_multipart_title: "{total}개 중 {index}번째 파트입니다",
 upload_multipart_body: "각 파트는 서로 다른 파일이 담긴 별개의 압축 파일이므로 이번에는 이 파트의 파일만 전송됩니다. 모든 파트를 같은 대상 위치에 업로드하면 하나의 폴더로 합쳐집니다.",
 
+
+// --- added v5.4.9: previously untranslated keys ---
+upload_multipart_queue_all: "{count}개 파트를 모두 대기열에 추가",
+
 };
 
 export default ko;

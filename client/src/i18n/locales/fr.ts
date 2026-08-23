@@ -2662,6 +2662,10 @@ tmdb_show_manual: "Saisir plutôt un identifiant à la main",
 upload_multipart_title: "Ceci est la partie {index} sur {total}",
 upload_multipart_body: "Chaque partie est une archive distincte contenant des fichiers différents : seuls ceux de cette partie sont envoyés. Envoyez chaque partie vers la MÊME destination et elles seront fusionnées dans un seul dossier.",
 
+
+// --- added v5.4.9: previously untranslated keys ---
+upload_multipart_queue_all: "Ajouter les {count} parties à la file d'attente",
+
 };
 
 export default fr;

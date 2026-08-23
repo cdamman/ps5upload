@@ -2627,6 +2627,10 @@ tmdb_show_manual: "Nhập ID thủ công thay thế",
 upload_multipart_title: "Đây là phần {index} trong {total}",
 upload_multipart_body: "Mỗi phần là một tệp nén riêng chứa các tệp khác nhau, nên chỉ các tệp của phần này được gửi. Hãy tải mọi phần lên CÙNG một đích đến, chúng sẽ gộp vào một thư mục.",
 
+
+// --- added v5.4.9: previously untranslated keys ---
+upload_multipart_queue_all: "Thêm cả {count} phần vào hàng đợi",
+
 };
 
 export default vi;

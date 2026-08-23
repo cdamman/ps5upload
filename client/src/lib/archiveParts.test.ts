@@ -3,6 +3,7 @@ import {
   needsManualPartUploads,
   parseArchivePart,
   siblingParts,
+  siblingPartPaths,
 } from "./archiveParts";
 
 const SET = [
@@ -70,5 +71,62 @@ describe("needsManualPartUploads", () => {
 
   it("is false for an ordinary single archive", () => {
     expect(needsManualPartUploads("Game.zip", ["Game.zip"])).toBe(false);
+  });
+});
+
+describe("siblingPartPaths", () => {
+  it("keeps a Windows path a Windows path", () => {
+    const dir = "C:\\Users\\Majid\\Downloads\\Black Myth Wukong";
+    expect(siblingPartPaths(`${dir}\\${SET[0]}`, SET)).toEqual([
+      `${dir}\\${SET[0]}`,
+      `${dir}\\${SET[1]}`,
+      `${dir}\\${SET[2]}`,
+    ]);
+  });
+
+  it("keeps a POSIX path a POSIX path", () => {
+    expect(siblingPartPaths(`/home/me/games/${SET[1]}`, SET)).toEqual([
+      `/home/me/games/${SET[0]}`,
+      `/home/me/games/${SET[1]}`,
+      `/home/me/games/${SET[2]}`,
+    ]);
+  });
+
+  it("orders by part number, not by listing order", () => {
+    const shuffled = [SET[2], SET[0], SET[3], SET[1]];
+    expect(siblingPartPaths(`/g/${SET[0]}`, shuffled)).toEqual([
+      `/g/${SET[0]}`,
+      `/g/${SET[1]}`,
+      `/g/${SET[2]}`,
+    ]);
+  });
+
+  it("preserves the zero-padding actually on disk", () => {
+    const mixed = ["Game.part1.zip", "Game.part2.zip", "Game.part10.zip"];
+    expect(siblingPartPaths("/g/Game.part1.zip", mixed)).toEqual([
+      "/g/Game.part1.zip",
+      "/g/Game.part2.zip",
+      "/g/Game.part10.zip",
+    ]);
+  });
+
+  it("returns nothing for a lone archive", () => {
+    expect(siblingPartPaths("/g/Game.zip", ["Game.zip"])).toEqual([]);
+    expect(siblingPartPaths("/g/Game.part01.zip", ["Game.part01.zip"])).toEqual(
+      [],
+    );
+  });
+
+  it("returns nothing when there is no directory to rebuild against", () => {
+    expect(siblingPartPaths(SET[0], SET)).toEqual([]);
+  });
+
+  it("does not mix a rar set into a zip set", () => {
+    const both = [...SET, "[SITE]- 01.021 PPSA23226.part01.rar"];
+    expect(siblingPartPaths(`/g/${SET[0]}`, both)).toEqual([
+      `/g/${SET[0]}`,
+      `/g/${SET[1]}`,
+      `/g/${SET[2]}`,
+    ]);
   });
 });

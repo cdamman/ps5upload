@@ -2572,6 +2572,10 @@ tmdb_show_manual: "Ввести идентификатор вручную",
 upload_multipart_title: "Это часть {index} из {total}",
 upload_multipart_body: "Каждая часть — отдельный архив с разными файлами, поэтому отправляются только файлы этой части. Загрузите все части в ОДНО И ТО ЖЕ место назначения, и они объединятся в одну папку.",
 
+
+// --- added v5.4.9: previously untranslated keys ---
+upload_multipart_queue_all: "Добавить все части ({count}) в очередь",
+
 };
 
 export default ru;

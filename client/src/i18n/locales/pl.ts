@@ -2922,6 +2922,10 @@ tmdb_show_manual: "Zamiast tego wpisz ID ręcznie",
 upload_multipart_title: "To część {index} z {total}",
 upload_multipart_body: "Każda część to osobne archiwum z innymi plikami, więc wysyłane są tylko pliki z tej części. Wyślij każdą część do TEGO SAMEGO miejsca docelowego, a połączą się w jednym folderze.",
 
+
+// --- added v5.4.9: previously untranslated keys ---
+upload_multipart_queue_all: "Dodaj wszystkie części ({count}) do kolejki",
+
 };
 
 export default pl;

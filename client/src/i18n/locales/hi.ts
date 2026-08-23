@@ -2662,6 +2662,10 @@ tmdb_show_manual: "इसके बजाय ID स्वयं दर्ज क
 upload_multipart_title: "यह {total} में से भाग {index} है",
 upload_multipart_body: "हर भाग अपने आप में एक अलग संग्रह है जिसमें अलग फ़ाइलें हैं, इसलिए अभी केवल इसी भाग की फ़ाइलें भेजी जाती हैं। सभी भाग एक ही गंतव्य पर अपलोड करें, वे एक ही फ़ोल्डर में मिल जाएंगे।",
 
+
+// --- added v5.4.9: previously untranslated keys ---
+upload_multipart_queue_all: "सभी {count} भाग कतार में जोड़ें",
+
 };
 
 export default hi;

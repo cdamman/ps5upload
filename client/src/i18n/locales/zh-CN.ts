@@ -2578,6 +2578,10 @@ tmdb_show_manual: "改为手动输入 ID",
 upload_multipart_title: "这是第 {index} 部分，共 {total} 部分",
 upload_multipart_body: "每个部分都是独立的压缩包，包含不同的文件，因此本次只会发送这一部分的文件。请将所有部分上传到同一个目标位置，它们会合并到同一个文件夹中。",
 
+
+// --- added v5.4.9: previously untranslated keys ---
+upload_multipart_queue_all: "将全部 {count} 个部分加入队列",
+
 };
 
 export default zh_CN;

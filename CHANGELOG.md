@@ -4,6 +4,25 @@ What's new in ps5upload, written for humans.
 
 ---
 
+## 5.4.17
+
+**A game split into `part01.zip`, `part02.zip`, … can now be queued in one
+click, instead of you uploading each part by hand.**
+
+- **"Add all N parts to the queue".** Pick part 1 and ps5upload looks in the
+  same folder for the rest of the set. If it finds them, one button queues
+  every part, in order, all going to the same destination folder so they
+  merge into one game.
+- **Why part 1 alone was never enough.** Each `.partNN.zip` is a complete,
+  separate archive holding a different slice of the game — nothing inside
+  part 1 points at part 2, so there is no way to follow them automatically.
+  Uploading part 1 really did finish; it just wasn't the whole game. That is
+  why the warning, and now the button, are there.
+- **Better bug reports.** When a multi-part set is detected it's now written
+  to the log, so a bug report shows whether the warning appeared.
+
+---
+
 ## 5.4.16
 
 **A `.rar` upload no longer fails just because the archive lists its files

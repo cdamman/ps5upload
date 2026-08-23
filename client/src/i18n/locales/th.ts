@@ -2652,6 +2652,10 @@ tmdb_show_manual: "กรอกรหัสเองแทน",
 upload_multipart_title: "นี่คือส่วนที่ {index} จาก {total}",
 upload_multipart_body: "แต่ละส่วนเป็นไฟล์บีบอัดของตัวเองที่บรรจุไฟล์ต่างกัน จึงส่งเฉพาะไฟล์ของส่วนนี้เท่านั้น กรุณาอัปโหลดทุกส่วนไปยังปลายทางเดียวกัน แล้วระบบจะรวมไว้ในโฟลเดอร์เดียว",
 
+
+// --- added v5.4.9: previously untranslated keys ---
+upload_multipart_queue_all: "เพิ่มทั้ง {count} ส่วนลงในคิว",
+
 };
 
 export default th;

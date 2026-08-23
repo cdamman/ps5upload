@@ -75,3 +75,49 @@ export function needsManualPartUploads(
   if (!self || self.ext === "rar") return false;
   return siblingParts(filename, namesInFolder).length > 1;
 }
+
+/** Rebuild the full paths of every part in the set, given the selected
+ *  archive's full path and the filenames sitting beside it in its folder.
+ *
+ *  Ordered by part number, so feeding the result straight into the upload
+ *  queue runs the parts in sequence.
+ *
+ *  The separator is read off the selected path rather than hardcoded: these
+ *  paths go back to the host filesystem, and a Windows source
+ *  (`C:\Users\...\Game.part01.zip`) has to stay a Windows path.
+ *
+ *  Filenames come from the folder listing rather than being synthesised
+ *  from the stem, so the exact casing and zero-padding on disk survive.
+ */
+export function siblingPartPaths(
+  selectedPath: string,
+  namesInFolder: readonly string[],
+): string[] {
+  const sep = Math.max(
+    selectedPath.lastIndexOf("/"),
+    selectedPath.lastIndexOf("\\"),
+  );
+  if (sep <= 0) return [];
+  const dir = selectedPath.slice(0, sep);
+  const slash = selectedPath[sep];
+  const parts = siblingParts(selectedPath.slice(sep + 1), namesInFolder);
+  if (parts.length === 0) return [];
+
+  const nameByIndex = new Map<number, string>();
+  for (const n of namesInFolder) {
+    const info = parseArchivePart(n);
+    if (!info) continue;
+    const inSet = parts.some(
+      (p) =>
+        p.index === info.index &&
+        p.ext === info.ext &&
+        p.stem.toLowerCase() === info.stem.toLowerCase(),
+    );
+    if (inSet && !nameByIndex.has(info.index)) nameByIndex.set(info.index, n);
+  }
+
+  return parts
+    .map((p) => nameByIndex.get(p.index))
+    .filter((n): n is string => n !== undefined)
+    .map((n) => `${dir}${slash}${n}`);
+}

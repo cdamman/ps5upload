@@ -67,6 +67,7 @@ import {
   needsManualPartUploads,
   parseArchivePart,
   siblingParts,
+  siblingPartPaths,
 } from "../../lib/archiveParts";
 import { localFs } from "../../api/localFs";
 import { OverflowMenu } from "../../components/OverflowMenu";
@@ -398,6 +399,51 @@ export default function UploadScreen() {
     });
   };
 
+  /** Queue every part of a multi-part archive set in one click.
+   *
+   *  A game published as `Game.part01.zip` … `Game.part06.zip` is six
+   *  separate archives that each have to be uploaded. Users reasonably
+   *  expect picking part 1 to handle the rest — desktop unpackers behave
+   *  that way for SPANNED sets — and were finishing part 1, seeing
+   *  "Upload complete", and assuming the whole game had arrived.
+   *
+   *  Every part resolves to the SAME destination (resolveUploadDest strips
+   *  the `.partN` marker), so the queue runs them in order into one folder.
+   */
+  const handleQueueAllParts = (paths: string[]) => {
+    if (!host?.trim() || paths.length === 0) return;
+    const addr = `${host}:${PS5_PAYLOAD_PORT}`;
+    for (const partPath of paths) {
+      const { dest } = resolveUploadDest(
+        destinationVolume,
+        destinationSubpath,
+        partPath,
+        true,
+        archiveIntoSubfolder,
+      );
+      const displayName =
+        partPath
+          .replace(/[\\/]+$/, "")
+          .split(/[\\/]/)
+          .pop() ?? partPath;
+      queueAdd({
+        sourceKind: "archive",
+        sourcePath: partPath,
+        displayName,
+        resolvedDest: dest,
+        addr,
+        // Overwrite: a fresh set of parts, each into the shared folder.
+        strategy: "overwrite",
+        reconcileMode,
+        excludes: activeExcludes,
+        rarPassword,
+        mountAfterUpload: false,
+        mountReadOnly,
+        registerAfterUpload: false,
+      });
+    }
+  };
+
   const [pending, setPending] = useState<null | {
     dest: string;
     addr: string;
@@ -607,6 +653,7 @@ export default function UploadScreen() {
           registerAfterUpload={registerAfterUpload}
           archiveExtractMode={archiveExtractMode}
           onSetArchiveExtractMode={setArchiveExtractMode}
+          onQueueAllParts={handleQueueAllParts}
           destinationVolume={destinationVolume}
           destinationSubpath={destinationSubpath}
           availableVolumes={availableVolumes}
@@ -732,6 +779,7 @@ function Step2Options(props: {
   detecting: boolean;
   detectError: string | null;
   zipInspectEntries: number | null;
+  onQueueAllParts: (paths: string[]) => void;
   mountAfterUpload: boolean;
   mountReadOnly: boolean;
   registerAfterUpload: boolean;
@@ -788,6 +836,7 @@ function Step2Options(props: {
     onRemoveExclude,
     onUpload,
     onAddToQueue,
+    onQueueAllParts,
   } = props;
   const tr = useTr();
 
@@ -800,6 +849,7 @@ function Step2Options(props: {
   const [partSet, setPartSet] = useState<{
     index: number;
     total: number;
+    paths: string[];
   } | null>(null);
   useEffect(() => {
     let cancelled = false;
@@ -818,9 +868,19 @@ function Step2Options(props: {
         if (!needsManualPartUploads(name, names)) return;
         const self = parseArchivePart(name);
         if (!self) return;
+        const paths = siblingPartPaths(path, names);
+        // Debug, not trace: bug reports are captured at debug, and "did the
+        // multi-part warning fire?" is the first question we ask when a user
+        // says only part of their game arrived.
+        log.debug(
+          "upload",
+          `multi-part set detected: part ${self.index} of ${paths.length}`,
+          { name, total: paths.length },
+        );
         setPartSet({
           index: self.index,
           total: siblingParts(name, names).length,
+          paths,
         });
       } catch {
         // Listing the folder is best-effort: a permission error or an
@@ -932,6 +992,21 @@ function Step2Options(props: {
                     "Each part is its own archive holding different files, so only this part's files are sent. Upload every part to the SAME destination and they'll merge into one folder.",
                   )}
                 </div>
+                {partSet.paths.length > 1 && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="mt-2"
+                    disabled={inFlight || queueRunning}
+                    onClick={() => onQueueAllParts(partSet.paths)}
+                  >
+                    {tr(
+                      "upload_multipart_queue_all",
+                      { count: String(partSet.paths.length) },
+                      `Add all ${partSet.paths.length} parts to the queue`,
+                    )}
+                  </Button>
+                )}
               </div>
             )}
             {detecting && (

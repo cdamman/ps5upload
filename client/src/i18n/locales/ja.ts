@@ -2667,6 +2667,10 @@ tmdb_show_manual: "代わりに ID を手動で入力",
 upload_multipart_title: "これは {total} 個中 {index} 個目のパートです",
 upload_multipart_body: "各パートはそれぞれ別のアーカイブで、中身のファイルも異なります。そのため、今回はこのパートのファイルだけが送信されます。すべてのパートを同じ保存先にアップロードすると、1 つのフォルダーにまとまります。",
 
+
+// --- added v5.4.9: previously untranslated keys ---
+upload_multipart_queue_all: "{count} 個のパートをすべてキューに追加",
+
 };
 
 export default ja;

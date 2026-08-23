@@ -2968,6 +2968,10 @@ shortcuts_activate: "Open / activate",
 upload_multipart_title: "This is part {index} of {total}",
 upload_multipart_body: "Each part is its own archive holding different files, so only this part's files are sent. Upload every part to the SAME destination and they'll merge into one folder.",
 
+
+// --- added v5.4.9: previously untranslated keys ---
+upload_multipart_queue_all: "Add all {count} parts to the queue",
+
 };
 
 export default en;

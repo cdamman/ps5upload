@@ -2634,6 +2634,10 @@ tmdb_show_manual: "Masukkan ID secara manual saja",
 upload_multipart_title: "Ini bagian {index} dari {total}",
 upload_multipart_body: "Setiap bagian adalah arsip tersendiri berisi berkas yang berbeda, jadi hanya berkas bagian ini yang dikirim. Unggah semua bagian ke tujuan yang SAMA agar tergabung dalam satu folder.",
 
+
+// --- added v5.4.9: previously untranslated keys ---
+upload_multipart_queue_all: "Tambahkan semua {count} bagian ke antrean",
+
 };
 
 export default id;
