@@ -416,7 +416,15 @@ pub fn is_retryable_transfer_error(err: &anyhow::Error) -> bool {
             // rather than aborting the whole upload. These map to
             // `ErrorKind::Other`, so they must be matched by OS code, not
             // kind.
-            return crate::connection::is_transient_local_resource_error(ioerr);
+            //
+            // `if` rather than `return`: this used to return on the FIRST
+            // io::Error in the chain, so a wrapper io::Error with a
+            // non-retryable kind hid a retryable one underneath it and the
+            // upload aborted instead of resuming. The loop is meant to walk
+            // the whole chain.
+            if crate::connection::is_transient_local_resource_error(ioerr) {
+                return true;
+            }
         }
     }
     false
@@ -2368,7 +2376,12 @@ where
                 // reconnect while it drains the dropped connection.
                 let backoff_ms = 500u64.saturating_mul(1u64 << attempt.min(5));
                 eprintln!("[resume] {label} attempt {attempt} failed ({e:#}); retrying in {backoff_ms} ms");
-                prior_failures.push(format!("attempt {attempt}: {e}"));
+                // `{e:#}` (not `{e}`): the bare Display prints only the outermost
+                // context, so a prior attempt read as "attempt 0: write frame split"
+                // with no cause — the one thing the user needed in order to tell a
+                // timed-out console apart from a refused one. The alternate form
+                // walks the whole anyhow chain down to the io::Error.
+                prior_failures.push(format!("attempt {attempt}: {e:#}"));
                 std::thread::sleep(std::time::Duration::from_millis(backoff_ms));
                 attempt += 1;
             }
@@ -5011,6 +5024,25 @@ mod retry_classification_tests {
                 "expected NO retry for {k:?}"
             );
         }
+    }
+
+    #[test]
+    fn walks_past_a_non_retryable_io_error_to_a_retryable_one() {
+        // A chain can carry more than one io::Error — anyhow context is any
+        // Display type, io::Error included. Classification used to stop at the
+        // first one it found and judge the whole chain on that, so a
+        // terminal-looking outer error hid the retryable cause underneath and
+        // aborted an upload a resume would have recovered.
+        let err = anyhow::Error::from(std::io::Error::new(
+            std::io::ErrorKind::TimedOut,
+            "peer stopped reading",
+        ))
+        .context(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "outer",
+        ))
+        .context("write frame split");
+        assert!(is_retryable_transfer_error(&err));
     }
 
     #[test]

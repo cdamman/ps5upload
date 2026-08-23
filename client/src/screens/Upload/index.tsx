@@ -1424,6 +1424,8 @@ function TransferStatus({ phase }: { phase: TransferPhase }) {
   // until completion or the next reconnect — the payload's single-
   // client transfer port serializes the next BEGIN_TX behind it.
   const resetTransfer = useTransferStore((s) => s.reset);
+  // Dismiss the upload's one-shot status (idle + in-flight poll no-op).
+  const clearPhase = () => resetTransfer(host);
   if (phase.kind === "idle") return null;
 
   if (phase.kind === "starting") {
@@ -1699,16 +1701,26 @@ function TransferStatus({ phase }: { phase: TransferPhase }) {
                   "Next: open the Library to register or mount it so it shows up on the PS5 home screen.",
                 )}
           </span>
-          {!phase.registeredAs && (
+          <div className="ml-auto flex items-center gap-2">
+            {!phase.registeredAs && (
+              <Button
+                variant="primary"
+                size="sm"
+                className="shrink-0"
+                onClick={() => navigate("/games")}
+              >
+                {tr("upload_done_open_library", "Open Library")}
+              </Button>
+            )}
             <Button
-              variant="primary"
+              variant="secondary"
               size="sm"
-              className="ml-auto shrink-0"
-              onClick={() => navigate("/games")}
+              className="shrink-0"
+              onClick={clearPhase}
             >
-              {tr("upload_done_open_library", "Open Library")}
+              {tr("upload_done_close", "Close")}
             </Button>
-          )}
+          </div>
         </div>
       </div>
     );

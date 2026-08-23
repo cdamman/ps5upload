@@ -152,6 +152,17 @@ function StepCard({
   );
 }
 
+/** Host that the NEXT mount of this screen should auto-probe.
+ *
+ *  Committing a new host remounts the whole route tree (App.tsx keys
+ *  `<Routes>` on the selected console), so a `handleCheck()` started in the
+ *  same handler as `setHost` does its `await` on a component that is already
+ *  unmounted — its "checking…" / "port not open" messages are transient state
+ *  and land nowhere. Module scope survives the remount: the committer parks
+ *  the host here and the fresh mount runs the probe itself.
+ */
+let pendingAutoCheck: string | null = null;
+
 export default function ConnectionScreen() {
   const tr = useTr();
   const host = useConnectionStore((s) => s.host);
@@ -166,6 +177,26 @@ export default function ConnectionScreen() {
   const setStoredStep1 = useConnectionStore((s) => s.setStep1);
   const setStoredStep2 = useConnectionStore((s) => s.setStep2);
   const navigate = useNavigate();
+
+  /** Local copy of the address field.
+   *
+   *  The input is deliberately NOT bound straight to `host`. App.tsx renders
+   *  `<Routes key={host}>` so that switching consoles unmounts every screen
+   *  (per-console isolation); writing the store on every keystroke made each
+   *  character a "console switch", which remounted this very screen — the
+   *  input lost focus mid-type and the scene-tool strip snapped back to
+   *  "Probing scene tools…" instead of the typed character appearing. Typing
+   *  is not a console switch: the store is written only when the user commits
+   *  (Enter, Check, discovery pick, or leaving the field).
+   */
+  const [hostDraft, setHostDraft] = useState(host);
+  // Re-sync when the host changes from somewhere else (console switcher,
+  // another screen). Cheap, and correct even though the remount would
+  // re-seed useState anyway.
+  useEffect(() => {
+    setHostDraft(host);
+  }, [host]);
+
 
   const [transientStep1, setTransientStep1] = useState<StepState | null>(null);
   const [transientStep1Msg, setTransientStep1Msg] = useState<string | null>(
@@ -266,6 +297,39 @@ export default function ConnectionScreen() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [payloadStatus, payloadStatusHost, host]);
+
+  /** Promote the draft address to the selected console.
+   *
+   *  A changed host remounts the tree, so anything we want to happen after the
+   *  switch has to be parked in `pendingAutoCheck` rather than awaited here.
+   */
+  const commitHost = (next: string, thenCheck: boolean) => {
+    const value = next.trim();
+    if (value === host) {
+      if (thenCheck) void handleCheck(value);
+      return;
+    }
+    if (thenCheck) pendingAutoCheck = value;
+    setHost(value);
+    settleStep1(
+      "idle",
+      tr("connection_step1_idle", undefined, "Enter your PS5's address and check"),
+    );
+    settleStep2(
+      "idle",
+      tr("connection_payload_not_loaded", undefined, "Helper not loaded yet"),
+    );
+  };
+
+  // Pick up a check that was requested just before the host commit remounted
+  // us. Mount-only: the parked value is consumed so a later remount for an
+  // unrelated reason doesn't re-probe.
+  useEffect(() => {
+    const parked = pendingAutoCheck;
+    pendingAutoCheck = null;
+    if (parked) void handleCheck(parked);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const flashStep1 = (s: StepState, msg: string) => {
     setTransientStep1(s);
@@ -550,14 +614,15 @@ export default function ConnectionScreen() {
           </label>
           <div className="mt-2 flex items-center gap-2">
             <input
-              value={host}
-              onChange={(e) => {
-                setHost(e.target.value);
-                settleStep1("idle", tr("connection_step1_idle", undefined, "Enter your PS5's address and check"));
-                settleStep2("idle", tr("connection_payload_not_loaded", undefined, "Helper not loaded yet"));
-              }}
+              value={hostDraft}
+              // Draft only — see `hostDraft`. Writing the store here made
+              // every keystroke remount the screen.
+              onChange={(e) => setHostDraft(e.target.value)}
+              // Leaving the field commits, so an address typed and then
+              // navigated away from is not silently discarded.
+              onBlur={() => commitHost(hostDraft, false)}
               onKeyDown={(e) => {
-                if (e.key === "Enter") void handleCheck();
+                if (e.key === "Enter") commitHost(hostDraft, true);
               }}
               placeholder="192.168.1.50"
               inputMode="decimal"
@@ -567,8 +632,12 @@ export default function ConnectionScreen() {
             <Button
               variant="secondary"
               size="md"
-              onClick={() => void handleCheck()}
-              disabled={!host.trim() || step1 === "busy" || step2 === "busy"}
+              // Keep focus in the input on mousedown. Otherwise the blur
+              // commit fires first, the host change remounts the tree, and
+              // this button is gone before its click event is dispatched.
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => commitHost(hostDraft, true)}
+              disabled={!hostDraft.trim() || step1 === "busy" || step2 === "busy"}
               loading={step1 === "busy"}
               title={tr(
                 "connection_check_tooltip",
@@ -588,13 +657,11 @@ export default function ConnectionScreen() {
               // (a) typing IP, (b) clicking Discover, (c) picking,
               // (d) clicking Check. The point of discovery is to
               // collapse those into one gesture.
-              setHost(picked);
-              settleStep1("idle", tr("connection_step1_idle", undefined, "Enter your PS5's address and check"));
-              settleStep2("idle", tr("connection_payload_not_loaded", undefined, "Helper not loaded yet"));
-              // Pass the picked host explicitly so we don't race
-              // React's re-render — handleCheck's closure captures
-              // the host that was current at last render.
-              void handleCheck(picked);
+              setHostDraft(picked);
+              // commitHost parks the check for after the remount, so the
+              // probe's own messages survive the console switch instead of
+              // being written to an unmounted screen.
+              commitHost(picked, true);
             }}
           />
           <p className="mt-3 text-xs text-[var(--color-muted)]">
@@ -935,6 +1002,9 @@ function DiscoverRow({
       <Button
         variant={isCurrent ? "ghost" : "secondary"}
         size="sm"
+        // Same reason as the Check button: don't let the address input's
+        // blur commit remount the tree out from under this click.
+        onMouseDown={(e) => e.preventDefault()}
         onClick={() => onPick(row.ip)}
         disabled={isCurrent}
       >
@@ -1048,6 +1118,25 @@ function BundledPayloadBanner() {
  * dedicated Activity tab got cut for not paying for itself; this
  * one-line surface keeps the signal and drops the surface area.
  */
+/** True when `host` is complete enough to be worth putting on the wire.
+ *
+ *  A half-typed address is not a name lookup we want to pay for: anything that
+ *  isn't a bare IPv4 literal goes down the DNS path in `resolve_targets`, which
+ *  budgets 10 s per lookup. `192.168.100.` (one backspace away from a valid
+ *  address) is a "hostname" by that rule. Rejecting the obviously-incomplete
+ *  keeps the strip quiet until the user has actually finished typing, while
+ *  still letting real DNS names through.
+ */
+function worthProbing(host: string): boolean {
+  const h = host.trim();
+  if (!h) return false;
+  // Digits-and-dots means the user is typing an IP — require all four octets.
+  if (/^[\d.]+$/.test(h)) return /^(\d{1,3}\.){3}\d{1,3}$/.test(h);
+  // Anything else is a name; a lone label is still plausible (a short LAN
+  // hostname), so only the empty case is rejected above.
+  return true;
+}
+
 function CompanionStrip({ host }: { host: string }) {
   const tr = useTr();
   const [rows, setRows] = useState<CompanionStatus[] | null>(null);
@@ -1055,6 +1144,14 @@ function CompanionStrip({ host }: { host: string }) {
 
   useEffect(() => {
     let cancelled = false;
+    // An incomplete address is not probed at all — see `worthProbing`. The
+    // strip stays in its "—" state rather than reporting "nothing detected"
+    // for an address that was never a real target.
+    if (!worthProbing(host)) {
+      setRows(null);
+      setLoading(false);
+      return;
+    }
     // Drop the previous host's rows immediately. Without this the strip kept
     // rendering the OLD console's chips under the NEW host's heading until
     // the first probe answered — which is how #272's reporter (reasonably)

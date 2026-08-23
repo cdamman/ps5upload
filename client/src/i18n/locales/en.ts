@@ -2704,6 +2704,7 @@ shortcuts_activate: "Open / activate",
   upload_cancel_desc: "Don't upload.",
   upload_already_up_to_date: "Already up to date",
   upload_complete: "Upload complete",
+  upload_done_close: "Close",
   upload_already_present: "Already present",
   upload_skipped: "Skipped",
   upload_unit_mbs: "MB/s",
@@ -2960,6 +2961,7 @@ shortcuts_activate: "Open / activate",
   backup_preset_appmeta: "Game tiles & icons",
   backup_preset_cheats: "Cheats",
   backup_preset_patches: "Patches",
+
 };
 
 export default en;

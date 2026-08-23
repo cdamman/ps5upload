@@ -4520,13 +4520,19 @@ async fn transfer_zip_handler(
         cfg.progress_files_finalized = Some(Arc::clone(&progress_files_finalized));
         cfg.progress_bytes_finalized = Some(Arc::clone(&progress_bytes_finalized));
         apply_per_request_bandwidth(&mut cfg, req.bandwidth_cap_mbps);
+        // 1 fresh attempt + DEFAULT_RESUME_RETRIES resumes, matching the file
+        // and folder routes. The archive routes used to hard-code 2, so a
+        // mid-transfer stall on a console that recovers in ~10 s (a Wi-Fi
+        // blip, or the payload's serial accept loop still draining the dropped
+        // connection) burned both retries inside the first 1.5 s of backoff
+        // and surfaced as "transfer_zip gave up after 2 retries".
         let result = transfer_zip_resumable(
             &cfg,
             tx_id,
             &req.dest_root,
             std::path::Path::new(&req.zip_path),
             ram_threshold,
-            2,
+            DEFAULT_RESUME_RETRIES,
             initial_flags,
         );
         match result {
@@ -5979,12 +5985,18 @@ async fn transfer_7z_handler(
         cfg.progress_files_finalized = Some(Arc::clone(&progress_files_finalized));
         cfg.progress_bytes_finalized = Some(Arc::clone(&progress_bytes_finalized));
         apply_per_request_bandwidth(&mut cfg, req.bandwidth_cap_mbps);
+        // 1 fresh attempt + DEFAULT_RESUME_RETRIES resumes, matching the file
+        // and folder routes. The archive routes used to hard-code 2, so a
+        // mid-transfer stall on a console that recovers in ~10 s (a Wi-Fi
+        // blip, or the payload's serial accept loop still draining the dropped
+        // connection) burned both retries inside the first 1.5 s of backoff
+        // and surfaced as "transfer_zip gave up after 2 retries".
         let result = transfer_7z_resumable(
             &cfg,
             tx_id,
             &req.dest_root,
             std::path::Path::new(&req.archive_path),
-            2,
+            DEFAULT_RESUME_RETRIES,
             initial_flags,
         );
         match result {
@@ -6183,13 +6195,19 @@ async fn transfer_rar_handler(
         cfg.progress_files_finalized = Some(Arc::clone(&progress_files_finalized));
         cfg.progress_bytes_finalized = Some(Arc::clone(&progress_bytes_finalized));
         apply_per_request_bandwidth(&mut cfg, req.bandwidth_cap_mbps);
+        // 1 fresh attempt + DEFAULT_RESUME_RETRIES resumes, matching the file
+        // and folder routes. The archive routes used to hard-code 2, so a
+        // mid-transfer stall on a console that recovers in ~10 s (a Wi-Fi
+        // blip, or the payload's serial accept loop still draining the dropped
+        // connection) burned both retries inside the first 1.5 s of backoff
+        // and surfaced as "transfer_zip gave up after 2 retries".
         let result = ps5upload_core::transfer::transfer_rar_resumable(
             &cfg,
             tx_id,
             &req.dest_root,
             std::path::Path::new(&req.archive_path),
             req.password.as_deref(),
-            2,
+            DEFAULT_RESUME_RETRIES,
             initial_flags,
         );
         match result {

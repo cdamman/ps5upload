@@ -4,6 +4,41 @@ What's new in ps5upload, written for humans.
 
 ---
 
+## 5.4.9
+
+**Typing an address works properly, stalled uploads recover, and every
+language is complete.**
+
+- **Typing a console address no longer fights you.** Each keystroke was
+  treated as switching to a different console, so the screen reset itself
+  mid-word: the text box lost focus and the scene-tools strip jumped back
+  to "Probing scene tools…". You can now type the whole address normally.
+  It is applied when you press Enter, press Check, pick a console from
+  Discover, or click away from the box.
+- **A half-typed address is no longer looked up.** An unfinished address
+  like `192.168.0.` was treated as a host name and sent off for a DNS
+  lookup that took ten seconds to give up. The strip now waits until the
+  address is actually complete.
+- **An interrupted upload resumes instead of giving up.** A recoverable
+  hiccup could be hidden behind an unrelated error and read as fatal, so
+  the whole upload was abandoned when it could have carried on.
+- **.zip, .7z and .rar uploads get the same second chances as everything
+  else.** They were capped at two quick retries, spent inside the first
+  second and a half, so a brief Wi-Fi drop ended the transfer with
+  "gave up after 2 retries".
+- **A failed attempt now says what actually went wrong,** instead of a bare
+  "write frame split" with the real cause stripped off.
+- **The finished-upload notice can be dismissed.** It used to sit there
+  until the next transfer.
+- **All 18 languages are complete.** 130 phrases — the Health Check screen,
+  the disclaimer, Fakelib, the SDK version changer, Remote Play checks and
+  more — were still showing in English in every language. They had been
+  parked on a list of known gaps, so nothing complained. They are now
+  translated and that list is empty.
+- **Bengali: the "Close" button was showing corrupted text.**
+
+---
+
 ## 5.4.8
 
 **Cancel really cancels, and a console can be reached by name.**
