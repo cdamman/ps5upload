@@ -2917,6 +2917,11 @@ tmdb_no_installed: "Nie znaleziono gier na tej konsoli. Nadal możesz wpisać ID
 tmdb_pick_game: "Wybierz grę",
 tmdb_show_manual: "Zamiast tego wpisz ID ręcznie",
 
+
+// --- added v5.4.9: previously untranslated keys ---
+upload_multipart_title: "To część {index} z {total}",
+upload_multipart_body: "Każda część to osobne archiwum z innymi plikami, więc wysyłane są tylko pliki z tej części. Wyślij każdą część do TEGO SAMEGO miejsca docelowego, a połączą się w jednym folderze.",
+
 };
 
 export default pl;

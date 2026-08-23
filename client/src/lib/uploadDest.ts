@@ -61,14 +61,23 @@ export function resolveUploadDest(
   // otherwise the contents land in a folder literally named `MyGame.rar`.
   let name = raw;
   if (isArchive) {
-    if (/\.rar$/i.test(raw)) {
-      // Also peel a trailing `.partN` from multi-volume names like
-      // `MyGame.part1.rar` (rar-only — zip/7z don't use that scheme, so we
-      // don't risk mangling a zip that merely has ".partN" in its name).
-      name = raw.replace(/\.rar$/i, "").replace(/\.part\d+$/i, "");
-    } else {
-      name = raw.replace(/\.(zip|7z)$/i, "");
-    }
+    // Peel the extension, then a trailing `.partN` multi-part marker.
+    //
+    // The `.partN` peel used to be rar-only, on the reasoning that zip/7z
+    // "don't use that scheme". They do: sites routinely publish a game as
+    // `Game.part01.zip` … `Game.part06.zip`, where each part is a SEPARATE
+    // self-contained archive holding a different slice of the game's files.
+    // Keeping the marker gave every part its own destination folder
+    // (`…part01/`, `…part02/`), scattering one game across six directories
+    // so it could not launch — the user had to notice and retarget each
+    // upload by hand. Stripping it lands every part in one folder, which is
+    // the only arrangement that works.
+    //
+    // Safe for a lone archive that merely has `.partN` in its name: the
+    // only effect is a folder called `Game` instead of `Game.part1`.
+    name = raw
+      .replace(/\.(zip|7z|rar)$/i, "")
+      .replace(/\.part\d+$/i, "");
   }
   const dest = name ? `${destRoot}/${name}` : destRoot;
   return { destRoot, dest };

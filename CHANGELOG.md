@@ -4,6 +4,29 @@ What's new in ps5upload, written for humans.
 
 ---
 
+## 5.4.15
+
+**Multi-part archives, and updates that match how you installed.**
+
+- **All parts of a split game now land in one folder.** A game published as
+  `Game.part01.zip` … `Game.part06.zip` used to get a separate folder per
+  part — `…part01/`, `…part02/` — scattering one game across six
+  directories so it couldn't launch. The part number is now dropped from
+  the folder name, so every part unpacks into the same place.
+- **The app tells you when an archive is one of several.** Pick
+  `Game.part03.zip` and it now says "This is part 3 of 6" and explains that
+  each part is its own archive and must be uploaded too. Previously the
+  upload finished, said nothing, and only some of the game was there. This
+  is only shown for `.zip`/`.7z` sets — a multi-part `.rar` really does pull
+  its other volumes in on its own, and still does.
+- **Updates now offer the same package type you installed.** If you
+  installed the `.rpm`, the updater offered a `.zip` you couldn't install
+  with your package manager. It now checks which package owns the running
+  app and offers the matching `.rpm` or `.deb`, falling back to the
+  portable download for an unpacked copy.
+
+---
+
 ## 5.4.14
 
 **Large `.zip` uploads no longer die while your PC is still decompressing.**

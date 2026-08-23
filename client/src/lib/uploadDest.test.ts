@@ -177,3 +177,49 @@ describe("resolveUploadDest", () => {
     expect(dest).toBe("/data/foo/bar/z");
   });
 });
+
+describe("multi-part archives land in ONE folder", () => {
+  // A game published as Game.part01.zip … Game.part06.zip is six SEPARATE
+  // self-contained archives, each holding a different slice of the game's
+  // files. Naming each destination after its own archive scattered the game
+  // across six sibling folders and it could not launch.
+  it("strips a .partNN marker from .zip parts so every part shares a folder", () => {
+    const parts = [
+      "C:/dl/[SITE]- 01.021 PPSA23226.part01.zip",
+      "C:/dl/[SITE]- 01.021 PPSA23226.part02.zip",
+      "C:/dl/[SITE]- 01.021 PPSA23226.part06.zip",
+    ];
+    const dests = parts.map(
+      (p) => resolveUploadDest("/data", "homebrew", p, true, true).dest,
+    );
+    expect(new Set(dests).size).toBe(1);
+    expect(dests[0]).toBe("/data/homebrew/[SITE]- 01.021 PPSA23226");
+  });
+
+  it("does the same for .7z and .rar parts", () => {
+    expect(
+      resolveUploadDest("/data", "homebrew", "/d/G.part1.7z", true, true).dest,
+    ).toBe("/data/homebrew/G");
+    expect(
+      resolveUploadDest("/data", "homebrew", "/d/G.part1.rar", true, true).dest,
+    ).toBe("/data/homebrew/G");
+  });
+
+  it("leaves a normal archive name alone", () => {
+    expect(
+      resolveUploadDest("/data", "homebrew", "/d/MyGame.zip", true, true).dest,
+    ).toBe("/data/homebrew/MyGame");
+    // "part" without digits is not a multi-part marker.
+    expect(
+      resolveUploadDest("/data", "homebrew", "/d/Counterpart.zip", true, true)
+        .dest,
+    ).toBe("/data/homebrew/Counterpart");
+  });
+
+  it("still honours flat extract (no wrapper folder at all)", () => {
+    expect(
+      resolveUploadDest("/data", "homebrew", "/d/G.part01.zip", true, false)
+        .dest,
+    ).toBe("/data/homebrew");
+  });
+});

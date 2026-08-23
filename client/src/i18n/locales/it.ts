@@ -2567,6 +2567,11 @@ tmdb_no_installed: "Nessun gioco trovato su questa console. Puoi comunque inseri
 tmdb_pick_game: "Scegli un gioco",
 tmdb_show_manual: "Inserisci invece un ID a mano",
 
+
+// --- added v5.4.9: previously untranslated keys ---
+upload_multipart_title: "Questa è la parte {index} di {total}",
+upload_multipart_body: "Ogni parte è un archivio a sé con file diversi, quindi vengono inviati solo i file di questa parte. Carica tutte le parti nella STESSA destinazione: verranno unite in un'unica cartella.",
+
 };
 
 export default it;

@@ -47,6 +47,17 @@ PLATFORM_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("windows-aarch64", re.compile(r".*-win-arm64\.zip$")),
     ("linux-x86_64",    re.compile(r".*-linux-x64\.zip$")),
     ("linux-aarch64",   re.compile(r".*-linux-arm64\.zip$")),
+    # Packaged Linux installs. The plain `linux-*` keys above are the
+    # PORTABLE zip; someone who installed the .deb or .rpm needs the same
+    # format back, not a tarball they cannot `dnf update` and that would
+    # unpack a second copy beside the packaged one. `preferred_asset_keys()`
+    # in commands/updates.rs asks the package database which package owns
+    # the running executable and looks these up first, falling back to the
+    # plain key when a release predates them.
+    ("linux-x86_64-deb",  re.compile(r".*-linux-x64\.deb$")),
+    ("linux-aarch64-deb", re.compile(r".*-linux-arm64\.deb$")),
+    ("linux-x86_64-rpm",  re.compile(r".*-linux-x64\.rpm$")),
+    ("linux-aarch64-rpm", re.compile(r".*-linux-arm64\.rpm$")),
     # Single universal APK (built --target aarch64 --target armv7), so one
     # "android" key — matches current_platform_key() in commands/updates.rs.
     ("android",         re.compile(r".*-android\.apk$")),

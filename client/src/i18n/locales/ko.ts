@@ -2658,6 +2658,11 @@ tmdb_no_installed: "이 본체에서 게임을 찾지 못했습니다. 아래에
 tmdb_pick_game: "게임 선택",
 tmdb_show_manual: "대신 ID를 직접 입력",
 
+
+// --- added v5.4.9: previously untranslated keys ---
+upload_multipart_title: "{total}개 중 {index}번째 파트입니다",
+upload_multipart_body: "각 파트는 서로 다른 파일이 담긴 별개의 압축 파일이므로 이번에는 이 파트의 파일만 전송됩니다. 모든 파트를 같은 대상 위치에 업로드하면 하나의 폴더로 합쳐집니다.",
+
 };
 
 export default ko;

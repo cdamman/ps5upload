@@ -2662,6 +2662,11 @@ tmdb_no_installed: "この本体にゲームが見つかりませんでした。
 tmdb_pick_game: "ゲームを選択",
 tmdb_show_manual: "代わりに ID を手動で入力",
 
+
+// --- added v5.4.9: previously untranslated keys ---
+upload_multipart_title: "これは {total} 個中 {index} 個目のパートです",
+upload_multipart_body: "各パートはそれぞれ別のアーカイブで、中身のファイルも異なります。そのため、今回はこのパートのファイルだけが送信されます。すべてのパートを同じ保存先にアップロードすると、1 つのフォルダーにまとまります。",
+
 };
 
 export default ja;

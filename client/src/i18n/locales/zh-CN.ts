@@ -2573,6 +2573,11 @@ tmdb_no_installed: "在这台主机上未找到游戏。你仍可在下方手动
 tmdb_pick_game: "选择一个游戏",
 tmdb_show_manual: "改为手动输入 ID",
 
+
+// --- added v5.4.9: previously untranslated keys ---
+upload_multipart_title: "这是第 {index} 部分，共 {total} 部分",
+upload_multipart_body: "每个部分都是独立的压缩包，包含不同的文件，因此本次只会发送这一部分的文件。请将所有部分上传到同一个目标位置，它们会合并到同一个文件夹中。",
+
 };
 
 export default zh_CN;

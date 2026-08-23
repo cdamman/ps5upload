@@ -2620,6 +2620,11 @@ tmdb_no_installed: "এই কনসোলে কোনো গেম পাও�
 tmdb_pick_game: "একটি গেম বাছুন",
 tmdb_show_manual: "বরং হাতে করে আইডি লিখুন",
 
+
+// --- added v5.4.9: previously untranslated keys ---
+upload_multipart_title: "এটি {total}-এর মধ্যে {index} নম্বর অংশ",
+upload_multipart_body: "প্রতিটি অংশ আলাদা একটি আর্কাইভ, যাতে ভিন্ন ভিন্ন ফাইল থাকে — তাই এখন কেবল এই অংশের ফাইলগুলিই পাঠানো হচ্ছে। সব অংশ একই গন্তব্যে আপলোড করুন, সেগুলি একটি ফোল্ডারে মিলে যাবে।",
+
 };
 
 export default bn;

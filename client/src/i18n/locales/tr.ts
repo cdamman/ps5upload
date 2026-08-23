@@ -2627,6 +2627,11 @@ tmdb_no_installed: "Bu konsolda oyun bulunamadı. Yine de aşağıdan elle bir k
 tmdb_pick_game: "Bir oyun seçin",
 tmdb_show_manual: "Bunun yerine elle kimlik gir",
 
+
+// --- added v5.4.9: previously untranslated keys ---
+upload_multipart_title: "Bu, {total} parçadan {index}. parça",
+upload_multipart_body: "Her parça farklı dosyalar içeren ayrı bir arşivdir; bu nedenle yalnızca bu parçanın dosyaları gönderilir. Tüm parçaları AYNI hedefe yükleyin; tek bir klasörde birleşecekler.",
+
 };
 
 export default tr;

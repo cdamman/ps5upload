@@ -2620,6 +2620,11 @@ tmdb_no_installed: "لم يُعثر على ألعاب على هذا الجهاز
 tmdb_pick_game: "اختر لعبة",
 tmdb_show_manual: "أدخل معرّفًا يدويًا بدلًا من ذلك",
 
+
+// --- added v5.4.9: previously untranslated keys ---
+upload_multipart_title: "هذا هو الجزء {index} من {total}",
+upload_multipart_body: "كل جزء أرشيف مستقل يحتوي على ملفات مختلفة، لذا تُرسل ملفات هذا الجزء فقط. ارفع كل الأجزاء إلى الوجهة نفسها وسوف تندمج في مجلد واحد.",
+
 };
 
 export default ar;

@@ -2647,6 +2647,11 @@ tmdb_no_installed: "ไม่พบเกมบนเครื่องนี้
 tmdb_pick_game: "เลือกเกม",
 tmdb_show_manual: "กรอกรหัสเองแทน",
 
+
+// --- added v5.4.9: previously untranslated keys ---
+upload_multipart_title: "นี่คือส่วนที่ {index} จาก {total}",
+upload_multipart_body: "แต่ละส่วนเป็นไฟล์บีบอัดของตัวเองที่บรรจุไฟล์ต่างกัน จึงส่งเฉพาะไฟล์ของส่วนนี้เท่านั้น กรุณาอัปโหลดทุกส่วนไปยังปลายทางเดียวกัน แล้วระบบจะรวมไว้ในโฟลเดอร์เดียว",
+
 };
 
 export default th;

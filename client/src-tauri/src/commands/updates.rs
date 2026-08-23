@@ -133,6 +133,62 @@ fn current_platform_key() -> &'static str {
     }
 }
 
+/// How this Linux copy was installed, if we can tell: `"rpm"`, `"deb"`,
+/// or `None` for a portable/unpacked copy.
+///
+/// We publish `.deb`, `.rpm` AND `.zip` for Linux, but the updater only
+/// ever offered the `.zip`. Someone who installed the RPM was told to
+/// download a tarball — they cannot `dnf update` it, and unpacking it
+/// leaves a second copy alongside the packaged one. A user asked for this
+/// directly.
+///
+/// The authoritative signal is the package database, not the distro: ask
+/// which package owns our own executable. A user can perfectly well run
+/// the portable zip on Fedora, so keying off `/etc/os-release` would
+/// hand them an RPM they never installed. If neither package manager
+/// claims the file, it is portable and the plain key is right.
+#[cfg(target_os = "linux")]
+fn linux_package_kind() -> Option<&'static str> {
+    fn owns(tool: &str, args: &[&str]) -> bool {
+        std::process::Command::new(tool)
+            .args(args)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .map(|st| st.success())
+            .unwrap_or(false)
+    }
+    // Resolve symlinks: /usr/bin/ps5upload may point into /opt, and the
+    // package database knows the real path.
+    let exe = std::env::current_exe().ok()?;
+    let exe = std::fs::canonicalize(&exe).unwrap_or(exe);
+    let exe = exe.to_str()?;
+    if owns("rpm", &["-qf", exe]) {
+        return Some("rpm");
+    }
+    if owns("dpkg", &["-S", exe]) {
+        return Some("deb");
+    }
+    None
+}
+
+/// Manifest keys to try, most specific first.
+///
+/// On Linux a packaged install prefers its own format (`linux-x86_64-rpm`)
+/// and falls back to the portable `.zip` key when the release predates
+/// those entries — so an older manifest still updates rather than
+/// reporting "no build for your platform".
+fn preferred_asset_keys() -> Vec<String> {
+    let base = current_platform_key();
+    #[cfg(target_os = "linux")]
+    {
+        if let Some(kind) = linux_package_kind() {
+            return vec![format!("{base}-{kind}"), base.to_string()];
+        }
+    }
+    vec![base.to_string()]
+}
+
 /// Minimal semver-ish comparison. Splits MAJOR.MINOR.PATCH numerics and
 /// honours pre-release suffix order per semver: a pre-release version
 /// (`2.2.0-rc1`) is LESS THAN the GA of the same numeric (`2.2.0`).
@@ -306,8 +362,12 @@ pub async fn update_check(app: AppHandle) -> Result<UpdateCheck, String> {
     let manifest = fetch_manifest().await?;
     let latest_version = manifest.version.clone();
     let available = is_newer(&current_version, &latest_version);
-    let key = current_platform_key();
-    let download_url = manifest.assets.get(key).cloned().unwrap_or_default();
+    // Most-specific-first: a packaged Linux install gets its own format,
+    // everything else gets the single platform key.
+    let download_url = preferred_asset_keys()
+        .into_iter()
+        .find_map(|k| manifest.assets.get(&k).cloned())
+        .unwrap_or_default();
     let download_filename = download_url.rsplit('/').next().unwrap_or("").to_string();
     Ok(UpdateCheck {
         available,

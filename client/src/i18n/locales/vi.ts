@@ -2622,6 +2622,11 @@ tmdb_no_installed: "Không tìm thấy game nào trên máy này. Bạn vẫn c�
 tmdb_pick_game: "Chọn một game",
 tmdb_show_manual: "Nhập ID thủ công thay thế",
 
+
+// --- added v5.4.9: previously untranslated keys ---
+upload_multipart_title: "Đây là phần {index} trong {total}",
+upload_multipart_body: "Mỗi phần là một tệp nén riêng chứa các tệp khác nhau, nên chỉ các tệp của phần này được gửi. Hãy tải mọi phần lên CÙNG một đích đến, chúng sẽ gộp vào một thư mục.",
+
 };
 
 export default vi;

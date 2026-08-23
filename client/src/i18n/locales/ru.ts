@@ -2567,6 +2567,11 @@ tmdb_no_installed: "На этой консоли игр не найдено. В�
 tmdb_pick_game: "Выберите игру",
 tmdb_show_manual: "Ввести идентификатор вручную",
 
+
+// --- added v5.4.9: previously untranslated keys ---
+upload_multipart_title: "Это часть {index} из {total}",
+upload_multipart_body: "Каждая часть — отдельный архив с разными файлами, поэтому отправляются только файлы этой части. Загрузите все части в ОДНО И ТО ЖЕ место назначения, и они объединятся в одну папку.",
+
 };
 
 export default ru;

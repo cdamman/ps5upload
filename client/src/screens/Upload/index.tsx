@@ -63,6 +63,12 @@ import {
   Select,
   Checkbox,
 } from "../../components";
+import {
+  needsManualPartUploads,
+  parseArchivePart,
+  siblingParts,
+} from "../../lib/archiveParts";
+import { localFs } from "../../api/localFs";
 import { OverflowMenu } from "../../components/OverflowMenu";
 import FfpkgInspectorPanel from "./FfpkgInspectorPanel";
 import FolderDiffPanel from "./FolderDiffPanel";
@@ -785,6 +791,47 @@ function Step2Options(props: {
   } = props;
   const tr = useTr();
 
+  // Multi-part archive detection. `Game.part01.zip` … `Game.part06.zip` are
+  // SEPARATE self-contained archives (unlike a rar volume set, which UnRAR
+  // pulls in from the first volume), so uploading one sends only its slice
+  // of the game. Nothing downstream can fix that for the user — but saying
+  // so up front is the difference between "why is my game broken" and a
+  // known five-more-uploads-to-go.
+  const [partSet, setPartSet] = useState<{
+    index: number;
+    total: number;
+  } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    setPartSet(null);
+    if (source.kind !== "archive") return;
+    const path = source.path;
+    const sep = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+    if (sep <= 0) return;
+    const dir = path.slice(0, sep);
+    const name = path.slice(sep + 1);
+    void (async () => {
+      try {
+        const entries = await localFs.listDir(dir);
+        if (cancelled) return;
+        const names = entries.filter((e) => !e.is_dir).map((e) => e.name);
+        if (!needsManualPartUploads(name, names)) return;
+        const self = parseArchivePart(name);
+        if (!self) return;
+        setPartSet({
+          index: self.index,
+          total: siblingParts(name, names).length,
+        });
+      } catch {
+        // Listing the folder is best-effort: a permission error or an
+        // Android content:// path just means no hint, never a failed upload.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [source]);
+
   const { icon: KindIcon, label: kindLabel } = detectedLabel(source, tr);
   // A .rar source has its own dedicated card (RarSourceCard) that owns ALL of
   // its messaging — password prompt, wrong-password, missing-volume. So the
@@ -869,6 +916,24 @@ function Step2Options(props: {
             <div className="mt-1 truncate font-mono text-xs text-[var(--color-muted)]">
               {source.path}
             </div>
+            {partSet && (
+              <div className="mt-2 rounded-md border border-[var(--color-warn-border,var(--color-border))] bg-[var(--color-surface-3)] p-2.5 text-xs">
+                <div className="font-medium">
+                  {tr(
+                    "upload_multipart_title",
+                    { index: String(partSet.index), total: String(partSet.total) },
+                    `This is part ${partSet.index} of ${partSet.total}`,
+                  )}
+                </div>
+                <div className="mt-1 text-[var(--color-muted)]">
+                  {tr(
+                    "upload_multipart_body",
+                    undefined,
+                    "Each part is its own archive holding different files, so only this part's files are sent. Upload every part to the SAME destination and they'll merge into one folder.",
+                  )}
+                </div>
+              </div>
+            )}
             {detecting && (
               // Prominent scanning banner. The small inline spinner up
               // top is easy to miss for users staring at the disabled

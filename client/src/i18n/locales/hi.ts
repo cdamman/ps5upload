@@ -2657,6 +2657,11 @@ tmdb_no_installed: "इस कंसोल पर कोई गेम नही�
 tmdb_pick_game: "कोई गेम चुनें",
 tmdb_show_manual: "इसके बजाय ID स्वयं दर्ज करें",
 
+
+// --- added v5.4.9: previously untranslated keys ---
+upload_multipart_title: "यह {total} में से भाग {index} है",
+upload_multipart_body: "हर भाग अपने आप में एक अलग संग्रह है जिसमें अलग फ़ाइलें हैं, इसलिए अभी केवल इसी भाग की फ़ाइलें भेजी जाती हैं। सभी भाग एक ही गंतव्य पर अपलोड करें, वे एक ही फ़ोल्डर में मिल जाएंगे।",
+
 };
 
 export default hi;
