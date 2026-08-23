@@ -103,6 +103,11 @@ describe("averageRate", () => {
     expect(averageRate(1_000_000, 2000)).toBe(500_000);
   });
 
+  it("returns 0 for sub-minimum elapsed (avoids absurd tiny-job rates)", () => {
+    expect(averageRate(1_000_000, 100)).toBe(0);
+    expect(averageRate(1_000_000, 249)).toBe(0);
+  });
+
   it("returns 0 for non-positive elapsed", () => {
     expect(averageRate(1024, 0)).toBe(0);
     expect(averageRate(1024, -100)).toBe(0);

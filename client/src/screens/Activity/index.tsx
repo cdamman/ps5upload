@@ -19,6 +19,7 @@ import {
   type ActivityOutcome,
 } from "../../state/activityHistory";
 import { formatBytes, formatDuration } from "../../lib/format";
+import { averageRate } from "../../lib/rollingRate";
 import { fsOpCancel } from "../../api/ps5";
 import { hostOf } from "../../lib/addr";
 import { useFsBulkOpStore, useFsDownloadOpStore } from "../../state/fsBulkOp";
@@ -242,9 +243,11 @@ function ActivityRow({ entry }: { entry: ActivityEntry }) {
     entry.endedAtMs !== null
       ? entry.endedAtMs - entry.startedAtMs
       : now - entry.startedAtMs;
+  // Shared helper clamps sub-250 ms windows so tiny/reconcile finishes
+  // don't render as absurd multi-GB/s averages in the Activity list.
   const speed =
-    entry.bytes && entry.bytes > 0 && elapsedMs > 0
-      ? (entry.bytes * 1000) / elapsedMs
+    entry.bytes && entry.bytes > 0
+      ? averageRate(entry.bytes, elapsedMs)
       : 0;
   const pct =
     entry.totalBytes && entry.totalBytes > 0 && entry.bytes
@@ -484,7 +487,15 @@ function ActivityRow({ entry }: { entry: ActivityEntry }) {
           // total-average and the readout is meaningless ("0 B/s" or a
           // stale prior value depending on which path you take). The
           // pill at the top already tells the user what's happening.
-          <span>{formatBytes(speed)}/s</span>
+          // Label as "live" so it isn't confused with the finished-row
+          // "avg" chip (bug report: high avg vs crawling live meter).
+          <span>
+            {tr(
+              "activity_live_speed",
+              { speed: formatBytes(speed) },
+              `${formatBytes(speed)}/s live`,
+            )}
+          </span>
         )}
         {!isRunning &&
           entry.bytes !== undefined &&

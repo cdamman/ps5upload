@@ -14717,6 +14717,24 @@ static int handle_begin_tx_frame(runtime_state_t *state, int client_fd,
     }
     ret = send_frame(client_fd, FTX2_FRAME_BEGIN_TX_ACK, 0, hdr.trace_id,
                      resp, (uint64_t)len);
+    /* Extend the per-socket idle timeout for the rest of this transfer.
+     * Host-side zip/7z inflate of multi-GB entries can leave the wire
+     * quiet for well over CLIENT_IDLE_SEC before the next STREAM_SHARD;
+     * without this bump we EAGAIN out of recv_exact and mark the tx
+     * interrupted (~120s conn_drop storm). Best-effort — if setsockopt
+     * fails we keep the original 120s and the stream-inflate engine
+     * fix is the primary defense. */
+    if (ret == 0) {
+        struct timeval idle_to;
+        idle_to.tv_sec  = PS5UPLOAD2_CLIENT_IDLE_IN_TX_SEC;
+        idle_to.tv_usec = 0;
+        if (setsockopt(client_fd, SOL_SOCKET, SO_RCVTIMEO,
+                       &idle_to, sizeof(idle_to)) != 0) {
+            fprintf(stderr,
+                    "[payload] setsockopt(SO_RCVTIMEO=%lds in-tx) failed on fd=%d: %s (errno=%d)\n",
+                    (long)idle_to.tv_sec, client_fd, strerror(errno), errno);
+        }
+    }
     return ret;
 }
 

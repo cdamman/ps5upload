@@ -8,6 +8,7 @@ import {
   type ActivityEntry,
 } from "../state/activityHistory";
 import { formatBytes, formatDuration } from "../lib/format";
+import { averageRate } from "../lib/rollingRate";
 import { useTr } from "../state/lang";
 import { ConsoleChip } from "../components";
 import { Spinner } from "../components/Spinner";
@@ -147,9 +148,7 @@ function RunningRow({ entry }: { entry: ActivityEntry }) {
   }, []);
   const elapsedMs = Math.max(0, now - entry.startedAtMs);
   const speed =
-    entry.bytes && entry.bytes > 0 && elapsedMs > 0
-      ? (entry.bytes * 1000) / elapsedMs
-      : 0;
+    entry.bytes && entry.bytes > 0 ? averageRate(entry.bytes, elapsedMs) : 0;
   const pct =
     entry.totalBytes && entry.totalBytes > 0 && entry.bytes
       ? Math.min(100, (entry.bytes / entry.totalBytes) * 100)

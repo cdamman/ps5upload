@@ -764,14 +764,15 @@ Yes — and the files arrive **already extracted** on the PS5. Keep the
 game as a single `.zip` on your PC (less disk, easier to move), drop it
 on the Upload screen, and ps5upload decompresses it on your computer
 while streaming the files into the normal transfer pipeline. There's no
-manual unzip step, and no temporary copy of the whole game on your disk
-— it decompresses one file at a time (large files briefly spill to a
-temp file), so a 100 GB archive doesn't need 100 GB of free RAM. The
-screen previews what the archive expands to (`zipped → extracted`, file
-count, and the % saved on disk) and detects the embedded game if it has
-a `sce_sys/param.json`. The destination folder is named after the
-`.zip` (minus the extension). Resume, excludes, the bandwidth cap, and
-mirroring to other consoles all work the same as a folder upload.
+manual unzip step, and no temporary copy of the whole game on your disk —
+large entries are streamed as they decompress (the wire stays busy, so
+the console won't drop a quiet connection mid-inflate). A 100 GB archive
+doesn't need 100 GB of free RAM. The screen previews what the archive
+expands to (`zipped → extracted`, file count, and the % saved on disk)
+and detects the embedded game if it has a `sce_sys/param.json`. The
+destination folder is named after the `.zip` (minus the extension).
+Resume, excludes, the bandwidth cap, and mirroring to other consoles all
+work the same as a folder upload.
 
 A note on space savings: PS5 game data is often already compressed, so
 DEFLATE (ZIP's method) sometimes shrinks a dump a lot and sometimes

@@ -60,9 +60,20 @@
 #define PS5UPLOAD2_CLIENT_RCVBUF_BYTES (512 * 1024)
 #define PS5UPLOAD2_CLIENT_SNDBUF_BYTES (512 * 1024)
 /* Idle-socket read timeout (seconds). Stops a misbehaving client from
- * pinning the single-threaded server on a persistent connection forever.
+ * pinning a worker on a persistent connection forever — applied to every
+ * freshly accepted fd (pre-BEGIN_TX probes, Hello, etc.).
+ *
+ * After BEGIN_TX succeeds we raise this to CLIENT_IDLE_IN_TX_SEC: the host
+ * may legitimately go quiet for minutes while decompressing a multi-GB zip
+ * entry before the next STREAM_SHARD. The old 120s cap killed those
+ * transfers mid-inflate (conn_drop every ~2 min) even on a healthy LAN.
  */
 #define PS5UPLOAD2_CLIENT_IDLE_SEC 120
+/* Per-connection read timeout once a transfer has begun on this socket.
+ * 30 minutes outlasts realistic host-side inflate of huge Deflate entries
+ * while still surfacing a truly wedged client. Restored implicitly when
+ * the connection closes (next accept gets CLIENT_IDLE_SEC again). */
+#define PS5UPLOAD2_CLIENT_IDLE_IN_TX_SEC (30 * 60)
 
 /* In-memory per-shard receive buffer size. Larger = fewer recv syscalls
  * and better disk-write batching.

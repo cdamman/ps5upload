@@ -1,18 +1,18 @@
-//! Integration tests for the zip-archive transfer path (Strategy C).
+//! Integration tests for the zip-archive transfer path.
 //!
 //! Each test builds a `.zip` fixture, transfers it through the mock FTX2
 //! server via `ps5upload_core::transfer::transfer_zip`, and asserts the files
 //! land already extracted with byte-identical content — i.e. a zip upload is
-//! equivalent to uploading the extracted folder. The on-the-wire frames are
-//! identical to a directory transfer, so the mock server needs no zip
-//! awareness; these tests exercise the host-side inflate-to-cache + shard
-//! planning, not a new protocol.
+//! equivalent to uploading the extracted folder. NonPacked entries are
+//! stream-inflated (shard-by-shard, like `.7z`); packed small entries still
+//! inflate whole. The mock server needs no zip awareness.
 
 mod mock_server;
 use mock_server::MockServer;
 
 use ps5upload_core::transfer::{
-    inspect_zip, transfer_zip, transfer_zip_with_opts, zip_plan_preview, TransferConfig,
+    inspect_zip, transfer_zip, transfer_zip_resumable, transfer_zip_with_opts, zip_plan_preview,
+    TransferConfig, TX_FLAG_RESUME,
 };
 use std::io::Write;
 use std::path::PathBuf;
@@ -112,16 +112,16 @@ fn transfer_zip_basic_lands_extracted() {
     );
 }
 
-// ─── Large entry split across many shards (RAM cache) ────────────────────────
+// ─── Large entry split across many shards (stream-inflate) ───────────────────
 
 #[test]
-fn transfer_zip_large_entry_multi_shard_ram_cache() {
+fn transfer_zip_large_entry_multi_shard_stream() {
     let data = pattern(100_000, 7);
     let zip = build_zip(&[("big.bin", &data)], true);
 
     let srv = MockServer::start();
-    // Tiny shard, no packing → one zip entry yields many NonPacked shards, all
-    // served from the single in-RAM inflated copy.
+    // Tiny shard, no packing → one zip entry yields many NonPacked shards,
+    // streamed as Deflate bytes arrive (not buffered whole first).
     let cfg = TransferConfig {
         shard_size: 4096,
         pack_size: 0,
@@ -130,11 +130,6 @@ fn transfer_zip_large_entry_multi_shard_ram_cache() {
     let result = transfer_zip(&cfg, random_tx_id(), "/data/g", &zip.0).unwrap();
 
     assert_eq!(result.shards_sent, data.len().div_ceil(4096) as u64);
-    // The mock maps each manifest file's non-packed shards (in seq order) to
-    // its real dest path — so the single entry "big.bin" lands at
-    // dest_root/big.bin. A byte-exact match here proves the per-entry cache
-    // served every shard's range correctly and in order across the inflated
-    // copy.
     let st = srv.state.lock().unwrap();
     assert_eq!(
         st.applied.get("/data/g/big.bin").map(|v| v.as_slice()),
@@ -142,10 +137,10 @@ fn transfer_zip_large_entry_multi_shard_ram_cache() {
     );
 }
 
-// ─── Large entry forced to spill to a temp file (Tmp cache) ──────────────────
+// ─── Large entry still works with a tiny ram_threshold (compat knob) ─────────
 
 #[test]
-fn transfer_zip_large_entry_temp_spill() {
+fn transfer_zip_large_entry_with_tiny_ram_threshold() {
     let data = pattern(80_000, 19);
     let zip = build_zip(&[("huge.bin", &data)], true);
 
@@ -155,18 +150,56 @@ fn transfer_zip_large_entry_temp_spill() {
         pack_size: 0,
         ..TransferConfig::new(&srv.addr)
     };
-    // ram_threshold = 64 bytes → the 80 KB entry exceeds it and inflates to a
-    // temp file; ranges are served via seek+read from that file.
+    // NonPacked streaming ignores ram_threshold; packed helpers still honor it.
     let result =
         transfer_zip_with_opts(&cfg, random_tx_id(), "/data/spill", &zip.0, 64, 0).unwrap();
 
     assert_eq!(result.bytes_sent, data.len() as u64);
-    // Single non-packed entry "huge.bin" → mapped to dest_root/huge.bin by the
-    // mock. A byte-exact match proves the temp-file cache served every range
-    // right.
     let st = srv.state.lock().unwrap();
     assert_eq!(
         st.applied.get("/data/spill/huge.bin").map(|v| v.as_slice()),
+        Some(data.as_slice())
+    );
+}
+
+// ─── Resume mid-entry after a drop (stream re-inflate + skip acked) ──────────
+
+#[test]
+fn transfer_zip_resumes_after_mid_stream_drop() {
+    let data = pattern(64_000, 42);
+    let zip = build_zip(&[("game.bin", &data)], true);
+    let tx_id = random_tx_id();
+
+    let srv = MockServer::start();
+    // Drop after 3 shards so the first attempt is interrupted mid-entry.
+    {
+        let mut st = srv.state.lock().unwrap();
+        st.drop_after_shards = Some(3);
+    }
+    let cfg = TransferConfig {
+        shard_size: 8192,
+        pack_size: 0,
+        ..TransferConfig::new(&srv.addr)
+    };
+    let first = transfer_zip_with_opts(&cfg, tx_id, "/data/r", &zip.0, 64, 0);
+    assert!(first.is_err(), "first attempt should die after 3 shards");
+
+    // Clear the drop so resume can finish.
+    {
+        let mut st = srv.state.lock().unwrap();
+        st.drop_after_shards = None;
+    }
+    let resumed = transfer_zip_resumable(&cfg, tx_id, "/data/r", &zip.0, 64, 3, TX_FLAG_RESUME)
+        .expect("resume should commit");
+    let total_shards = data.len().div_ceil(8192) as u64;
+    assert!(
+        resumed.shards_sent < total_shards,
+        "resume should skip already-acked shards (sent {}, total {total_shards})",
+        resumed.shards_sent
+    );
+    let st = srv.state.lock().unwrap();
+    assert_eq!(
+        st.applied.get("/data/r/game.bin").map(|v| v.as_slice()),
         Some(data.as_slice())
     );
 }

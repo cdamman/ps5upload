@@ -2596,28 +2596,20 @@ pub fn transfer_file_list_multistream(
 //
 // ── Why this is just `transfer_dir` with a different byte source ─────────────
 //
-// `transfer_dir` plans shards from `(file, offset, len)` and materialises each
-// shard lazily by `seek + read`. A DEFLATE-compressed zip entry is NOT
-// seekable, so we can't seek to an arbitrary offset of the *decompressed*
-// stream on demand. The fix is the same one SimpleZipDrive uses: inflate a
-// whole entry once into a seekable cache (RAM for small entries, a temp file
-// for large ones), then serve the shard's byte range out of that cache.
+// NonPacked zip entries stream like `.7z`: open the Deflate reader once per
+// entry and emit each shard-sized chunk as soon as it inflates. That keeps the
+// transfer socket busy so the payload's SO_RCVTIMEO never fires during a
+// multi-GB decompress (the pre-5.4.14 full-entry-cache path went silent for
+// minutes, then died at the 120s idle cap — Black Myth Wukong bug report).
 //
-// ── Why a single-entry cache suffices (Strategy C) ──────────────────────────
-//
-// Shards are planned and sent in entry order, and all of an entry's shards are
-// contiguous. So the cache only ever needs to hold the *current* entry: when a
-// shard for a different entry arrives, we evict and inflate the new one. This
-// bounds host memory/temp to one entry's uncompressed size and makes resume
-// trivial — a resumed mid-entry shard just re-inflates that entry locally
-// (cheap, no re-download) and reads the resumed range. Tiny entries that get
-// coalesced into a packed shard are inflated whole on the spot (they're below
-// `pack_file_max`, i.e. 128 KiB) and never touch the single-entry cache.
+// Packed (tiny) entries still inflate whole into a small buffer — they're
+// below `pack_file_max` (128 KiB). The Mem/Tmp cache helpers remain for that
+// packed path and for tests that call `read_range` directly.
 
 /// Entries whose *uncompressed* size is at or above this inflate to a temp
-/// file; smaller entries inflate into a RAM buffer. 512 MiB matches
-/// SimpleZipDrive's default per-file RAM threshold. Only one entry is ever
-/// cached at a time, so this is the peak extra RAM the zip path can use.
+/// file when using the seekable cache helpers; smaller entries use RAM.
+/// The live NonPacked send path streams and does not depend on this for
+/// keeping the wire busy.
 pub const DEFAULT_ZIP_ENTRY_RAM_THRESHOLD: u64 = 512 * 1024 * 1024;
 
 /// Distinct cache-file id per `ZipMaterialiser`, so two concurrent zip
@@ -2961,6 +2953,95 @@ impl ZipMaterialiser {
         Ok(out.expect("Ok arm populates out when there was no open error"))
     }
 
+    /// Stream one NonPacked entry's shards as Deflate bytes arrive.
+    ///
+    /// Opens the zip entry once, `read_exact`s each shard-sized chunk in
+    /// plan order, and sends immediately (or discards on resume when
+    /// `seq <= last_acked_shard`). Returns the number of shards actually
+    /// transmitted. This is what keeps the transfer socket alive during
+    /// multi-GB inflates — contrast the old full-entry cache which
+    /// blocked for minutes before the first STREAM_SHARD.
+    fn stream_nonpacked_run(
+        &mut self,
+        run: &[ZipShard],
+        entry_index: usize,
+        entry_size: u64,
+        last_acked_shard: u64,
+        sender: &mut PipelinedSender<'_>,
+        progress_bytes: Option<&std::sync::Arc<std::sync::atomic::AtomicU64>>,
+    ) -> Result<u64> {
+        use std::io::Read;
+        // Don't leave a stale packed-path cache pinned while we borrow
+        // the archive for streaming.
+        self.evict();
+
+        let mut open_err: Option<zip::result::ZipError> = None;
+        let mut shards_sent = 0u64;
+        let mut send_err: Option<anyhow::Error> = None;
+        match self.archive.by_index(entry_index) {
+            Ok(mut zf) => {
+                let mut consumed = 0u64;
+                for zs in run {
+                    let (seq, offset, len) = match zs {
+                        ZipShard::NonPacked {
+                            shard_seq,
+                            offset,
+                            len,
+                            entry_index: ei,
+                            entry_size: es,
+                            ..
+                        } => {
+                            if *ei != entry_index || *es != entry_size {
+                                bail!(
+                                    "zip stream run desynced: expected entry {entry_index}/{entry_size}, got {ei}/{es}"
+                                );
+                            }
+                            if *offset != consumed {
+                                bail!(
+                                    "zip stream run non-contiguous: expected offset {consumed}, got {offset}"
+                                );
+                            }
+                            (*shard_seq, *offset, *len)
+                        }
+                        _ => bail!("zip stream_nonpacked_run got non-NonPacked shard"),
+                    };
+                    let _ = offset; // validated against consumed
+                    let mut buf = vec![0u8; len as usize];
+                    zf.read_exact(&mut buf).with_context(|| {
+                        format!(
+                            "inflate zip entry {entry_index} shard seq={seq} ({len} bytes at {consumed})"
+                        )
+                    })?;
+                    consumed += len;
+                    if seq <= last_acked_shard {
+                        continue;
+                    }
+                    if let Err(e) = sender.send_with(seq, &buf, 1, 0) {
+                        send_err = Some(e);
+                        break;
+                    }
+                    shards_sent += 1;
+                    if let Some(p) = progress_bytes {
+                        p.fetch_add(len, std::sync::atomic::Ordering::Relaxed);
+                    }
+                }
+                if send_err.is_none() && consumed != entry_size {
+                    bail!(
+                        "zip entry {entry_index} streamed {consumed} bytes, central directory said {entry_size}"
+                    );
+                }
+            }
+            Err(e) => open_err = Some(e),
+        }
+        if let Some(e) = open_err {
+            return Err(self.map_open_error(entry_index, e));
+        }
+        if let Some(e) = send_err {
+            return Err(e);
+        }
+        Ok(shards_sent)
+    }
+
     /// Materialise one shard's wire body — the zip analogue of
     /// `materialise_body`. Packed bodies use the same
     /// `[u32 path_len][u32 size][path][data]` record layout the payload's
@@ -3225,12 +3306,11 @@ pub fn transfer_zip(
 }
 
 /// Full-control zip transfer. `ram_threshold` is the per-entry RAM/temp-spill
-/// cutoff (see `DEFAULT_ZIP_ENTRY_RAM_THRESHOLD`); `flags` is the BEGIN_TX
-/// flag word (`TX_FLAG_RESUME` to adopt an interrupted tx of the same
-/// `tx_id`). Mirrors `transfer_dir_with_flags`: a metadata-only planning pass
-/// (central directory) builds the manifest + shard plan, then the send pass
-/// materialises each shard's bytes just before it goes out — here by inflating
-/// one entry at a time into a seekable cache.
+/// cutoff for packed-entry helpers (see `DEFAULT_ZIP_ENTRY_RAM_THRESHOLD`);
+/// `flags` is the BEGIN_TX flag word (`TX_FLAG_RESUME` to adopt an interrupted
+/// tx of the same `tx_id`). Planning is central-directory only; the send pass
+/// **streams** NonPacked Deflate entries shard-by-shard (like `.7z`) so the
+/// wire stays busy during multi-GB inflates.
 pub fn transfer_zip_with_opts(
     cfg: &TransferConfig,
     tx_id: [u8; 16],
@@ -3434,32 +3514,76 @@ pub fn transfer_zip_with_opts(
     // Same ghost-commit guard as the single-file paths. See guard_last_acked.
     guard_last_acked(last_acked_shard, total_shards)?;
 
-    // ── Send pass ── inflate one entry at a time into a seekable cache and
-    //    serve each shard's range. Skipped (already-acked) shards on resume
-    //    don't force re-sends; the cache re-inflates locally when first
-    //    touched.
+    // ── Send pass ── stream NonPacked Deflate entries shard-by-shard (keep
+    //    the wire busy during multi-GB inflates). Packed/Empty still go
+    //    through the small-entry materialiser. On resume, fully-acked
+    //    entries are skipped without opening; mid-entry resumes discard
+    //    already-acked inflate bytes then resume sending.
     let mut mat = ZipMaterialiser::new(archive, ram_threshold, std::env::temp_dir());
     let mut shards_sent = 0u64;
     {
         let mut sender = PipelinedSender::new(&mut c, cfg, tx_id, total_shards);
-        for zs in &planned_shards {
-            let seq = zip_shard_seq(zs);
-            if seq <= last_acked_shard {
-                continue;
-            }
-            let body = mat.body(zs)?;
-            let (record_count, sflags) = zip_shard_meta(zs);
-            shards_sent += 1;
-            sender.send_with(seq, &body, record_count, sflags)?;
-            if let Some(p) = &cfg.progress_bytes {
-                // File-data bytes only (see transfer_dir) — packed-shard
-                // framing isn't part of the plan total.
-                p.fetch_add(zip_shard_data_len(zs), std::sync::atomic::Ordering::Relaxed);
+        let mut i = 0usize;
+        while i < planned_shards.len() {
+            match &planned_shards[i] {
+                ZipShard::Empty { .. } | ZipShard::Packed { .. } => {
+                    let zs = &planned_shards[i];
+                    let seq = zip_shard_seq(zs);
+                    i += 1;
+                    if seq <= last_acked_shard {
+                        continue;
+                    }
+                    let body = mat.body(zs)?;
+                    let (record_count, sflags) = zip_shard_meta(zs);
+                    shards_sent += 1;
+                    sender.send_with(seq, &body, record_count, sflags)?;
+                    if let Some(p) = &cfg.progress_bytes {
+                        p.fetch_add(
+                            zip_shard_data_len(zs),
+                            std::sync::atomic::Ordering::Relaxed,
+                        );
+                    }
+                }
+                ZipShard::NonPacked {
+                    entry_index,
+                    entry_size,
+                    ..
+                } => {
+                    let entry_index = *entry_index;
+                    let entry_size = *entry_size;
+                    let run_start = i;
+                    i += 1;
+                    while i < planned_shards.len() {
+                        match &planned_shards[i] {
+                            ZipShard::NonPacked {
+                                entry_index: ei, ..
+                            } if *ei == entry_index => i += 1,
+                            _ => break,
+                        }
+                    }
+                    let run = &planned_shards[run_start..i];
+                    // Fast path: every shard of this entry already landed —
+                    // don't touch Deflate at all.
+                    if run
+                        .iter()
+                        .all(|zs| zip_shard_seq(zs) <= last_acked_shard)
+                    {
+                        continue;
+                    }
+                    shards_sent += mat.stream_nonpacked_run(
+                        run,
+                        entry_index,
+                        entry_size,
+                        last_acked_shard,
+                        &mut sender,
+                        cfg.progress_bytes.as_ref(),
+                    )?;
+                }
             }
         }
         sender.drain()?;
     }
-    drop(mat); // evict any temp cache file before COMMIT
+    drop(mat); // evict any packed-path temp cache before COMMIT
 
     let commit_ack = send_commit_and_expect_ack(&mut c, &tx_meta_buf(tx_id, 0, b""), cfg)?;
 

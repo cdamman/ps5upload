@@ -70,15 +70,30 @@ export function computeRate(samples: RateSample[], now: number): number {
 }
 
 /**
+ * Minimum wall time before we trust a bytes/elapsed average.
+ * Sub-250 ms completions (tiny files, reconcile no-ops) otherwise
+ * report absurd multi-GB/s rates that confuse Activity / bug reports.
+ */
+export const MIN_AVERAGE_RATE_ELAPSED_MS = 250;
+
+/**
  * Final average for a completed upload: `bytes / elapsedMs * 1000`.
  * Use this for the done-state readout instead of the trailing window's
  * last value — at end-of-transfer the trailing window only sees the
  * tail, which is dominated by COMMIT-phase metadata work and reads
  * artificially low. The total-bytes-over-total-time average is what
  * users actually want to compare runs against.
+ *
+ * Returns 0 when elapsed is below {@link MIN_AVERAGE_RATE_ELAPSED_MS}
+ * so UI surfaces can hide the chip instead of showing "1463 MB/s".
  */
 export function averageRate(bytes: number, elapsedMs: number): number {
-  if (!isFinite(bytes) || !isFinite(elapsedMs) || elapsedMs <= 0 || bytes <= 0) {
+  if (
+    !isFinite(bytes) ||
+    !isFinite(elapsedMs) ||
+    elapsedMs < MIN_AVERAGE_RATE_ELAPSED_MS ||
+    bytes <= 0
+  ) {
     return 0;
   }
   return (bytes * 1000) / elapsedMs;

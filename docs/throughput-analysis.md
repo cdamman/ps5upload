@@ -69,3 +69,13 @@ With multi-stream default (4), the **common case** (a game folder on a decent
 source) is already at the aggregate ceiling: Fat ≈ disk wall, Pro ≈ 80% of
 gigabit. Optimizations #1–#4 mainly help **single-file uploads** and **slow
 sources**, where multi-stream can't aggregate around the per-stream limit.
+
+## Zip archive uploads (5.4.14)
+
+Large Deflate entries inside a `.zip` used to be fully inflated on the host
+before the first `STREAM_SHARD`. That left the transfer socket idle long enough
+for the payload's 120s `SO_RCVTIMEO` to kill the connection — live UI rates
+collapsed to hundreds of KB/s while Activity averages from brief healthy bursts
+still looked fine (~50 MB/s on Fat). As of 5.4.14 NonPacked zip entries
+**stream-inflate** (same model as `.7z`), and after `BEGIN_TX` the payload
+raises the per-socket idle timeout to 30 minutes as belt-and-suspenders.

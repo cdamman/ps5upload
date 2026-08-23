@@ -4,6 +4,24 @@ What's new in ps5upload, written for humans.
 
 ---
 
+## 5.4.14
+
+**Large `.zip` uploads no longer die while your PC is still decompressing.**
+
+- **Big zip entries could stall the transfer for minutes, then fail.** The app
+  used to fully decompress each large file inside a `.zip` before sending any
+  of it. The console treated that silence as a dead connection and dropped the
+  upload after about two minutes — so live speed looked like a crawl even when
+  Activity later showed a healthy average from a short burst. Large zip
+  members are now streamed as they decompress (same idea as `.7z`), and the
+  console keeps the transfer socket alive for much longer once an upload has
+  started.
+- **Activity speed labels are clearer.** Running rows say “live”; finished
+  rows still say “avg”. Tiny jobs that finish in a blink no longer show absurd
+  multi‑GB/s averages.
+
+---
+
 ## 5.4.13
 
 **Big uploads no longer get killed by the app's own reconnect.**
