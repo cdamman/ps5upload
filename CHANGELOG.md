@@ -4,6 +4,26 @@ What's new in ps5upload, written for humans.
 
 ---
 
+## 5.4.16
+
+**A `.rar` upload no longer fails just because the archive lists its files
+in a different order than it extracts them.**
+
+- **"rar stream desynced from plan" is fixed.** Uploading a `.rar` reads it
+  twice: once to list what's inside, once to send the files. If those two
+  passes reported the files in a different order — which some archives do —
+  the upload stopped dead, even though nothing was wrong with it. Each file
+  is now matched by name instead of by position, so it goes to the right
+  place no matter what order it arrives in.
+- **A damaged or incomplete archive now says so.** Instead of a confusing
+  "desynced" message you get which files are missing, and a suggestion to
+  test-extract the archive locally first.
+- **Resuming an upload of such an archive is refused rather than risked.**
+  If the order differs, resuming could skip the wrong parts and leave a
+  broken install, so the app asks you to start again with Overwrite.
+
+---
+
 ## 5.4.15
 
 **Multi-part archives, and updates that match how you installed.**

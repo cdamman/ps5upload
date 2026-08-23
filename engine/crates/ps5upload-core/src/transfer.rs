@@ -4535,6 +4535,47 @@ mod rar_support {
     /// No staging directory, so a `.rar` upload needs no free host disk beyond
     /// the archive itself. Structurally this mirrors `transfer_7z_with_opts`
     /// on purpose — same sender, same resume rule, same lock-step plan check.
+    /// Bind one streamed rar entry to its slot in the plan.
+    ///
+    /// Extracted so the rule is testable without a real archive whose
+    /// listing and extraction orders diverge — the situation that motivated
+    /// it and which cannot be synthesised here.
+    ///
+    /// Returns `(plan index, reordered)`. `reordered` is true when the entry
+    /// did not arrive in planned order, which is harmless for a fresh upload
+    /// (each entry carries its own absolute shard numbers) but unsafe to
+    /// resume through.
+    pub(crate) fn bind_plan_entry(
+        plan_index: &std::collections::HashMap<&str, usize>,
+        seen: &[bool],
+        planned_len: usize,
+        name: &str,
+        emitted: usize,
+        resuming: bool,
+    ) -> Result<(usize, bool)> {
+        let Some(&i) = plan_index.get(name) else {
+            bail!(
+                "rar entry {name:?} is missing from the archive listing \
+                 ({planned_len} files planned). The archive's listing and \
+                 extraction passes disagree — usually an incomplete or damaged \
+                 multi-part set. Test-extract it locally; if it extracts \
+                 cleanly, please report this with the archive's layout."
+            );
+        };
+        if seen[i] {
+            bail!("rar produced entry {name:?} more than once");
+        }
+        let reordered = i != emitted;
+        if reordered && resuming {
+            bail!(
+                "this archive's listing and extraction order differ, so a \
+                 resumed upload could skip the wrong parts. Start the upload \
+                 again with Overwrite instead of Resume."
+            );
+        }
+        Ok((i, reordered))
+    }
+
     pub fn transfer_rar_streaming(
         cfg: &TransferConfig,
         tx_id: [u8; 16],
@@ -4613,17 +4654,49 @@ mod rar_support {
         let send_result = (|| -> Result<()> {
             let mut sender = PipelinedSender::new(&mut c, cfg, tx_id, total_shards);
             let mut buf = vec![0u8; cfg.shard_size];
-            let mut pos = 0usize;
+
+            // Bind each streamed entry to ITS OWN manifest slot by name.
+            //
+            // This used to be positional lock-step: entry N of the send pass
+            // had to be entry N of the plan, or the transfer aborted. But the
+            // two passes walk the archive with DIFFERENT UnRAR modes — the
+            // plan uses open_for_listing(), the send uses
+            // open_for_processing() — and nothing guarantees those enumerate
+            // in the same order for every archive shape. A user hit exactly
+            // that and could not upload at all.
+            //
+            // Looking the entry up by name is strictly SAFER than trusting
+            // position: the guard exists to stop one file's bytes landing at
+            // another file's destination, and a name lookup enforces that
+            // directly rather than inferring it from ordering. Shard numbers
+            // are absolute and come from the entry's own plan slot, so the
+            // payload places the bytes correctly whatever order they arrive
+            // in.
+            let plan_index: std::collections::HashMap<&str, usize> = plan
+                .iter()
+                .enumerate()
+                .map(|(i, (n, _, _))| (n.as_str(), i))
+                .collect();
+            let mut seen = vec![false; plan.len()];
+            let mut emitted = 0usize;
+            let mut reordered = false;
 
             while let Some(name) = next_entry(&rx)? {
                 // Lock-step with the plan. Both passes walk the archive in the
                 // same order, so a mismatch means something is wrong — fail
                 // rather than write one file's bytes to another's dest path.
-                if pos >= plan.len() || plan[pos].0 != name {
-                    bail!("rar stream desynced from plan at entry {name:?}");
-                }
-                let (_, size, shard_start) = plan[pos].clone();
-                pos += 1;
+                let (i, was_reordered) = bind_plan_entry(
+                    &plan_index,
+                    &seen,
+                    plan.len(),
+                    name.as_str(),
+                    emitted,
+                    last_acked_shard > 0,
+                )?;
+                seen[i] = true;
+                reordered |= was_reordered;
+                emitted += 1;
+                let (_, size, shard_start) = plan[i].clone();
 
                 let mut rd = EntryReader::new(&rx);
                 if size == 0 {
@@ -4667,11 +4740,28 @@ mod rar_support {
                 }
             }
 
-            if pos != plan.len() {
+            if emitted != plan.len() {
+                let missing: Vec<&str> = seen
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, ok)| !**ok)
+                    .map(|(i, _)| plan[i].0.as_str())
+                    .take(3)
+                    .collect();
                 bail!(
-                    "rar stream ended after {pos} of {} planned files",
+                    "rar stream ended after {emitted} of {} planned files \
+                     (never received: {missing:?}). The archive is likely \
+                     incomplete or damaged — test-extract it locally.",
                     plan.len()
                 );
+            }
+            if reordered {
+                crate::log::log(&format!(
+                    "rar: archive listed and extracted its entries in different \
+                     orders; every file was still sent to its own planned \
+                     destination ({} files)",
+                    plan.len()
+                ));
             }
             sender.drain()?;
             Ok(())
@@ -5083,7 +5173,82 @@ mod retry_classification_tests {
     //! way is expensive: retrying a permission error wastes user time
     //! with no chance of success, and NOT retrying a real network drop
     //! turns a recoverable hiccup into a failed upload.
+    use super::rar_support::bind_plan_entry;
     use super::*;
+    use std::collections::HashMap;
+
+    fn idx<'a>(names: &'a [&'a str]) -> HashMap<&'a str, usize> {
+        names.iter().enumerate().map(|(i, n)| (*n, i)).collect()
+    }
+
+    /// The plan and the send pass walk the archive with different UnRAR
+    /// modes (open_for_listing vs open_for_processing), and nothing
+    /// guarantees they enumerate in the same order. This used to be a hard
+    /// positional lock-step that aborted the whole upload; a user could not
+    /// upload at all because of it. Binding by NAME is both tolerant of the
+    /// order AND stricter about identity.
+    #[test]
+    fn entries_bind_to_their_own_slot_whatever_the_order() {
+        let names = ["a/one.pak", "a/two.pak", "a/three.pak"];
+        let index = idx(&names);
+        let mut seen = vec![false; 3];
+
+        // Arrives LAST-first — the exact shape that used to abort.
+        let (i, reordered) = bind_plan_entry(&index, &seen, 3, "a/three.pak", 0, false).unwrap();
+        assert_eq!(i, 2, "bytes must go to three.pak's own slot, not slot 0");
+        assert!(reordered);
+        seen[i] = true;
+
+        let (i, _) = bind_plan_entry(&index, &seen, 3, "a/one.pak", 1, false).unwrap();
+        assert_eq!(i, 0);
+    }
+
+    #[test]
+    fn in_order_delivery_is_not_flagged_as_reordered() {
+        let names = ["a", "b"];
+        let index = idx(&names);
+        let seen = vec![false; 2];
+        let (i, reordered) = bind_plan_entry(&index, &seen, 2, "a", 0, false).unwrap();
+        assert_eq!((i, reordered), (0, false));
+    }
+
+    /// A file the extraction pass produces but the listing never reported has
+    /// no manifest slot, so the console has nowhere to put it. Dropping it
+    /// silently would install an incomplete game.
+    #[test]
+    fn an_unplanned_entry_is_refused() {
+        let names = ["a"];
+        let index = idx(&names);
+        let seen = vec![false; 1];
+        let e = bind_plan_entry(&index, &seen, 1, "ghost.pak", 0, false).unwrap_err();
+        assert!(format!("{e}").contains("missing from the archive listing"));
+    }
+
+    #[test]
+    fn the_same_entry_twice_is_refused() {
+        let names = ["a"];
+        let index = idx(&names);
+        let seen = vec![true];
+        let e = bind_plan_entry(&index, &seen, 1, "a", 0, false).unwrap_err();
+        assert!(format!("{e}").contains("more than once"));
+    }
+
+    /// Resume skips every shard at or below `last_acked_shard`, which only
+    /// means "already sent" while shards ascend. Out of order, that would
+    /// skip the WRONG parts and commit a corrupt install — so refuse, and
+    /// tell the user how to proceed.
+    #[test]
+    fn reordering_is_refused_while_resuming_but_allowed_fresh() {
+        let names = ["a", "b"];
+        let index = idx(&names);
+        let seen = vec![false; 2];
+        // Fresh upload: fine.
+        assert!(bind_plan_entry(&index, &seen, 2, "b", 0, false).is_ok());
+        // Resuming: refused, with an actionable instruction.
+        let e = bind_plan_entry(&index, &seen, 2, "b", 0, true).unwrap_err();
+        let msg = format!("{e}");
+        assert!(msg.contains("Overwrite instead of Resume"), "{msg}");
+    }
 
     fn ioerr(kind: std::io::ErrorKind) -> anyhow::Error {
         anyhow::Error::from(std::io::Error::new(kind, "test"))
