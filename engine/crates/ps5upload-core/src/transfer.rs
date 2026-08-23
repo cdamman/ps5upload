@@ -3538,10 +3538,7 @@ pub fn transfer_zip_with_opts(
                     shards_sent += 1;
                     sender.send_with(seq, &body, record_count, sflags)?;
                     if let Some(p) = &cfg.progress_bytes {
-                        p.fetch_add(
-                            zip_shard_data_len(zs),
-                            std::sync::atomic::Ordering::Relaxed,
-                        );
+                        p.fetch_add(zip_shard_data_len(zs), std::sync::atomic::Ordering::Relaxed);
                     }
                 }
                 ZipShard::NonPacked {
@@ -3564,10 +3561,7 @@ pub fn transfer_zip_with_opts(
                     let run = &planned_shards[run_start..i];
                     // Fast path: every shard of this entry already landed —
                     // don't touch Deflate at all.
-                    if run
-                        .iter()
-                        .all(|zs| zip_shard_seq(zs) <= last_acked_shard)
-                    {
+                    if run.iter().all(|zs| zip_shard_seq(zs) <= last_acked_shard) {
                         continue;
                     }
                     shards_sent += mat.stream_nonpacked_run(

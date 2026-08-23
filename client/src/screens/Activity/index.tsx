@@ -8,7 +8,14 @@ import {
   Eye,
 } from "lucide-react";
 
-import { PageHeader, Button, EmptyState, Modal, Spinner, Badge } from "../../components";
+import {
+  PageHeader,
+  Button,
+  EmptyState,
+  Modal,
+  Spinner,
+  Badge,
+} from "../../components";
 import { TaskList } from "../../components/TaskList";
 import { TelemetryDashboard } from "../../components/TelemetryDashboard";
 import { useConfirm } from "../../components/ConfirmDialog";
@@ -142,9 +149,7 @@ export default function ActivityScreen() {
       )}
 
       {/* v5 telemetry dashboard — live sensor charts. */}
-      {view === "telemetry" && (
-        <TelemetryDashboard />
-      )}
+      {view === "telemetry" && <TelemetryDashboard />}
 
       {/* v5 unified task list — active + recently-finished tasks from
           the taskStore. Sits above the legacy activity history so live
@@ -246,9 +251,7 @@ function ActivityRow({ entry }: { entry: ActivityEntry }) {
   // Shared helper clamps sub-250 ms windows so tiny/reconcile finishes
   // don't render as absurd multi-GB/s averages in the Activity list.
   const speed =
-    entry.bytes && entry.bytes > 0
-      ? averageRate(entry.bytes, elapsedMs)
-      : 0;
+    entry.bytes && entry.bytes > 0 ? averageRate(entry.bytes, elapsedMs) : 0;
   const pct =
     entry.totalBytes && entry.totalBytes > 0 && entry.bytes
       ? Math.min(100, (entry.bytes / entry.totalBytes) * 100)
@@ -662,10 +665,7 @@ function ActivityDetailModal({
 }
 
 function OutcomeIcon({ outcome }: { outcome: ActivityOutcome }) {
-  if (outcome === "running")
-    return (
-      <Spinner size={14} tone="accent" />
-    );
+  if (outcome === "running") return <Spinner size={14} tone="accent" />;
   if (outcome === "done")
     return <CheckCircle2 size={13} className="text-[var(--color-good)]" />;
   if (outcome === "failed")
