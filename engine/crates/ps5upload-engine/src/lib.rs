@@ -3901,62 +3901,21 @@ async fn transfer_dir_handler(
         req.excludes.len()
     );
 
-    // Validate the source and build the upload plan OFF the async reactor.
-    // walk_plan does a recursive read_dir+metadata over the whole source tree
-    // (46k-file games are routine; a slow SMB/UNC share can take minutes).
-    // Running it inline on the bare #[tokio::main] runtime would park a worker
-    // thread for that entire walk, stalling SSE, /pkg-host serving, and every
-    // OTHER console's requests. The client already waits for this walk before
-    // it receives the job_id (the plan must exist to seed JobState::Running),
-    // so moving it to a blocking thread changes which thread blocks, not the
-    // client-observed latency. (Mirrors transfer_download_handler's enumeration.)
-    let (total_bytes, files) = {
-        let src_dir = req.src_dir.clone();
-        let excludes = req.excludes.clone();
-        match tokio::task::spawn_blocking(move || {
-            // Fail fast on a missing / non-directory source. walk_plan swallows
-            // read errors (returns empty), so without this a typo'd path or a
-            // permissions problem would start a "Running → 0 bytes" job (or a
-            // fake "Done, 0 files") instead of a clear error — mirroring the
-            // up-front stat that transfer_file_handler does for single files.
-            let p = std::path::Path::new(&src_dir);
-            if !p.is_dir() {
-                return Err(format!(
-                    "source directory not found or not a directory: {src_dir}"
-                ));
-            }
-            Ok(walk_plan(p, &excludes))
-        })
-        .await
-        {
-            Ok(Ok(plan)) => plan,
-            Ok(Err(msg)) => return json_err(StatusCode::BAD_REQUEST, msg).into_response(),
-            Err(e) => {
-                return json_err(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("source walk task panicked/cancelled: {e}"),
-                )
-                .into_response()
-            }
-        }
-    };
-    let files_sent_count = files.len() as u64;
-    let progress = Arc::new(AtomicU64::new(0));
-    let progress_files = Arc::new(AtomicU64::new(0));
-    // P3 / v2.18.0 — apply-phase counters. The engine's
-    // send_commit_and_expect_ack reads APPLY_PROGRESS frames from
-    // the payload during the commit wait and stores into these.
-    // The ticker (spawn_progress_ticker) reads and writes them to
-    // JobState::Running's files_finalized / bytes_finalized fields.
-    let progress_files_finalized = Arc::new(AtomicU64::new(0));
-    let progress_bytes_finalized = Arc::new(AtomicU64::new(0));
-    let ctx = TickerContext {
-        started_at_ms,
-        total_bytes,
-        dynamic_total_bytes: None,
-        skipped_files: 0,
-        skipped_bytes: 0,
-    };
+    // Hand the client its job_id BEFORE walking the source tree.
+    //
+    // walk_plan does a recursive read_dir+metadata over the whole source
+    // (46k-file games are routine). This handler used to await that walk and
+    // only then return the id, so the client — which shows "Starting…" until
+    // the id arrives — sat inert for the whole walk with no spinner, no file
+    // count, and no way to cancel. On a Docker bind-mount (gRPC-FUSE metadata
+    // ops are orders of magnitude slower than a local SSD) that is minutes on
+    // a real game folder, and it reads as a hang: issue #275, "upload process
+    // stuck at starting…".
+    //
+    // The reconcile route already seeds `Running` with an unknown plan and
+    // fills it in from its blocking task; plain dir upload now does the same,
+    // so the two folder paths behave alike. The client's Running-with-no-plan
+    // interstitial already covers the gap.
     set_job(
         &state.jobs,
         &state.events_tx,
@@ -3964,14 +3923,11 @@ async fn transfer_dir_handler(
         JobState::Running {
             started_at_ms,
             bytes_sent: 0,
-            total_bytes,
-            files,
+            total_bytes: 0, // unknown until the walk below finishes
+            files: vec![],
             skipped_files: 0,
             skipped_bytes: 0,
             files_processing: 0,
-            // P3 / v2.18.0 — apply-phase counters start at 0; the
-            // ticker fills them in once APPLY_PROGRESS frames begin
-            // arriving from the payload during commit.
             files_finalized: 0,
             files_finalizing_total: 0,
             bytes_finalized: 0,
@@ -3980,22 +3936,95 @@ async fn transfer_dir_handler(
 
     let jobs = Arc::clone(&state.jobs);
     let events_tx = state.events_tx.clone();
-    let stop_ticker = spawn_progress_ticker(
-        Arc::clone(&jobs),
-        events_tx.clone(),
-        job_id,
-        ctx,
-        Arc::clone(&progress),
-        Arc::clone(&progress_files),
-        Arc::clone(&progress_files_finalized),
-        Arc::clone(&progress_bytes_finalized),
-    );
 
     tokio::task::spawn_blocking(move || {
-        // See ticker stop-guard rationale at the file-upload spawn site.
-        let _stop_guard = TickerStopGuard::new(stop_ticker);
+        // Guard installed first so a panic in the walk can't orphan the job
+        // in Running forever (same rationale as the reconcile route).
         let mut fail_guard =
             JobFailOnDropGuard::new(Arc::clone(&jobs), events_tx.clone(), job_id, started_at_ms);
+
+        // Fail fast on a missing / non-directory source. walk_plan swallows
+        // read errors (returns empty), so without this a typo'd path or a
+        // permissions problem would start a "Running → 0 bytes" job (or a
+        // fake "Done, 0 files") instead of a clear error. This used to be a
+        // 400 on the POST; now the id is already out, so it lands as a job
+        // failure the client surfaces the same way.
+        let src_path = std::path::PathBuf::from(&req.src_dir);
+        if !src_path.is_dir() {
+            let completed_at_ms = now_ms();
+            set_job(
+                &jobs,
+                &events_tx,
+                job_id,
+                job_failed_from_err(
+                    started_at_ms,
+                    completed_at_ms,
+                    &anyhow::anyhow!(
+                        "source directory not found or not a directory: {}",
+                        req.src_dir
+                    ),
+                ),
+            );
+            fail_guard.mark_succeeded();
+            return;
+        }
+
+        let walk_started = std::time::Instant::now();
+        let (total_bytes, files) = walk_plan(&src_path, &req.excludes);
+        let files_sent_count = files.len() as u64;
+        crate::log_info!(
+            "transfer_dir: job={job_id} walk done in {} ms — files={} bytes={}",
+            walk_started.elapsed().as_millis(),
+            files_sent_count,
+            total_bytes
+        );
+
+        let progress = Arc::new(AtomicU64::new(0));
+        let progress_files = Arc::new(AtomicU64::new(0));
+        // P3 / v2.18.0 — apply-phase counters. The engine's
+        // send_commit_and_expect_ack reads APPLY_PROGRESS frames from
+        // the payload during the commit wait and stores into these.
+        let progress_files_finalized = Arc::new(AtomicU64::new(0));
+        let progress_bytes_finalized = Arc::new(AtomicU64::new(0));
+        let ctx = TickerContext {
+            started_at_ms,
+            total_bytes,
+            dynamic_total_bytes: None,
+            skipped_files: 0,
+            skipped_bytes: 0,
+        };
+        // Now that the plan exists, publish it so the UI can switch from the
+        // "preparing" interstitial to a real progress bar.
+        set_job(
+            &jobs,
+            &events_tx,
+            job_id,
+            JobState::Running {
+                started_at_ms,
+                bytes_sent: 0,
+                total_bytes,
+                files,
+                skipped_files: 0,
+                skipped_bytes: 0,
+                files_processing: 0,
+                files_finalized: 0,
+                files_finalizing_total: 0,
+                bytes_finalized: 0,
+            },
+        );
+
+        let stop_ticker = spawn_progress_ticker(
+            Arc::clone(&jobs),
+            events_tx.clone(),
+            job_id,
+            ctx,
+            Arc::clone(&progress),
+            Arc::clone(&progress_files),
+            Arc::clone(&progress_files_finalized),
+            Arc::clone(&progress_bytes_finalized),
+        );
+        // See ticker stop-guard rationale at the file-upload spawn site.
+        let _stop_guard = TickerStopGuard::new(stop_ticker);
         let mut cfg = make_transfer_config(&addr);
         // Make this transfer cancellable: register a flag the core checks at
         // every shard boundary, flipped by POST /api/jobs/{id}/cancel.
@@ -8241,6 +8270,63 @@ mod cancel_registry_tests {
 #[cfg(test)]
 mod helpers_tests {
     use super::*;
+
+    /// #275 — `POST /api/transfer/dir` used to await the full source walk
+    /// before returning the job_id, so the client sat on "Starting…" for the
+    /// whole walk (minutes on a Docker bind-mount) with no progress and no
+    /// way to cancel. The id must now come back immediately, which also
+    /// means a bad source can no longer be a 400: it surfaces as a job
+    /// failure instead. This test pins the second half, which is the
+    /// observable consequence of the first.
+    #[tokio::test]
+    async fn transfer_dir_reports_a_bad_source_as_a_job_failure_not_a_400() {
+        let jobs: Arc<Mutex<HashMap<Uuid, JobState>>> = Arc::new(Mutex::new(HashMap::new()));
+        let (events_tx, _rx) = broadcast::channel(16);
+        let state = AppState {
+            jobs: Arc::clone(&jobs),
+            default_ps5_addr: "127.0.0.1:1".to_string(),
+            events_tx,
+        };
+        let req = TransferDirReq {
+            addr: Some("127.0.0.1:1".to_string()),
+            tx_id: None,
+            dest_root: "/data/nope".to_string(),
+            src_dir: "/definitely/not/a/real/directory/for/tests".to_string(),
+            excludes: vec![],
+            bandwidth_cap_mbps: None,
+        };
+
+        let resp = transfer_dir_handler(State(state), Json(req))
+            .await
+            .into_response();
+        assert_eq!(
+            resp.status(),
+            StatusCode::ACCEPTED,
+            "the job id must be handed out before the walk, so a missing \
+             source can no longer be rejected synchronously"
+        );
+
+        // The spawned task marks the job Failed. Poll briefly rather than
+        // sleeping a fixed amount so the test isn't timing-fragile.
+        let mut failed = None;
+        for _ in 0..100 {
+            {
+                let g = jobs.lock().unwrap();
+                if let Some((_, JobState::Failed { error, .. })) =
+                    g.iter().next().map(|(k, v)| (*k, v.clone()))
+                {
+                    failed = Some(error);
+                    break;
+                }
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+        let error = failed.expect("job should have been marked Failed");
+        assert!(
+            error.contains("source directory not found"),
+            "unexpected error: {error}"
+        );
+    }
 
     #[tokio::test]
     async fn progress_ticker_adopts_a_late_discovered_total() {

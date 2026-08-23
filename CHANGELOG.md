@@ -4,6 +4,25 @@ What's new in ps5upload, written for humans.
 
 ---
 
+## 5.4.10
+
+**Folder uploads in the browser no longer look stuck on "Starting…".**
+
+- **Uploading a folder from the self-hosted web UI (Docker) appeared to
+  hang.** The button sat on "Starting…" and nothing else happened. The
+  engine was reading through the whole folder before it told the app the
+  upload had begun, and until that finished the app had nothing to show and
+  no way to cancel. On a big game folder — especially one mounted into a
+  Docker container, where reading file details is far slower — that is
+  minutes of looking frozen. The upload now registers immediately and
+  reports progress while the folder is still being read, matching what
+  Resume-style folder uploads already did. ([#275](https://github.com/phantomptr/ps5upload/issues/275))
+- **A folder that doesn't exist now reports a proper error** instead of
+  failing the request outright.
+- Updated `sevenz-rust2` and `mdns-sd`.
+
+---
+
 ## 5.4.9
 
 **Typing an address works properly, stalled uploads recover, and every
