@@ -4,6 +4,25 @@ What's new in ps5upload, written for humans.
 
 ---
 
+## 5.4.12
+
+**When the console refuses an uninstall, the app now says so.**
+
+- **An uninstall the console rejected was reported as success.** The helper
+  asks the PS5's own uninstaller to remove a game; if the console refused,
+  that refusal was written to a log file and nowhere else, so the app
+  cheerfully reported the game as uninstalled while it stayed in Settings →
+  Storage. The refusal, and the console's reason code, are now returned and
+  logged. Found while chasing a real case where a game could not be deleted
+  and every attempt looked like it had worked.
+- **You can now snapshot the console's content databases.** These two files
+  are the console's record of what is installed, and they can drift from
+  what is actually on the drives — which is how a game with no files left
+  can still sit in Storage refusing to be deleted. Taking a copy before
+  changing anything turns a bad repair into one you can undo.
+
+---
+
 ## 5.4.11
 
 **Changing a console's IP address sticks.**

@@ -1444,8 +1444,10 @@ int register_title_from_path(const char *src_path,
  * under the default debugger authid would be rejected on FW 9.60+ exactly
  * like InstallByPackage is. Swap for the call window, then restore. */
 
-int unregister_title(const char *title_id, const char **err_reason_out) {
+int unregister_title(const char *title_id, const char **err_reason_out,
+                     unsigned *sony_rc_out) {
     register_module_init();
+    if (sony_rc_out) *sony_rc_out = 0u;
     if (!title_id || !is_safe_component(title_id)) {
         if (err_reason_out) *err_reason_out = "unregister_title_id_invalid";
         return -1;
@@ -1538,6 +1540,12 @@ int unregister_title(const char *title_id, const char **err_reason_out) {
         usleep(SONY_API_POST_SLEEP_US);
         pthread_mutex_unlock(&sony_api_lock);
         if (unrc != 0) {
+            /* Report it to the caller as well as the log. The nullfs
+             * teardown above already removed our tile, so this is not
+             * fatal — but Sony refusing the uninstall means the title
+             * can survive in Settings -> Storage, and the caller must be
+             * able to say so instead of claiming success. */
+            if (sony_rc_out) *sony_rc_out = (unsigned)unrc;
             fprintf(stderr,
                     "[register] sceAppInstUtilAppUninstall(%s) rc=0x%08X "
                     "(non-fatal — tile may linger)\n",

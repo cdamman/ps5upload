@@ -85,9 +85,18 @@ int register_title_from_path(const char *src_path,
  * the nullfs at /system_ex/app/<title_id>, removes tracking files,
  * and (if available) calls sceAppInstUtilAppUninstall to clear the
  * XMB tile. Returns 0 if the unmount succeeded (tile removal is
- * optional and reported via the shared log, not the return). */
+ * optional).
+ *
+ * `sony_rc_out` (may be NULL) receives sceAppInstUtilAppUninstall's
+ * return code: 0 when it succeeded or was never called, non-zero when
+ * Sony REFUSED the uninstall. That refusal used to be logged to stderr
+ * and nowhere else, so callers reported a clean success while the
+ * console kept the title — a real user hit this with a title Sony
+ * rejected with 0x80B21B02, and the tool insisted the uninstall had
+ * worked. Surface it instead of swallowing it. */
 int unregister_title(const char *title_id,
-                     const char **err_reason_out);
+                     const char **err_reason_out,
+                     unsigned *sony_rc_out);
 
 /* Launch an already-registered title via sceLncUtilLaunchApp. The title
  * must already be in app.db; this does not register. On firmware where

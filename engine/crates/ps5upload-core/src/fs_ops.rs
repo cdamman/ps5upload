@@ -961,16 +961,58 @@ pub fn app_register(addr: &str, src_path: &str, patch_drm_type: bool) -> Result<
 /// (where available) calls Sony's AppUninstall to clear the XMB tile.
 /// Best-effort: returns Ok even when the Sony API is missing, as long
 /// as the unmount succeeded.
-pub fn app_unregister(addr: &str, title_id: &str) -> Result<()> {
+/// Outcome of an unregister. Our own teardown (nullfs unmount + tracker
+/// removal) succeeding is what makes this `Ok`; `sony_uninstall_rc` reports
+/// separately whether Sony's `sceAppInstUtilAppUninstall` accepted the
+/// uninstall.
+///
+/// The split matters: the payload deliberately treats a Sony refusal as
+/// non-fatal, because our nullfs teardown alone already removes the tile.
+/// But the refusal used to go to the payload's stderr and NOWHERE else, so
+/// this function returned a clean `Ok(())` while the console kept the title
+/// in Settings → Storage. A user hit exactly that with a title Sony rejected
+/// with `0x80B21B02`, and the tool insisted the uninstall had worked.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct UnregisterOutcome {
+    /// `sceAppInstUtilAppUninstall`'s return code. 0 = accepted (or never
+    /// called, on firmware where the symbol is unavailable). Non-zero =
+    /// Sony refused; the title can survive in Settings → Storage.
+    pub sony_uninstall_rc: u32,
+}
+
+impl UnregisterOutcome {
+    /// True when Sony refused the uninstall — the caller should say so
+    /// rather than reporting a clean success.
+    pub fn sony_refused(&self) -> bool {
+        self.sony_uninstall_rc != 0
+    }
+}
+
+pub fn app_unregister(addr: &str, title_id: &str) -> Result<UnregisterOutcome> {
     let body = serde_json::to_vec(&serde_json::json!({ "title_id": title_id }))
         .context("serialize app_unregister body")?;
-    send_empty_ack_op(
-        addr,
-        FrameType::AppUnregister,
-        &body,
-        FrameType::AppUnregisterAck,
-        "APP_UNREGISTER",
-    )
+    let mut c = Connection::connect(addr)?;
+    c.send_frame(FrameType::AppUnregister, &body)?;
+    let (hdr, resp) = c.recv_frame()?;
+    let ft = hdr.frame_type().unwrap_or(FrameType::Error);
+    if ft == FrameType::Error {
+        bail!(
+            "payload rejected APP_UNREGISTER: {}",
+            String::from_utf8_lossy(&resp)
+        );
+    }
+    if ft != FrameType::AppUnregisterAck {
+        bail!("expected APP_UNREGISTER_ACK, got {ft:?}");
+    }
+    // Older payloads answer with an empty body — treat that as "Sony's
+    // result unknown", i.e. 0, rather than failing the call.
+    let rc = serde_json::from_slice::<serde_json::Value>(&resp)
+        .ok()
+        .and_then(|v| v.get("sony_uninstall_rc").and_then(|x| x.as_u64()))
+        .unwrap_or(0) as u32;
+    Ok(UnregisterOutcome {
+        sony_uninstall_rc: rc,
+    })
 }
 
 /// Launch an already-registered title via `sceLncUtilLaunchApp`. The
@@ -1571,8 +1613,117 @@ fn blake3_file(path: &std::path::Path) -> Result<String> {
     Ok(hasher.finalize().to_hex().to_string())
 }
 
+// ── Content-database snapshot ────────────────────────────────────────────
+
+/// The console's two content databases. `app.db` drives the home-screen
+/// tiles; `appinfo.db` drives Settings → Storage. They are the authority on
+/// what the console believes is installed, and they can disagree with what
+/// is actually on disk.
+pub const CONTENT_DB_DIR: &str = "/system_data/priv/mms";
+pub const CONTENT_DB_FILES: [&str; 2] = ["app.db", "appinfo.db"];
+
+/// Snapshot the console's content databases to `dest_dir`.
+///
+/// Why this exists: a user hit a title that Settings → Storage listed but
+/// refused to delete (CE-118883-9). Diagnosing it meant reading these two
+/// files, and *repairing* it meant editing them — with no safety net if the
+/// edit went wrong. Taking a snapshot before any destructive title
+/// operation turns an unrecoverable mistake into a restore.
+///
+/// Read-only, and deliberately NOT a general "read any system path" API:
+/// the directory and both filenames are fixed constants, so this cannot be
+/// pointed at arbitrary console files. It reads through `fs_read_unsafe`,
+/// which the payload already permits for `/system_data/` (with a
+/// symlink-escape guard) while continuing to refuse writes and deletes
+/// there.
+///
+/// Returns the paths written, in `CONTENT_DB_FILES` order.
+pub fn backup_content_databases(
+    addr: &str,
+    dest_dir: &std::path::Path,
+) -> Result<Vec<std::path::PathBuf>> {
+    std::fs::create_dir_all(dest_dir)
+        .with_context(|| format!("create backup dir {}", dest_dir.display()))?;
+    let mut written = Vec::new();
+    for name in CONTENT_DB_FILES {
+        let remote = format!("{CONTENT_DB_DIR}/{name}");
+        let bytes = read_whole_system_file(addr, &remote)
+            .with_context(|| format!("read {remote} from PS5"))?;
+        if bytes.is_empty() {
+            bail!("{remote} read back empty — refusing to write a useless backup");
+        }
+        let out = dest_dir.join(name);
+        std::fs::write(&out, &bytes).with_context(|| format!("write {}", out.display()))?;
+        written.push(out);
+    }
+    Ok(written)
+}
+
+/// Read a whole system file by chunking `fs_read_unsafe`.
+///
+/// FS_READ caps every response at 2 MiB, so a single call can silently
+/// truncate. `appinfo.db` is already past 1 MiB on a well-used console and
+/// will cross that cap; a truncated database is worse than none at all
+/// because it still looks like a valid backup. Loop until short read.
+fn read_whole_system_file(addr: &str, path: &str) -> Result<Vec<u8>> {
+    const CHUNK: u64 = 1024 * 1024;
+    let mut out: Vec<u8> = Vec::new();
+    loop {
+        let chunk = fs_read_unsafe(addr, path, out.len() as u64, CHUNK)?;
+        let n = chunk.len();
+        out.extend_from_slice(&chunk);
+        if (n as u64) < CHUNK {
+            break;
+        }
+        // Guard against a payload that ignores `offset` and re-serves the
+        // same bytes forever.
+        if out.len() > 256 * 1024 * 1024 {
+            bail!("{path} exceeded 256 MiB — aborting (payload not honouring offset?)");
+        }
+    }
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
+    use super::UnregisterOutcome;
+
+    /// A Sony refusal must not read as a clean uninstall. The payload
+    /// reports `sceAppInstUtilAppUninstall`'s rc in the ACK body; a
+    /// non-zero value means the console kept the title even though our
+    /// own teardown succeeded. This is the case a user hit with
+    /// `0x80B21B02`, where the tool reported success and the title stayed
+    /// in Settings → Storage.
+    #[test]
+    fn a_nonzero_sony_rc_is_reported_as_refused() {
+        let ok = UnregisterOutcome {
+            sony_uninstall_rc: 0,
+        };
+        assert!(!ok.sony_refused(), "rc 0 means Sony accepted");
+
+        let refused = UnregisterOutcome {
+            sony_uninstall_rc: 0x80B2_1B02,
+        };
+        assert!(refused.sony_refused());
+        assert_eq!(format!("0x{:08X}", refused.sony_uninstall_rc), "0x80B21B02");
+    }
+
+    /// Older payloads answer APP_UNREGISTER with an EMPTY body. That must
+    /// degrade to "Sony's result unknown" (rc 0) rather than failing the
+    /// call, so a new engine keeps working against an old payload.
+    #[test]
+    fn an_empty_ack_body_degrades_to_rc_zero() {
+        let parsed = serde_json::from_slice::<serde_json::Value>(b"")
+            .ok()
+            .and_then(|v| v.get("sony_uninstall_rc").and_then(|x| x.as_u64()))
+            .unwrap_or(0) as u32;
+        assert_eq!(parsed, 0);
+        assert!(!UnregisterOutcome {
+            sony_uninstall_rc: parsed
+        }
+        .sony_refused());
+    }
+
     use super::*;
 
     // ── robust-copy poll verdict (the 25 GB USB copy stability fix) ──

@@ -62,10 +62,11 @@ use ps5upload_core::{
         MAX_DOWNLOAD_STREAMS,
     },
     fs_ops::{
-        app_launch, app_list_registered, app_register, app_unregister, fs_copy_robust,
-        fs_delete_with_op_id, fs_mkdir, fs_mount, fs_move_with_timeout, fs_op_cancel, fs_op_status,
-        fs_read, fs_unmount, list_dir, reconcile, walk_local_inventory, DirListing, ListDirOptions,
-        MountResult, ReconcileFile, ReconcileMode, ReconcilePlan, RegisterResult,
+        app_launch, app_list_registered, app_register, app_unregister, backup_content_databases,
+        fs_copy_robust, fs_delete_with_op_id, fs_mkdir, fs_mount, fs_move_with_timeout,
+        fs_op_cancel, fs_op_status, fs_read, fs_unmount, list_dir, reconcile, walk_local_inventory,
+        DirListing, ListDirOptions, MountResult, ReconcileFile, ReconcileMode, ReconcilePlan,
+        RegisterResult,
     },
     game_meta::{parse_param_json_bytes, parse_param_sfo_bytes},
     hw::{
@@ -1688,6 +1689,52 @@ struct AppUnregisterReq {
     title_id: String,
 }
 
+#[derive(Deserialize)]
+struct ContentDbBackupReq {
+    addr: Option<String>,
+    /// Local directory to write the snapshot into. A timestamped
+    /// subdirectory is created underneath.
+    dest_dir: String,
+}
+
+/// POST /api/ps5/content-db/backup — snapshot `app.db` + `appinfo.db`.
+///
+/// These two files are the console's record of what is installed, and they
+/// can drift from what is actually on disk — a title whose files are gone
+/// but whose row survives shows in Settings -> Storage and refuses to
+/// delete. Repairing that means editing the databases, so having a
+/// known-good copy first is the difference between a recoverable mistake
+/// and a broken content index.
+async fn ps5_content_db_backup(
+    State(state): State<AppState>,
+    Json(req): Json<ContentDbBackupReq>,
+) -> impl IntoResponse {
+    let addr = mgmt_addr_or_default(req.addr, &state.default_ps5_addr);
+    let stamp = now_ms() / 1000;
+    let dest = std::path::PathBuf::from(&req.dest_dir).join(format!("appdb-{stamp}"));
+    crate::log_info!("content_db_backup: addr={addr} dest={}", dest.display());
+    let dest_for_task = dest.clone();
+    match tokio::task::spawn_blocking(move || backup_content_databases(&addr, &dest_for_task))
+        .await
+        .map_err(anyhow::Error::from)
+        .and_then(|r| r)
+    {
+        Ok(paths) => {
+            let files: Vec<String> = paths.iter().map(|p| p.display().to_string()).collect();
+            crate::log_info!("content_db_backup ok: {} file(s)", files.len());
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({ "ok": true, "dir": dest, "files": files })),
+            )
+                .into_response()
+        }
+        Err(e) => {
+            crate::log_warn!("content_db_backup failed: {e:#}");
+            json_err(StatusCode::BAD_GATEWAY, format!("{e:#}")).into_response()
+        }
+    }
+}
+
 async fn ps5_app_unregister(
     State(state): State<AppState>,
     Json(req): Json<AppUnregisterReq>,
@@ -1702,12 +1749,35 @@ async fn ps5_app_unregister(
         .map_err(anyhow::Error::from)
         .and_then(|r| r)
     {
-        Ok(()) => {
-            crate::log_info!(
-                "app_unregister ok: {title_for_log} in {} ms",
-                started.elapsed().as_millis()
-            );
-            (StatusCode::OK, Json(serde_json::json!({ "ok": true }))).into_response()
+        Ok(outcome) => {
+            // Our teardown succeeded. Sony's own uninstall is a SEPARATE
+            // result and may have been refused — report it instead of
+            // flattening both into a bare `ok: true`, which is what let a
+            // 0x80B21B02 refusal masquerade as a successful uninstall while
+            // the title stayed in Settings → Storage.
+            if outcome.sony_refused() {
+                crate::log_warn!(
+                    "app_unregister: {title_for_log} — our teardown ok in {} ms, but \
+                     sceAppInstUtilAppUninstall REFUSED with rc=0x{:08X}; the title may \
+                     remain in Settings → Storage",
+                    started.elapsed().as_millis(),
+                    outcome.sony_uninstall_rc
+                );
+            } else {
+                crate::log_info!(
+                    "app_unregister ok: {title_for_log} in {} ms",
+                    started.elapsed().as_millis()
+                );
+            }
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "ok": true,
+                    "sony_uninstall_refused": outcome.sony_refused(),
+                    "sony_uninstall_rc": format!("0x{:08X}", outcome.sony_uninstall_rc),
+                })),
+            )
+                .into_response()
         }
         Err(e) => {
             crate::log_warn!(
@@ -7769,6 +7839,7 @@ async fn run(cfg: EngineConfig) -> anyhow::Result<()> {
         .route("/api/ps5/app/launch", post(ps5_app_launch))
         .route("/api/ps5/app/register", post(ps5_app_register))
         .route("/api/ps5/app/unregister", post(ps5_app_unregister))
+        .route("/api/ps5/content-db/backup", post(ps5_content_db_backup))
         .route("/api/ps5/hw/info", get(ps5_hw_info))
         .route("/api/ps5/hw/temps", get(ps5_hw_temps))
         .route("/api/ps5/syslog/tail", get(ps5_syslog_tail))

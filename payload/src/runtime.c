@@ -8871,7 +8871,8 @@ static int handle_app_unregister(runtime_state_t *state, int client_fd,
         return send_frame(client_fd, FTX2_FRAME_ERROR, 0, trace_id,
                           "unregister_title_id_missing", 27);
     }
-    if (unregister_title(title_id, &err) != 0) {
+    unsigned sony_rc = 0u;
+    if (unregister_title(title_id, &err, &sony_rc) != 0) {
         const char *reason = err ? err : "unregister_failed";
         return send_frame(client_fd, FTX2_FRAME_ERROR, 0, trace_id,
                           reason, (uint64_t)strlen(reason));
@@ -8886,8 +8887,18 @@ static int handle_app_unregister(runtime_state_t *state, int client_fd,
         pop_notification(toast);
     }
 
-    return send_frame(client_fd, FTX2_FRAME_APP_UNREGISTER_ACK, 0,
-                      trace_id, NULL, 0);
+    /* Carry Sony's uninstall result back. An empty ACK used to mean
+     * "unregistered" unconditionally, so a refusal by
+     * sceAppInstUtilAppUninstall (e.g. 0x80B21B02 on a title whose
+     * content records are inconsistent) was invisible to the client. */
+    {
+        char ack[96];
+        int alen = snprintf(ack, sizeof(ack),
+                            "{\"sony_uninstall_rc\":%u}", sony_rc);
+        if (alen < 0) alen = 0;
+        return send_frame(client_fd, FTX2_FRAME_APP_UNREGISTER_ACK, 0,
+                          trace_id, ack, (uint64_t)alen);
+    }
 }
 
 static int handle_app_launch(runtime_state_t *state, int client_fd,

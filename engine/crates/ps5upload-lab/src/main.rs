@@ -517,8 +517,17 @@ fn do_register(addr: &str, src_path: &str) -> Result<()> {
 }
 
 fn do_unregister(addr: &str, title_id: &str) -> Result<()> {
-    app_unregister(addr, title_id)?;
-    println!("unregistered: {title_id}");
+    let outcome = app_unregister(addr, title_id)?;
+    if outcome.sony_refused() {
+        println!(
+            "unregistered: {title_id} (our teardown ok, but the console's own \
+             uninstaller REFUSED with rc=0x{:08X} — the title may remain in \
+             Settings > Storage)",
+            outcome.sony_uninstall_rc
+        );
+    } else {
+        println!("unregistered: {title_id}");
+    }
     Ok(())
 }
 
