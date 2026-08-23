@@ -4,6 +4,32 @@ What's new in ps5upload, written for humans.
 
 ---
 
+## 5.4.11
+
+**Changing a console's IP address sticks.**
+
+- **Typing a new address and pressing Check snapped back to the old one.**
+  The address box was only updating its own copy of the address, while the
+  console list — which is what actually decides which PS5 is selected — kept
+  the previous one and put it back a moment later. Committing an address now
+  changes the selected console itself, so it stays changed.
+  ([#276](https://github.com/phantomptr/ps5upload/issues/276))
+- **A check could report success against an address your PS5 no longer
+  had.** When the address snapped back, the app restored that console's
+  last-known state along with it — firmware, helper status, "already
+  checked" — so it looked like the new address had been verified when
+  nothing had been contacted.
+- **Pointing a console at a new IP no longer keeps the old console's
+  details.** Its remembered firmware and helper version are cleared, and an
+  automatic name follows the new address instead of still reading
+  `PS5 (192.168.1.10)` while pointing somewhere else. A name you chose
+  yourself is left alone.
+- **Typing an address that belongs to another console you've already added
+  now switches to it,** rather than leaving two entries pointing at the same
+  PS5.
+
+---
+
 ## 5.4.10
 
 **Folder uploads in the browser no longer look stuck on "Starting…".**

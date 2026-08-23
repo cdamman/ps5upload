@@ -235,8 +235,36 @@ export const useRosterStore = create<RosterState>((set, get) => ({
   },
   updateHost: (id, host) => {
     const oldHost = get().profiles.find((p) => p.id === id)?.host;
+    const trimmed = host.trim();
+    // Only a change of the BARE host counts — re-pointing 1.2.3.4 to
+    // 1.2.3.4:9113 is the same console and must not wipe its history.
+    const hostChanged = !!oldHost && hostOf(oldHost) !== hostOf(trimmed);
     const next = get().profiles.map((p) =>
-      p.id === id ? { ...p, host: host.trim() } : p,
+      p.id === id
+        ? {
+            ...p,
+            host: trimmed,
+            // The cached kernel/payload/last-seen describe the console that
+            // WAS at the old address. The roster row renders them next to the
+            // NEW address, so after re-pointing, the UI confidently showed the
+            // new console on the old console's firmware — and looked "already
+            // checked" when it had never been probed. Clear them; the next
+            // probe refills them. (#276 follow-up.)
+            ...(hostChanged
+              ? {
+                  last_seen_kernel: null,
+                  last_seen_payload: null,
+                  last_seen_at: null,
+                }
+              : {}),
+            // Keep an auto-generated name in step with the address, so the
+            // sidebar can't read "PS5 (192.168.1.10)" while pointing at .99.
+            // A name the user chose themselves is left alone.
+            ...(hostChanged && oldHost && p.name === `PS5 (${oldHost})`
+              ? { name: `PS5 (${trimmed})` }
+              : {}),
+          }
+        : p,
     );
     // Re-pointing a profile at a new IP orphans the old IP's pkg-library
     // store; evict it (unless another profile still uses that bare host) so

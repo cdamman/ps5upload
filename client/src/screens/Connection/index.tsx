@@ -34,6 +34,8 @@ import {
   Sparkles,
 } from "lucide-react";
 import { PageHeader, Button, Spinner, ErrorCard } from "../../components";
+import { useRosterStore } from "../../state/roster";
+import { hostOf } from "../../lib/addr";
 import { useTr } from "../../state/lang";
 import PowerControl from "./PowerControl";
 import { BringUpPanel } from "./BringUpPanel";
@@ -166,7 +168,6 @@ let pendingAutoCheck: string | null = null;
 export default function ConnectionScreen() {
   const tr = useTr();
   const host = useConnectionStore((s) => s.host);
-  const setHost = useConnectionStore((s) => s.setHost);
   const payloadStatus = useConnectionStore((s) => s.payloadStatus);
   const payloadStatusHost = useConnectionStore((s) => s.payloadStatusHost);
   const setStatus = useConnectionStore((s) => s.setStatus);
@@ -310,7 +311,34 @@ export default function ConnectionScreen() {
       return;
     }
     if (thenCheck) pendingAutoCheck = value;
-    setHost(value);
+
+    // Re-point the ACTIVE ROSTER PROFILE — not just `connection.host`.
+    //
+    // The roster profile is the source of truth for which console is
+    // selected. `ensureRosterMigrated()` runs on every AppShell mount and
+    // reconciles `connection.host` back to the active profile's host. A
+    // bare `setHost()` therefore survived only until the next mount — and
+    // since changing the host remounts the whole route tree, that was
+    // immediate: the field snapped straight back to the previous IP.
+    //
+    // Worse, `setHost` also mirrors that host's last-known runtime, so the
+    // reverted OLD console could still be showing "helper ok" and the check
+    // appeared to pass against an address the PS5 no longer has. (#276)
+    const roster = useRosterStore.getState();
+    const existing = roster.profiles.find(
+      (p) => hostOf(p.host) === hostOf(value),
+    );
+    if (existing && existing.id !== roster.active_id) {
+      // The typed address is a console we already know about — select it
+      // rather than pointing two profiles at the same host.
+      roster.setActive(existing.id);
+    } else if (roster.active_id) {
+      roster.updateHost(roster.active_id, value);
+    } else {
+      // No roster yet (fresh install): seed a profile so the reconcile has
+      // something to agree with. setHost alone would be undone on mount.
+      roster.setActive(roster.add({ name: `PS5 (${value})`, host: value }));
+    }
     settleStep1(
       "idle",
       tr("connection_step1_idle", undefined, "Enter your PS5's address and check"),
