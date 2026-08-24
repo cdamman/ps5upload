@@ -2926,6 +2926,11 @@ upload_multipart_body: "Każda część to osobne archiwum z innymi plikami, wi�
 // --- added v5.4.9: previously untranslated keys ---
 upload_multipart_queue_all: "Dodaj wszystkie części ({count}) do kolejki",
 
+// --- added v5.4.18: mismatched multi-part set ---
+upload_partset_mismatch_title: "Pozostałe {count} części to pliki .{other}, a wybrano plik .{selected}",
+upload_partset_mismatch_body: "Pochodzą z innego pobrania, więc to archiwum nie może ich otworzyć — wysłanie go przenosi tylko jego własne pliki. Części się nie łączą.",
+upload_partset_mismatch_fix: "Aby użyć pozostałych części, potrzebny jest ich pierwszy wolumin „{name}”, którego nie ma w tym folderze. Pobierz go z tego samego źródła i wybierz jego.",
+
 };
 
 export default pl;

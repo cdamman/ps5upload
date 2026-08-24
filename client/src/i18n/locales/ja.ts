@@ -2671,6 +2671,11 @@ upload_multipart_body: "各パートはそれぞれ別のアーカイブで、�
 // --- added v5.4.9: previously untranslated keys ---
 upload_multipart_queue_all: "{count} 個のパートをすべてキューに追加",
 
+// --- added v5.4.18: mismatched multi-part set ---
+upload_partset_mismatch_title: "他の {count} 個のパートは .{other} ファイルですが、選択されたのは .{selected} です",
+upload_partset_mismatch_body: "それらは別のダウンロードのものなので、このアーカイブでは開けません。アップロードしても自身のファイルしか送信されません。パート同士は結合できません。",
+upload_partset_mismatch_fix: "他のパートを使うには最初の巻「{name}」が必要ですが、このフォルダーにはありません。同じ配布元から取得し直し、そちらを選択してください。",
+
 };
 
 export default ja;

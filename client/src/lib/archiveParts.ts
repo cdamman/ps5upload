@@ -121,3 +121,91 @@ export function siblingPartPaths(
     .filter((n): n is string => n !== undefined)
     .map((n) => `${dir}${slash}${n}`);
 }
+
+/** Every file beside this one sharing its `.partN` stem, whatever the
+ *  extension. `siblingParts` deliberately requires a matching extension —
+ *  this does not, so a MISMATCHED set can be spotted and explained. */
+function stemMatesAnyExt(
+  self: ArchivePartInfo,
+  namesInFolder: readonly string[],
+): ArchivePartInfo[] {
+  const byKey = new Map<string, ArchivePartInfo>();
+  for (const n of namesInFolder) {
+    const info = parseArchivePart(n);
+    if (!info) continue;
+    if (info.stem.toLowerCase() !== self.stem.toLowerCase()) continue;
+    const key = `${info.ext}:${info.index}`;
+    if (!byKey.has(key)) byKey.set(key, info);
+  }
+  return [...byKey.values()];
+}
+
+/** What, if anything, is worth telling the user about the set this archive
+ *  belongs to. `null` means nothing notable. */
+export type ArchiveSetIssue =
+  | {
+      /** A zip/7z set: each part is its own upload. */
+      kind: "manual-parts";
+      total: number;
+    }
+  | {
+      /** The parts beside this one are a DIFFERENT archive format — so they
+       *  are not siblings of the selected file at all, and uploading it
+       *  delivers only its own contents. Nearly always means a download
+       *  went wrong: one part was fetched from a different packaging of
+       *  the game than the rest. */
+      kind: "mixed-extensions";
+      selectedExt: string;
+      otherExt: string;
+      otherCount: number;
+      /** The volume the other-format set needs but does not have, e.g.
+       *  `Game.part01.rar`. Null when that set is complete from part 1. */
+      missingFirst: string | null;
+    };
+
+/** Diagnose the set the chosen archive belongs to.
+ *
+ *  Checked before the plain multi-part case, because a mismatched set is
+ *  the more urgent thing to say: telling someone "upload the other 10
+ *  parts too" is wrong — and costs them hours — when those parts are a
+ *  different format that their part 1 cannot open.
+ */
+export function diagnoseArchiveSet(
+  filename: string,
+  namesInFolder: readonly string[],
+): ArchiveSetIssue | null {
+  const self = parseArchivePart(filename);
+  if (!self) return null;
+
+  const others = stemMatesAnyExt(self, namesInFolder).filter(
+    (p) => p.ext !== self.ext,
+  );
+  if (others.length > 0) {
+    // Report against the largest foreign set: the one the user has most of.
+    const byExt = new Map<string, ArchivePartInfo[]>();
+    for (const p of others) {
+      const list = byExt.get(p.ext);
+      if (list) list.push(p);
+      else byExt.set(p.ext, [p]);
+    }
+    const [otherExt, group] = [...byExt.entries()].sort(
+      (a, b) => b[1].length - a[1].length,
+    )[0];
+    const hasFirst = group.some((p) => p.index === 1);
+    return {
+      kind: "mixed-extensions",
+      selectedExt: self.ext,
+      otherExt,
+      otherCount: group.length,
+      missingFirst: hasFirst ? null : `${self.stem}.part01.${otherExt}`,
+    };
+  }
+
+  if (needsManualPartUploads(filename, namesInFolder)) {
+    return {
+      kind: "manual-parts",
+      total: siblingParts(filename, namesInFolder).length,
+    };
+  }
+  return null;
+}

@@ -2629,6 +2629,11 @@ upload_multipart_body: "প্রতিটি অংশ আলাদা এক�
 // --- added v5.4.9: previously untranslated keys ---
 upload_multipart_queue_all: "সব {count}টি অংশ সারিতে যোগ করুন",
 
+// --- added v5.4.18: mismatched multi-part set ---
+upload_partset_mismatch_title: "বাকি {count}টি অংশ .{other} ফাইল, কিন্তু আপনি একটি .{selected} বেছে নিয়েছেন",
+upload_partset_mismatch_body: "সেগুলো অন্য একটি ডাউনলোডের, তাই এই আর্কাইভ সেগুলো খুলতে পারে না — এটি আপলোড করলে কেবল এর নিজের ফাইলগুলোই পাঠানো হয়। অংশগুলো একসাথে মেলে না।",
+upload_partset_mismatch_fix: "বাকি অংশগুলো ব্যবহার করতে সেগুলোর প্রথম ভলিউম \"{name}\" দরকার, যা এই ফোল্ডারে নেই। একই উৎস থেকে সেটি আবার ডাউনলোড করে সেটিই বেছে নিন।",
+
 };
 
 export default bn;

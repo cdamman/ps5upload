@@ -2972,6 +2972,11 @@ upload_multipart_body: "Each part is its own archive holding different files, so
 // --- added v5.4.9: previously untranslated keys ---
 upload_multipart_queue_all: "Add all {count} parts to the queue",
 
+// --- added v5.4.18: mismatched multi-part set ---
+upload_partset_mismatch_title: "The other {count} parts are .{other} files, but you picked a .{selected}",
+upload_partset_mismatch_body: "They belong to a different download, so this archive can't open them — uploading it sends only its own files. The parts don't mix.",
+upload_partset_mismatch_fix: "To use the other parts you need their first volume, \"{name}\", which isn't in this folder. Re-download it from the same source, then pick it instead.",
+
 };
 
 export default en;

@@ -2629,6 +2629,11 @@ upload_multipart_body: "كل جزء أرشيف مستقل يحتوي على مل
 // --- added v5.4.9: previously untranslated keys ---
 upload_multipart_queue_all: "إضافة كل الأجزاء ({count}) إلى قائمة الانتظار",
 
+// --- added v5.4.18: mismatched multi-part set ---
+upload_partset_mismatch_title: "الأجزاء الـ {count} الأخرى ملفات ‎.{other}‎، لكنك اخترت ملف ‎.{selected}‎",
+upload_partset_mismatch_body: "إنها تعود إلى تنزيل مختلف، لذا لا يستطيع هذا الأرشيف فتحها — ورفعه يُرسل ملفاته هو فقط. الأجزاء لا تندمج معًا.",
+upload_partset_mismatch_fix: "لاستخدام الأجزاء الأخرى تحتاج إلى مجلدها الأول \"{name}\"، وهو غير موجود في هذا المجلد. أعد تنزيله من المصدر نفسه ثم اختره بدلاً من هذا.",
+
 };
 
 export default ar;

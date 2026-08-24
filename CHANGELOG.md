@@ -4,6 +4,23 @@ What's new in ps5upload, written for humans.
 
 ---
 
+## 5.4.18
+
+**If your parts are a mix of `.zip` and `.rar`, ps5upload now tells you
+before you spend hours uploading — instead of saying nothing.**
+
+- **Mismatched part sets are detected.** A folder holding
+  `Game.part01.zip` next to `Game.part02.rar` … `part11.rar` is two
+  different downloads, not one set. The `.zip` cannot open the `.rar`
+  volumes, so uploading it delivers only its own files and stops. Until
+  now nothing was shown at all, because the part detector only matched
+  parts that shared an extension.
+- **It tells you what's missing.** When the other parts have no first
+  volume of their own, the warning names the exact file to re-download
+  (`Game.part01.rar`) so you can fix the set and pick that instead.
+
+---
+
 ## 5.4.17
 
 **A game split into `part01.zip`, `part02.zip`, … can now be queued in one

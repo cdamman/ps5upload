@@ -2582,6 +2582,11 @@ upload_multipart_body: "每个部分都是独立的压缩包，包含不同的�
 // --- added v5.4.9: previously untranslated keys ---
 upload_multipart_queue_all: "将全部 {count} 个部分加入队列",
 
+// --- added v5.4.18: mismatched multi-part set ---
+upload_partset_mismatch_title: "其余 {count} 个分卷是 .{other} 文件，但你选择的是 .{selected} 文件",
+upload_partset_mismatch_body: "它们来自另一次下载，因此该压缩包无法打开它们——上传只会传送它自己的文件。分卷之间不能混用。",
+upload_partset_mismatch_fix: "要使用其余分卷，需要它们的第一个分卷“{name}”，但该文件不在此文件夹中。请从同一来源重新下载后改选它。",
+
 };
 
 export default zh_CN;

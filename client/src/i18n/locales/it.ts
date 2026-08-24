@@ -2576,6 +2576,11 @@ upload_multipart_body: "Ogni parte è un archivio a sé con file diversi, quindi
 // --- added v5.4.9: previously untranslated keys ---
 upload_multipart_queue_all: "Aggiungi tutte le {count} parti alla coda",
 
+// --- added v5.4.18: mismatched multi-part set ---
+upload_partset_mismatch_title: "Le altre {count} parti sono file .{other}, ma hai scelto un .{selected}",
+upload_partset_mismatch_body: "Appartengono a un download diverso, quindi questo archivio non può aprirle: caricandolo invii solo i suoi file. Le parti non si combinano.",
+upload_partset_mismatch_fix: "Per usare le altre parti serve il loro primo volume, \"{name}\", che non è in questa cartella. Riscaricalo dalla stessa fonte e seleziona quello.",
+
 };
 
 export default it;

@@ -2576,6 +2576,11 @@ upload_multipart_body: "Каждая часть — отдельный архи�
 // --- added v5.4.9: previously untranslated keys ---
 upload_multipart_queue_all: "Добавить все части ({count}) в очередь",
 
+// --- added v5.4.18: mismatched multi-part set ---
+upload_partset_mismatch_title: "Остальные {count} частей — файлы .{other}, но вы выбрали .{selected}",
+upload_partset_mismatch_body: "Они относятся к другой загрузке, поэтому этот архив не может их открыть — при отправке передаются только его собственные файлы. Части не объединяются.",
+upload_partset_mismatch_fix: "Чтобы использовать остальные части, нужен их первый том «{name}», которого нет в этой папке. Скачайте его из того же источника и выберите его.",
+
 };
 
 export default ru;

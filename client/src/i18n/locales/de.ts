@@ -2637,6 +2637,11 @@ upload_multipart_body: "Jeder Teil ist ein eigenes Archiv mit anderen Dateien �
 // --- added v5.4.9: previously untranslated keys ---
 upload_multipart_queue_all: "Alle {count} Teile zur Warteschlange hinzufügen",
 
+// --- added v5.4.18: mismatched multi-part set ---
+upload_partset_mismatch_title: "Die anderen {count} Teile sind .{other}-Dateien, du hast aber eine .{selected} ausgewählt",
+upload_partset_mismatch_body: "Sie gehören zu einem anderen Download, dieses Archiv kann sie also nicht öffnen — beim Hochladen werden nur seine eigenen Dateien übertragen. Die Teile lassen sich nicht mischen.",
+upload_partset_mismatch_fix: "Für die anderen Teile brauchst du deren ersten Band, „{name}“, der nicht in diesem Ordner liegt. Lade ihn aus derselben Quelle erneut herunter und wähle ihn stattdessen aus.",
+
 };
 
 export default de;

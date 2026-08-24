@@ -2638,6 +2638,11 @@ upload_multipart_body: "Setiap bagian adalah arsip tersendiri berisi berkas yang
 // --- added v5.4.9: previously untranslated keys ---
 upload_multipart_queue_all: "Tambahkan semua {count} bagian ke antrean",
 
+// --- added v5.4.18: mismatched multi-part set ---
+upload_partset_mismatch_title: "{count} bagian lainnya adalah berkas .{other}, tetapi Anda memilih .{selected}",
+upload_partset_mismatch_body: "Semuanya berasal dari unduhan berbeda, jadi arsip ini tidak bisa membukanya — mengunggahnya hanya mengirim berkasnya sendiri. Bagian-bagian itu tidak menyatu.",
+upload_partset_mismatch_fix: "Untuk memakai bagian lainnya Anda perlu volume pertamanya, \"{name}\", yang tidak ada di folder ini. Unduh ulang dari sumber yang sama, lalu pilih berkas itu.",
+
 };
 
 export default id;

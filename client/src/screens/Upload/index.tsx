@@ -64,10 +64,11 @@ import {
   Checkbox,
 } from "../../components";
 import {
-  needsManualPartUploads,
   parseArchivePart,
   siblingParts,
   siblingPartPaths,
+  diagnoseArchiveSet,
+  type ArchiveSetIssue,
 } from "../../lib/archiveParts";
 import { localFs } from "../../api/localFs";
 import { OverflowMenu } from "../../components/OverflowMenu";
@@ -851,9 +852,13 @@ function Step2Options(props: {
     total: number;
     paths: string[];
   } | null>(null);
+  const [mismatch, setMismatch] = useState<
+    Extract<ArchiveSetIssue, { kind: "mixed-extensions" }> | null
+  >(null);
   useEffect(() => {
     let cancelled = false;
     setPartSet(null);
+    setMismatch(null);
     if (source.kind !== "archive") return;
     const path = source.path;
     const sep = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
@@ -865,7 +870,16 @@ function Step2Options(props: {
         const entries = await localFs.listDir(dir);
         if (cancelled) return;
         const names = entries.filter((e) => !e.is_dir).map((e) => e.name);
-        if (!needsManualPartUploads(name, names)) return;
+        const issue = diagnoseArchiveSet(name, names);
+        if (!issue) return;
+        if (issue.kind === "mixed-extensions") {
+          // The neighbouring parts are a DIFFERENT archive format, so they
+          // are not siblings at all. Saying "upload the rest too" here would
+          // send the user down hours of uploads that cannot work.
+          log.debug("upload", "mismatched part set", issue);
+          setMismatch(issue);
+          return;
+        }
         const self = parseArchivePart(name);
         if (!self) return;
         const paths = siblingPartPaths(path, names);
@@ -976,6 +990,37 @@ function Step2Options(props: {
             <div className="mt-1 truncate font-mono text-xs text-[var(--color-muted)]">
               {source.path}
             </div>
+            {mismatch && (
+              <div className="mt-2 rounded-md border border-[var(--color-danger,var(--color-border))] bg-[var(--color-surface-3)] p-2.5 text-xs">
+                <div className="font-medium">
+                  {tr(
+                    "upload_partset_mismatch_title",
+                    {
+                      selected: mismatch.selectedExt.toUpperCase(),
+                      other: mismatch.otherExt.toUpperCase(),
+                      count: String(mismatch.otherCount),
+                    },
+                    `The other ${mismatch.otherCount} parts are .${mismatch.otherExt} files, but you picked a .${mismatch.selectedExt}`,
+                  )}
+                </div>
+                <div className="mt-1 text-[var(--color-muted)]">
+                  {tr(
+                    "upload_partset_mismatch_body",
+                    { other: mismatch.otherExt.toUpperCase() },
+                    `They belong to a different download, so this archive can't open them — uploading it sends only its own files. The parts don't mix.`,
+                  )}
+                </div>
+                {mismatch.missingFirst && (
+                  <div className="mt-1 text-[var(--color-muted)]">
+                    {tr(
+                      "upload_partset_mismatch_fix",
+                      { name: mismatch.missingFirst },
+                      `To use the other parts you need their first volume, "${mismatch.missingFirst}", which isn't in this folder. Re-download it from the same source, then pick it instead.`,
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
             {partSet && (
               <div className="mt-2 rounded-md border border-[var(--color-warn-border,var(--color-border))] bg-[var(--color-surface-3)] p-2.5 text-xs">
                 <div className="font-medium">

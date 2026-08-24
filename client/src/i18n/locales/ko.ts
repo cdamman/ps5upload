@@ -2667,6 +2667,11 @@ upload_multipart_body: "각 파트는 서로 다른 파일이 담긴 별개의 �
 // --- added v5.4.9: previously untranslated keys ---
 upload_multipart_queue_all: "{count}개 파트를 모두 대기열에 추가",
 
+// --- added v5.4.18: mismatched multi-part set ---
+upload_partset_mismatch_title: "나머지 {count}개 파트는 .{other} 파일이지만 선택한 것은 .{selected} 파일입니다",
+upload_partset_mismatch_body: "서로 다른 다운로드에 속하므로 이 압축 파일로는 열 수 없습니다. 업로드해도 자기 파일만 전송됩니다. 파트끼리 합쳐지지 않습니다.",
+upload_partset_mismatch_fix: "나머지 파트를 사용하려면 첫 번째 볼륨인 \"{name}\"이 필요하지만 이 폴더에 없습니다. 같은 출처에서 다시 받은 뒤 그 파일을 선택하세요.",
+
 };
 
 export default ko;

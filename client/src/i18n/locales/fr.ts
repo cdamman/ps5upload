@@ -2666,6 +2666,11 @@ upload_multipart_body: "Chaque partie est une archive distincte contenant des fi
 // --- added v5.4.9: previously untranslated keys ---
 upload_multipart_queue_all: "Ajouter les {count} parties à la file d'attente",
 
+// --- added v5.4.18: mismatched multi-part set ---
+upload_partset_mismatch_title: "Les {count} autres parties sont des fichiers .{other}, mais vous avez choisi un .{selected}",
+upload_partset_mismatch_body: "Elles proviennent d'un autre téléchargement, donc cette archive ne peut pas les ouvrir : l'envoyer ne transfère que ses propres fichiers. Les parties ne se combinent pas.",
+upload_partset_mismatch_fix: "Pour utiliser les autres parties, il vous faut leur premier volume, « {name} », absent de ce dossier. Retéléchargez-le depuis la même source, puis choisissez-le.",
+
 };
 
 export default fr;

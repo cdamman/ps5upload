@@ -2631,6 +2631,11 @@ upload_multipart_body: "Mỗi phần là một tệp nén riêng chứa các t�
 // --- added v5.4.9: previously untranslated keys ---
 upload_multipart_queue_all: "Thêm cả {count} phần vào hàng đợi",
 
+// --- added v5.4.18: mismatched multi-part set ---
+upload_partset_mismatch_title: "{count} phần còn lại là tệp .{other}, nhưng bạn đã chọn tệp .{selected}",
+upload_partset_mismatch_body: "Chúng thuộc một bản tải khác nên kho lưu trữ này không mở được — tải lên chỉ gửi các tệp của chính nó. Các phần không ghép với nhau.",
+upload_partset_mismatch_fix: "Để dùng các phần còn lại, bạn cần tập đầu tiên của chúng, \"{name}\", hiện không có trong thư mục này. Hãy tải lại từ cùng nguồn rồi chọn tệp đó.",
+
 };
 
 export default vi;

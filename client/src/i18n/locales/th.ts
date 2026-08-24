@@ -2656,6 +2656,11 @@ upload_multipart_body: "แต่ละส่วนเป็นไฟล์บ�
 // --- added v5.4.9: previously untranslated keys ---
 upload_multipart_queue_all: "เพิ่มทั้ง {count} ส่วนลงในคิว",
 
+// --- added v5.4.18: mismatched multi-part set ---
+upload_partset_mismatch_title: "อีก {count} ส่วนที่เหลือเป็นไฟล์ .{other} แต่คุณเลือกไฟล์ .{selected}",
+upload_partset_mismatch_body: "ไฟล์เหล่านั้นมาจากการดาวน์โหลดคนละชุด ไฟล์บีบอัดนี้จึงเปิดมันไม่ได้ — การอัปโหลดจะส่งเฉพาะไฟล์ของตัวเองเท่านั้น ส่วนต่าง ๆ ไม่รวมกัน",
+upload_partset_mismatch_fix: "หากต้องการใช้ส่วนที่เหลือ คุณต้องมีไฟล์ชุดแรกของมันคือ \"{name}\" ซึ่งไม่มีอยู่ในโฟลเดอร์นี้ กรุณาดาวน์โหลดใหม่จากแหล่งเดียวกันแล้วเลือกไฟล์นั้นแทน",
+
 };
 
 export default th;

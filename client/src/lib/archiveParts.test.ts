@@ -4,6 +4,7 @@ import {
   parseArchivePart,
   siblingParts,
   siblingPartPaths,
+  diagnoseArchiveSet,
 } from "./archiveParts";
 
 const SET = [
@@ -128,5 +129,66 @@ describe("siblingPartPaths", () => {
       `/g/${SET[1]}`,
       `/g/${SET[2]}`,
     ]);
+  });
+});
+
+// Reported 2026-08-23 against 5.4.17: part 1 uploaded, "Upload complete",
+// nothing about the other ten parts. The folder turned out to hold ONE zip
+// and TEN rar volumes under the same stem — so the extension-matching in
+// siblingParts found zero siblings and the app said nothing at all.
+const MIXED = [
+  "[DLPSGAME.COM]- 01.021 PPSA23226.part01.zip",
+  ...Array.from(
+    { length: 10 },
+    (_, i) =>
+      `[DLPSGAME.COM]- 01.021 PPSA23226.part${String(i + 2).padStart(2, "0")}.rar`,
+  ),
+];
+
+describe("diagnoseArchiveSet", () => {
+  it("flags the mixed zip/rar folder the old code was silent about", () => {
+    expect(needsManualPartUploads(MIXED[0], MIXED)).toBe(false); // the bug
+    expect(diagnoseArchiveSet(MIXED[0], MIXED)).toEqual({
+      kind: "mixed-extensions",
+      selectedExt: "zip",
+      otherExt: "rar",
+      otherCount: 10,
+      missingFirst: "[DLPSGAME.COM]- 01.021 PPSA23226.part01.rar",
+    });
+  });
+
+  it("names no missing volume when the other set starts at part 1", () => {
+    const folder = ["G.part01.zip", "G.part01.rar", "G.part02.rar"];
+    const d = diagnoseArchiveSet("G.part01.zip", folder);
+    expect(d).toMatchObject({ kind: "mixed-extensions", missingFirst: null });
+  });
+
+  it("still reports a plain zip set as manual-parts", () => {
+    expect(diagnoseArchiveSet(SET[0], SET)).toEqual({
+      kind: "manual-parts",
+      total: 3,
+    });
+  });
+
+  it("says nothing for a healthy rar set — unrar follows the volumes", () => {
+    const rars = ["G.part01.rar", "G.part02.rar", "G.part03.rar"];
+    expect(diagnoseArchiveSet(rars[0], rars)).toBeNull();
+  });
+
+  it("says nothing for a lone archive", () => {
+    expect(diagnoseArchiveSet("Game.zip", ["Game.zip"])).toBeNull();
+  });
+
+  it("picks the largest foreign set when several formats collide", () => {
+    const folder = [
+      "G.part01.zip",
+      "G.part02.rar",
+      "G.part03.rar",
+      "G.part04.7z",
+    ];
+    expect(diagnoseArchiveSet("G.part01.zip", folder)).toMatchObject({
+      otherExt: "rar",
+      otherCount: 2,
+    });
   });
 });

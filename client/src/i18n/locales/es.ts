@@ -2576,6 +2576,11 @@ upload_multipart_body: "Cada parte es un archivo independiente con archivos dist
 // --- added v5.4.9: previously untranslated keys ---
 upload_multipart_queue_all: "Añadir las {count} partes a la cola",
 
+// --- added v5.4.18: mismatched multi-part set ---
+upload_partset_mismatch_title: "Las otras {count} partes son archivos .{other}, pero elegiste un .{selected}",
+upload_partset_mismatch_body: "Pertenecen a otra descarga, así que este archivo no puede abrirlas: al subirlo solo se envían sus propios archivos. Las partes no se mezclan.",
+upload_partset_mismatch_fix: "Para usar las otras partes necesitas su primer volumen, \"{name}\", que no está en esta carpeta. Descárgalo de la misma fuente y elígelo en su lugar.",
+
 };
 
 export default es;

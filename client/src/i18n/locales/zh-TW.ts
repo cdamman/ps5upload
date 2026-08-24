@@ -2577,6 +2577,11 @@ upload_multipart_body: "每個部分都是獨立的壓縮檔，內含不同的�
 // --- added v5.4.9: previously untranslated keys ---
 upload_multipart_queue_all: "將全部 {count} 個部分加入佇列",
 
+// --- added v5.4.18: mismatched multi-part set ---
+upload_partset_mismatch_title: "其餘 {count} 個分卷是 .{other} 檔案，但你選擇的是 .{selected} 檔案",
+upload_partset_mismatch_body: "它們來自另一次下載，因此該壓縮檔無法開啟它們——上傳只會傳送它自己的檔案。分卷之間不能混用。",
+upload_partset_mismatch_fix: "要使用其餘分卷，需要它們的第一個分卷「{name}」，但該檔案不在此資料夾中。請從相同來源重新下載後改選它。",
+
 };
 
 export default zh_TW;

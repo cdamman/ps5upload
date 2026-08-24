@@ -2666,6 +2666,11 @@ upload_multipart_body: "हर भाग अपने आप में एक �
 // --- added v5.4.9: previously untranslated keys ---
 upload_multipart_queue_all: "सभी {count} भाग कतार में जोड़ें",
 
+// --- added v5.4.18: mismatched multi-part set ---
+upload_partset_mismatch_title: "बाकी {count} भाग .{other} फ़ाइलें हैं, लेकिन आपने .{selected} चुनी है",
+upload_partset_mismatch_body: "वे किसी दूसरे डाउनलोड की हैं, इसलिए यह आर्काइव उन्हें नहीं खोल सकता — इसे अपलोड करने पर केवल इसकी अपनी फ़ाइलें ही भेजी जाती हैं। भाग आपस में नहीं जुड़ते।",
+upload_partset_mismatch_fix: "बाकी भागों को इस्तेमाल करने के लिए उनका पहला वॉल्यूम \"{name}\" चाहिए, जो इस फ़ोल्डर में नहीं है। उसे उसी स्रोत से दोबारा डाउनलोड करें और उसे चुनें।",
+
 };
 
 export default hi;

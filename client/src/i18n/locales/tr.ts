@@ -2636,6 +2636,11 @@ upload_multipart_body: "Her parça farklı dosyalar içeren ayrı bir arşivdir;
 // --- added v5.4.9: previously untranslated keys ---
 upload_multipart_queue_all: "{count} parçanın tamamını kuyruğa ekle",
 
+// --- added v5.4.18: mismatched multi-part set ---
+upload_partset_mismatch_title: "Diğer {count} parça .{other} dosyası, ancak siz bir .{selected} seçtiniz",
+upload_partset_mismatch_body: "Farklı bir indirmeye ait oldukları için bu arşiv onları açamaz — yüklemek yalnızca kendi dosyalarını gönderir. Parçalar birbirine karışmaz.",
+upload_partset_mismatch_fix: "Diğer parçaları kullanmak için ilk birimleri olan \"{name}\" gerekir, bu klasörde yok. Aynı kaynaktan yeniden indirip onu seçin.",
+
 };
 
 export default tr;
