@@ -2636,6 +2636,13 @@ upload_partset_mismatch_title: "{count} phần còn lại là tệp .{other}, nh
 upload_partset_mismatch_body: "Chúng thuộc một bản tải khác nên kho lưu trữ này không mở được — tải lên chỉ gửi các tệp của chính nó. Các phần không ghép với nhau.",
 upload_partset_mismatch_fix: "Để dùng các phần còn lại, bạn cần tập đầu tiên của chúng, \"{name}\", hiện không có trong thư mục này. Hãy tải lại từ cùng nguồn rồi chọn tệp đó.",
 
+// --- added v5.4.19: natively-split archive volumes ---
+upload_split_pick_entry_title: "Hãy chọn \"{name}\"",
+upload_split_pick_entry_body: "Đây là một tập trong bộ chia nhỏ, không phải toàn bộ kho lưu trữ. Hãy chọn tệp ở trên, các tập còn lại sẽ được đọc tự động — bạn không cần tải lên từng tập.",
+upload_split_unsupported_title: "Đây là kho lưu trữ chia nhỏ ({count} tập) mà ps5upload không mở được",
+upload_split_unsupported_body: "Tải lên sẽ gửi tập thô sang PS5 và máy không dùng được. Hãy ghép các tập lại thành một tệp trước: mở tập đầu tiên bằng 7-Zip hoặc WinRAR rồi giải nén, sau đó tải lên thư mục đã giải nén hoặc một tệp nén duy nhất.",
+upload_split_unsupported_target: "Ghép lại thành: {name}",
+
 };
 
 export default vi;

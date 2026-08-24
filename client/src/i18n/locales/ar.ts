@@ -2634,6 +2634,13 @@ upload_partset_mismatch_title: "الأجزاء الـ {count} الأخرى مل�
 upload_partset_mismatch_body: "إنها تعود إلى تنزيل مختلف، لذا لا يستطيع هذا الأرشيف فتحها — ورفعه يُرسل ملفاته هو فقط. الأجزاء لا تندمج معًا.",
 upload_partset_mismatch_fix: "لاستخدام الأجزاء الأخرى تحتاج إلى مجلدها الأول \"{name}\"، وهو غير موجود في هذا المجلد. أعد تنزيله من المصدر نفسه ثم اختره بدلاً من هذا.",
 
+// --- added v5.4.19: natively-split archive volumes ---
+upload_split_pick_entry_title: "اختر \"{name}\" بدلاً من ذلك",
+upload_split_pick_entry_body: "هذا مجلد واحد من مجموعة مقسّمة وليس الأرشيف كاملاً. اختر الملف أعلاه وستُقرأ بقية المجلدات تلقائيًا، فلا حاجة إلى رفعها كل على حدة.",
+upload_split_unsupported_title: "هذا أرشيف مقسّم ({count} مجلدات) لا يستطيع ps5upload فتحه",
+upload_split_unsupported_body: "رفعه يُرسل المجلد الخام إلى جهاز PS5 وهو لا يستطيع استخدامه. اجمع المجلدات أولاً في أرشيف واحد: افتح المجلد الأول ببرنامج 7-Zip أو WinRAR واستخرجه، ثم ارفع المجلد المستخرج أو أرشيفًا واحدًا منه.",
+upload_split_unsupported_target: "يُجمَع ليصبح: {name}",
+
 };
 
 export default ar;

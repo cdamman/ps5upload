@@ -2931,6 +2931,13 @@ upload_partset_mismatch_title: "Pozostałe {count} części to pliki .{other}, a
 upload_partset_mismatch_body: "Pochodzą z innego pobrania, więc to archiwum nie może ich otworzyć — wysłanie go przenosi tylko jego własne pliki. Części się nie łączą.",
 upload_partset_mismatch_fix: "Aby użyć pozostałych części, potrzebny jest ich pierwszy wolumin „{name}”, którego nie ma w tym folderze. Pobierz go z tego samego źródła i wybierz jego.",
 
+// --- added v5.4.19: natively-split archive volumes ---
+upload_split_pick_entry_title: "Wybierz zamiast tego „{name}”",
+upload_split_pick_entry_body: "To jeden wolumin podzielonego zestawu, a nie całe archiwum. Wybierz plik wskazany powyżej — pozostałe woluminy zostaną odczytane automatycznie, nie trzeba ich wysyłać osobno.",
+upload_split_unsupported_title: "To podzielone archiwum ({count} woluminów), którego ps5upload nie potrafi otworzyć",
+upload_split_unsupported_body: "Wysłanie go przenosi surowy wolumin na PS5, która nie potrafi go użyć. Najpierw połącz woluminy w jedno archiwum: otwórz pierwszy w 7-Zip lub WinRAR i wypakuj, a następnie wyślij wypakowany folder albo pojedyncze archiwum.",
+upload_split_unsupported_target: "Po połączeniu: {name}",
+
 };
 
 export default pl;

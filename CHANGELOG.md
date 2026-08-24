@@ -4,6 +4,28 @@ What's new in ps5upload, written for humans.
 
 ---
 
+## 5.4.19
+
+**Every way an archive can be split is now recognised — including the ones
+that used to upload silently as a useless raw file.**
+
+- **`Game.7z.001`, `Game.zip.001` and friends.** These are what 7-Zip
+  produces when it splits a file. They don't end in `.zip`/`.7z`/`.rar`, so
+  ps5upload didn't see them as archives at all and sent the raw volume to
+  your PS5, where it's unusable — with no warning. Now it says so, and tells
+  you to join the volumes first.
+- **Spanned zips (`Game.z01` + `Game.zip`).** The `.zip` opens but its
+  contents live in the other volumes, which ps5upload can't read. Flagged
+  instead of half-uploading.
+- **Old-style RAR volumes (`Game.r00`).** If you pick one of these, you're
+  now pointed at the `Game.rar` that opens the whole set — one click, and
+  the rest are read automatically.
+- **Ordinary files are left alone.** A `save.2024` or `backup.1999` is not
+  a split archive, so a numeric suffix only counts when a real second
+  volume is sitting next to it.
+
+---
+
 ## 5.4.18
 
 **If your parts are a mix of `.zip` and `.rar`, ps5upload now tells you

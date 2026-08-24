@@ -2672,6 +2672,13 @@ upload_partset_mismatch_title: "나머지 {count}개 파트는 .{other} 파일�
 upload_partset_mismatch_body: "서로 다른 다운로드에 속하므로 이 압축 파일로는 열 수 없습니다. 업로드해도 자기 파일만 전송됩니다. 파트끼리 합쳐지지 않습니다.",
 upload_partset_mismatch_fix: "나머지 파트를 사용하려면 첫 번째 볼륨인 \"{name}\"이 필요하지만 이 폴더에 없습니다. 같은 출처에서 다시 받은 뒤 그 파일을 선택하세요.",
 
+// --- added v5.4.19: natively-split archive volumes ---
+upload_split_pick_entry_title: "대신 \"{name}\"을(를) 선택하세요",
+upload_split_pick_entry_body: "이 파일은 분할 세트의 한 볼륨일 뿐 전체 압축 파일이 아닙니다. 위 파일을 선택하면 나머지 볼륨은 자동으로 읽히므로 따로 업로드할 필요가 없습니다.",
+upload_split_unsupported_title: "ps5upload가 열 수 없는 분할 압축 파일입니다({count}개 볼륨)",
+upload_split_unsupported_body: "업로드하면 원본 볼륨이 그대로 PS5로 전송되어 사용할 수 없습니다. 먼저 볼륨을 하나의 압축 파일로 합치세요. 7-Zip이나 WinRAR로 첫 볼륨을 열어 압축을 푼 뒤, 풀어낸 폴더나 그것을 하나로 묶은 파일을 업로드하면 됩니다.",
+upload_split_unsupported_target: "합치면: {name}",
+
 };
 
 export default ko;

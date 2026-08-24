@@ -161,6 +161,24 @@ export type ArchiveSetIssue =
       /** The volume the other-format set needs but does not have, e.g.
        *  `Game.part01.rar`. Null when that set is complete from part 1. */
       missingFirst: string | null;
+    }
+  | {
+      /** The picked file is a volume of a natively-split set whose opening
+       *  file is sitting right there — `Game.r00` beside `Game.rar`.
+       *  Recoverable in one click: pick `entryName` instead. */
+      kind: "pick-entry-volume";
+      entryName: string;
+    }
+  | {
+      /** A split set we cannot open at all: the volumes have to be joined
+       *  back into one archive first. Covers `X.7z.001` (no opening file
+       *  exists until the parts are joined) and spanned zips (`X.z01` +
+       *  `X.zip`), which need a multi-disk reader we do not have. */
+      kind: "split-unsupported";
+      scheme: "numeric" | "zip";
+      /** The joined archive the volumes reconstruct, when nameable. */
+      entryName: string | null;
+      volumeCount: number;
     };
 
 /** Diagnose the set the chosen archive belongs to.
@@ -174,6 +192,52 @@ export function diagnoseArchiveSet(
   filename: string,
   namesInFolder: readonly string[],
 ): ArchiveSetIssue | null {
+  // Natively-split volumes first: these never reach `parseArchivePart`,
+  // and a `.001` is not even recognised as an archive, so without this it
+  // uploads as a plain file and the user gets a useless blob on the PS5.
+  const vol = parseSplitVolume(filename);
+  if (vol) {
+    const present = new Set(namesInFolder.map((n) => n.toLowerCase()));
+    // A rar volume set opens from its `.rar`, which UnRAR then follows.
+    if (vol.scheme === "rar" && present.has(vol.entryName.toLowerCase())) {
+      return { kind: "pick-entry-volume", entryName: vol.entryName };
+    }
+    const volumeCount = namesInFolder.filter((n) => {
+      const v = parseSplitVolume(n);
+      return v !== null && v.scheme === vol.scheme && v.entryName === vol.entryName;
+    }).length;
+    // A trailing run of digits is not distinctive on its own: `save.2024`
+    // and `backup.1999` both look like `X.001`. Demand an actual SET — two
+    // or more volumes sharing a base — before calling a numeric suffix a
+    // split archive, so an ordinary file with a numeric extension is left
+    // alone. `.z01`/`.r00` are distinctive enough to stand by themselves.
+    if (vol.scheme === "numeric" && volumeCount < 2) return null;
+    return {
+      kind: "split-unsupported",
+      // A rar set missing its `.rar` cannot be opened either; report it the
+      // same way, naming the file they need.
+      scheme: vol.scheme === "zip" ? "zip" : "numeric",
+      entryName: vol.entryName || null,
+      volumeCount,
+    };
+  }
+
+  // A `.zip` with `.z01` volumes beside it is the LAST disk of a spanned
+  // set. It opens — the central directory is in this file — but its entries
+  // reference earlier disks the single-disk reader never reads.
+  if (isSpannedZip(filename, namesInFolder)) {
+    const stem = filename.replace(/\.zip$/i, "");
+    return {
+      kind: "split-unsupported",
+      scheme: "zip",
+      entryName: filename,
+      volumeCount:
+        namesInFolder.filter((n) =>
+          new RegExp(`^${stem.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\.z\\d{2,}$`, "i").test(n),
+        ).length + 1,
+    };
+  }
+
   const self = parseArchivePart(filename);
   if (!self) return null;
 
@@ -208,4 +272,96 @@ export function diagnoseArchiveSet(
     };
   }
   return null;
+}
+
+// ── Native split schemes ────────────────────────────────────────────────
+//
+// `.partN.<ext>` (above) is what most repackers use, but each format also
+// has its OWN split convention, and those look nothing alike:
+//
+//   Game.7z.001, Game.7z.002   7-Zip's byte-splitter. Also seen as
+//                              Game.zip.001 / Game.rar.001 / Game.001 —
+//                              the splitter doesn't care what it's cutting.
+//   Game.z01, Game.z02 + .zip  Spanned zip. The central directory lives in
+//                              the final `.zip`; earlier volumes are raw.
+//   Game.r00, Game.r01 + .rar  Old-style RAR volumes. UnRAR follows these
+//                              from the `.rar`, so that one is fine — the
+//                              user just has to pick the `.rar`.
+//
+// None of these end in `.zip`/`.7z`/`.rar`, so `archiveFormat()` returns
+// null and the file is treated as a PLAIN FILE — uploaded byte-for-byte to
+// the PS5, where it is useless. That failure is silent, which makes it
+// worse than the `.partN` case: no warning can fire because the file never
+// registers as an archive at all.
+
+/** A volume of a natively-split set. */
+export interface SplitVolumeInfo {
+  /** `numeric` → `X.7z.001`; `zip` → `X.z01`; `rar` → `X.r00`. */
+  scheme: "numeric" | "zip" | "rar";
+  /** Volume number as written (`001` → 1, `r00` → 0). */
+  index: number;
+  /** The file that OPENS the set, if the scheme has one we can name:
+   *  `X.rar` for rar volumes, `X.zip` for a spanned zip, and for numeric
+   *  splits the joined file the volumes reconstruct (`X.7z`). */
+  entryName: string;
+}
+
+const NUMERIC_SPLIT_RE = /^(.*?)(\.(?:zip|7z|rar))?\.(\d{3,})$/i;
+const ZIP_VOL_RE = /^(.*)\.z(\d{2,})$/i;
+const RAR_VOL_RE = /^(.*)\.r(\d{2,})$/i;
+
+/** Parse a natively-split volume name. Returns null for anything else —
+ *  including the `.partN.<ext>` scheme, which `parseArchivePart` owns. */
+export function parseSplitVolume(filename: string): SplitVolumeInfo | null {
+  // `.partN.zip` is a whole archive, not a volume: let it through untouched.
+  if (parseArchivePart(filename)) return null;
+
+  const num = NUMERIC_SPLIT_RE.exec(filename);
+  if (num) {
+    const stem = num[1];
+    const inner = num[2] ?? "";
+    return {
+      scheme: "numeric",
+      index: Number.parseInt(num[3], 10),
+      // `X.7z.001` rebuilds `X.7z`. A bare `X.001` gives no hint about the
+      // joined format, so name the stem alone.
+      entryName: `${stem}${inner}`,
+    };
+  }
+
+  const z = ZIP_VOL_RE.exec(filename);
+  if (z) {
+    return {
+      scheme: "zip",
+      index: Number.parseInt(z[2], 10),
+      entryName: `${z[1]}.zip`,
+    };
+  }
+
+  const r = RAR_VOL_RE.exec(filename);
+  if (r) {
+    return {
+      scheme: "rar",
+      index: Number.parseInt(r[2], 10),
+      entryName: `${r[1]}.rar`,
+    };
+  }
+
+  return null;
+}
+
+/** True when this `.zip` is the last volume of a SPANNED set — i.e. there
+ *  are `.z01`-style volumes beside it. The zip reader is single-disk, so
+ *  such a `.zip` opens but its entries point at data we never see. */
+export function isSpannedZip(
+  filename: string,
+  namesInFolder: readonly string[],
+): boolean {
+  const m = /^(.*)\.zip$/i.exec(filename);
+  if (!m) return false;
+  const stem = m[1].toLowerCase();
+  return namesInFolder.some((n) => {
+    const v = ZIP_VOL_RE.exec(n);
+    return v !== null && v[1].toLowerCase() === stem;
+  });
 }

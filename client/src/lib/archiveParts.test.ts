@@ -5,6 +5,8 @@ import {
   siblingParts,
   siblingPartPaths,
   diagnoseArchiveSet,
+  parseSplitVolume,
+  isSpannedZip,
 } from "./archiveParts";
 
 const SET = [
@@ -190,5 +192,119 @@ describe("diagnoseArchiveSet", () => {
       otherExt: "rar",
       otherCount: 2,
     });
+  });
+});
+
+describe("parseSplitVolume", () => {
+  it("reads 7-Zip numeric splits and names the joined archive", () => {
+    expect(parseSplitVolume("Game.7z.001")).toEqual({
+      scheme: "numeric",
+      index: 1,
+      entryName: "Game.7z",
+    });
+    expect(parseSplitVolume("Game.zip.014")).toMatchObject({
+      scheme: "numeric",
+      index: 14,
+      entryName: "Game.zip",
+    });
+    expect(parseSplitVolume("Game.001")).toMatchObject({
+      scheme: "numeric",
+      entryName: "Game",
+    });
+  });
+
+  it("reads spanned-zip and old-style rar volumes", () => {
+    expect(parseSplitVolume("Game.z01")).toEqual({
+      scheme: "zip",
+      index: 1,
+      entryName: "Game.zip",
+    });
+    expect(parseSplitVolume("Game.r00")).toEqual({
+      scheme: "rar",
+      index: 0,
+      entryName: "Game.rar",
+    });
+  });
+
+  it("leaves whole archives and .partN sets alone", () => {
+    for (const n of [
+      "Game.zip",
+      "Game.7z",
+      "Game.rar",
+      "Game.part01.zip",
+      "Game.part01.rar",
+      "readme.txt",
+    ]) {
+      expect(parseSplitVolume(n)).toBeNull();
+    }
+  });
+});
+
+describe("isSpannedZip", () => {
+  it("is true only when .zNN volumes sit beside the .zip", () => {
+    const spanned = ["G.zip", "G.z01", "G.z02"];
+    expect(isSpannedZip("G.zip", spanned)).toBe(true);
+    expect(isSpannedZip("G.zip", ["G.zip"])).toBe(false);
+    expect(isSpannedZip("G.zip", ["G.zip", "Other.z01"])).toBe(false);
+  });
+});
+
+describe("diagnoseArchiveSet — native split schemes", () => {
+  it("points a .r00 pick at the .rar that opens it", () => {
+    const folder = ["G.rar", "G.r00", "G.r01"];
+    expect(diagnoseArchiveSet("G.r00", folder)).toEqual({
+      kind: "pick-entry-volume",
+      entryName: "G.rar",
+    });
+  });
+
+  it("flags a rar volume set whose .rar is missing", () => {
+    const folder = ["G.r00", "G.r01"];
+    expect(diagnoseArchiveSet("G.r00", folder)).toMatchObject({
+      kind: "split-unsupported",
+      entryName: "G.rar",
+    });
+  });
+
+  it("flags a 7-Zip numeric split and counts the volumes", () => {
+    const folder = ["G.7z.001", "G.7z.002", "G.7z.003", "notes.txt"];
+    expect(diagnoseArchiveSet("G.7z.001", folder)).toEqual({
+      kind: "split-unsupported",
+      scheme: "numeric",
+      entryName: "G.7z",
+      volumeCount: 3,
+    });
+  });
+
+  it("flags a spanned zip picked by its .zip", () => {
+    const folder = ["G.zip", "G.z01", "G.z02"];
+    expect(diagnoseArchiveSet("G.zip", folder)).toMatchObject({
+      kind: "split-unsupported",
+      scheme: "zip",
+      volumeCount: 3,
+    });
+  });
+
+  it("leaves an ordinary single .zip alone", () => {
+    expect(diagnoseArchiveSet("G.zip", ["G.zip", "readme.txt"])).toBeNull();
+  });
+
+  it("leaves a healthy .partN.rar set alone", () => {
+    const rars = ["G.part01.rar", "G.part02.rar"];
+    expect(diagnoseArchiveSet("G.part01.rar", rars)).toBeNull();
+  });
+});
+
+describe("numeric suffixes that are not split archives", () => {
+  it("leaves an ordinary file with a numeric extension alone", () => {
+    for (const n of ["save.2024", "backup.1999", "PS5UPDATE.100", "clip.264"]) {
+      expect(diagnoseArchiveSet(n, [n, "readme.txt"])).toBeNull();
+    }
+  });
+
+  it("still flags it once a second volume shows up", () => {
+    expect(diagnoseArchiveSet("save.001", ["save.001", "save.002"])).toMatchObject(
+      { kind: "split-unsupported", volumeCount: 2 },
+    );
   });
 });

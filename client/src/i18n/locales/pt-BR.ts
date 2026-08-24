@@ -2669,6 +2669,13 @@ upload_partset_mismatch_title: "As outras {count} partes são arquivos .{other},
 upload_partset_mismatch_body: "Elas pertencem a outro download, então este arquivo não consegue abri-las — enviá-lo transfere apenas os arquivos dele. As partes não se combinam.",
 upload_partset_mismatch_fix: "Para usar as outras partes você precisa do primeiro volume delas, \"{name}\", que não está nesta pasta. Baixe-o novamente da mesma fonte e selecione-o.",
 
+// --- added v5.4.19: natively-split archive volumes ---
+upload_split_pick_entry_title: "Escolha \"{name}\" em vez disso",
+upload_split_pick_entry_body: "Este é um volume de um conjunto dividido, não o arquivo completo. Escolha o arquivo acima e os volumes restantes são lidos automaticamente — não é preciso enviá-los separadamente.",
+upload_split_unsupported_title: "Este é um arquivo dividido ({count} volumes) que o ps5upload não consegue abrir",
+upload_split_unsupported_body: "Enviá-lo manda o volume bruto para o seu PS5, que não consegue usá-lo. Junte os volumes em um único arquivo primeiro: abra o primeiro com 7-Zip ou WinRAR e extraia, depois envie a pasta extraída ou um único arquivo dela.",
+upload_split_unsupported_target: "Resulta em: {name}",
+
 };
 
 export default pt_BR;

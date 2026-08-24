@@ -2643,6 +2643,13 @@ upload_partset_mismatch_title: "{count} bagian lainnya adalah berkas .{other}, t
 upload_partset_mismatch_body: "Semuanya berasal dari unduhan berbeda, jadi arsip ini tidak bisa membukanya — mengunggahnya hanya mengirim berkasnya sendiri. Bagian-bagian itu tidak menyatu.",
 upload_partset_mismatch_fix: "Untuk memakai bagian lainnya Anda perlu volume pertamanya, \"{name}\", yang tidak ada di folder ini. Unduh ulang dari sumber yang sama, lalu pilih berkas itu.",
 
+// --- added v5.4.19: natively-split archive volumes ---
+upload_split_pick_entry_title: "Pilih \"{name}\" saja",
+upload_split_pick_entry_body: "Ini satu volume dari set terpisah, bukan arsip utuh. Pilih berkas di atas dan volume sisanya dibaca otomatis — Anda tidak perlu mengunggahnya satu per satu.",
+upload_split_unsupported_title: "Ini arsip terpisah ({count} volume) yang tidak bisa dibuka ps5upload",
+upload_split_unsupported_body: "Mengunggahnya mengirim volume mentah ke PS5 Anda, yang tidak bisa memakainya. Gabungkan dulu volume-volumenya jadi satu arsip: buka volume pertama dengan 7-Zip atau WinRAR lalu ekstrak, kemudian unggah folder hasil ekstrak atau satu arsip darinya.",
+upload_split_unsupported_target: "Tergabung jadi: {name}",
+
 };
 
 export default id;

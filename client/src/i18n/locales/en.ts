@@ -2977,6 +2977,13 @@ upload_partset_mismatch_title: "The other {count} parts are .{other} files, but 
 upload_partset_mismatch_body: "They belong to a different download, so this archive can't open them — uploading it sends only its own files. The parts don't mix.",
 upload_partset_mismatch_fix: "To use the other parts you need their first volume, \"{name}\", which isn't in this folder. Re-download it from the same source, then pick it instead.",
 
+// --- added v5.4.19: natively-split archive volumes ---
+upload_split_pick_entry_title: "Pick \"{name}\" instead",
+upload_split_pick_entry_body: "This is one volume of a split set, not the whole archive. Choose the file above and the remaining volumes are read automatically — you don't need to upload them separately.",
+upload_split_unsupported_title: "This is a split archive ({count} volumes) that ps5upload can't open",
+upload_split_unsupported_body: "Uploading it sends the raw volume to your PS5, which can't use it. Join the volumes back into one archive first — open the first volume with 7-Zip or WinRAR and extract, then upload the extracted folder or a single archive of it.",
+upload_split_unsupported_target: "Joins into: {name}",
+
 };
 
 export default en;

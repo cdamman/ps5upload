@@ -2642,6 +2642,13 @@ upload_partset_mismatch_title: "Die anderen {count} Teile sind .{other}-Dateien,
 upload_partset_mismatch_body: "Sie gehören zu einem anderen Download, dieses Archiv kann sie also nicht öffnen — beim Hochladen werden nur seine eigenen Dateien übertragen. Die Teile lassen sich nicht mischen.",
 upload_partset_mismatch_fix: "Für die anderen Teile brauchst du deren ersten Band, „{name}“, der nicht in diesem Ordner liegt. Lade ihn aus derselben Quelle erneut herunter und wähle ihn stattdessen aus.",
 
+// --- added v5.4.19: natively-split archive volumes ---
+upload_split_pick_entry_title: "Wähle stattdessen „{name}“",
+upload_split_pick_entry_body: "Das ist ein Band eines geteilten Satzes, nicht das ganze Archiv. Wähle die oben genannte Datei — die übrigen Bände werden automatisch gelesen, du musst sie nicht einzeln hochladen.",
+upload_split_unsupported_title: "Das ist ein geteiltes Archiv ({count} Bände), das ps5upload nicht öffnen kann",
+upload_split_unsupported_body: "Beim Hochladen landet der rohe Band auf der PS5, die nichts damit anfangen kann. Füge die Bände zuerst wieder zu einem Archiv zusammen: Öffne den ersten Band mit 7-Zip oder WinRAR und entpacke ihn, lade dann den entpackten Ordner oder ein einzelnes Archiv davon hoch.",
+upload_split_unsupported_target: "Ergibt zusammengefügt: {name}",
+
 };
 
 export default de;

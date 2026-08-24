@@ -2676,6 +2676,13 @@ upload_partset_mismatch_title: "他の {count} 個のパートは .{other} フ�
 upload_partset_mismatch_body: "それらは別のダウンロードのものなので、このアーカイブでは開けません。アップロードしても自身のファイルしか送信されません。パート同士は結合できません。",
 upload_partset_mismatch_fix: "他のパートを使うには最初の巻「{name}」が必要ですが、このフォルダーにはありません。同じ配布元から取得し直し、そちらを選択してください。",
 
+// --- added v5.4.19: natively-split archive volumes ---
+upload_split_pick_entry_title: "代わりに「{name}」を選択してください",
+upload_split_pick_entry_body: "これは分割されたセットの 1 ボリュームであり、アーカイブ全体ではありません。上のファイルを選べば残りのボリュームは自動的に読み込まれるので、個別にアップロードする必要はありません。",
+upload_split_unsupported_title: "これは ps5upload が開けない分割アーカイブです（{count} ボリューム）",
+upload_split_unsupported_body: "アップロードすると生のボリュームが PS5 に送られ、そのままでは利用できません。まずボリュームを 1 つのアーカイブに結合してください。7-Zip か WinRAR で最初のボリュームを開いて展開し、展開後のフォルダーか、それを 1 つにまとめた書庫をアップロードします。",
+upload_split_unsupported_target: "結合後: {name}",
+
 };
 
 export default ja;

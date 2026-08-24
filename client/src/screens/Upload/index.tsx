@@ -852,14 +852,19 @@ function Step2Options(props: {
     total: number;
     paths: string[];
   } | null>(null);
-  const [mismatch, setMismatch] = useState<
-    Extract<ArchiveSetIssue, { kind: "mixed-extensions" }> | null
-  >(null);
+  const [issue, setIssue] = useState<Exclude<
+    ArchiveSetIssue,
+    { kind: "manual-parts" }
+  > | null>(null);
   useEffect(() => {
     let cancelled = false;
     setPartSet(null);
-    setMismatch(null);
-    if (source.kind !== "archive") return;
+    setIssue(null);
+    // Not just archives: a natively-split volume (`Game.7z.001`, `Game.z01`,
+    // `Game.r00`) doesn't end in a known archive extension, so it arrives
+    // here as kind "file". That is exactly the case that needs warning
+    // about — left alone it uploads as a raw blob.
+    if (source.kind !== "archive" && source.kind !== "file") return;
     const path = source.path;
     const sep = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
     if (sep <= 0) return;
@@ -872,12 +877,14 @@ function Step2Options(props: {
         const names = entries.filter((e) => !e.is_dir).map((e) => e.name);
         const issue = diagnoseArchiveSet(name, names);
         if (!issue) return;
-        if (issue.kind === "mixed-extensions") {
-          // The neighbouring parts are a DIFFERENT archive format, so they
-          // are not siblings at all. Saying "upload the rest too" here would
-          // send the user down hours of uploads that cannot work.
-          log.debug("upload", "mismatched part set", issue);
-          setMismatch(issue);
+        if (issue.kind !== "manual-parts") {
+          // Everything except a plain zip/7z part set is a problem to
+          // explain, not a queue to build: the neighbouring parts are a
+          // different format, or this is a split volume we cannot open.
+          // Saying "upload the rest too" would send the user down hours of
+          // uploads that cannot work.
+          log.debug("upload", `archive set issue: ${issue.kind}`, issue);
+          setIssue(issue);
           return;
         }
         const self = parseArchivePart(name);
@@ -990,34 +997,83 @@ function Step2Options(props: {
             <div className="mt-1 truncate font-mono text-xs text-[var(--color-muted)]">
               {source.path}
             </div>
-            {mismatch && (
+            {issue && (
               <div className="mt-2 rounded-md border border-[var(--color-danger,var(--color-border))] bg-[var(--color-surface-3)] p-2.5 text-xs">
-                <div className="font-medium">
-                  {tr(
-                    "upload_partset_mismatch_title",
-                    {
-                      selected: mismatch.selectedExt.toUpperCase(),
-                      other: mismatch.otherExt.toUpperCase(),
-                      count: String(mismatch.otherCount),
-                    },
-                    `The other ${mismatch.otherCount} parts are .${mismatch.otherExt} files, but you picked a .${mismatch.selectedExt}`,
-                  )}
-                </div>
-                <div className="mt-1 text-[var(--color-muted)]">
-                  {tr(
-                    "upload_partset_mismatch_body",
-                    { other: mismatch.otherExt.toUpperCase() },
-                    `They belong to a different download, so this archive can't open them — uploading it sends only its own files. The parts don't mix.`,
-                  )}
-                </div>
-                {mismatch.missingFirst && (
-                  <div className="mt-1 text-[var(--color-muted)]">
-                    {tr(
-                      "upload_partset_mismatch_fix",
-                      { name: mismatch.missingFirst },
-                      `To use the other parts you need their first volume, "${mismatch.missingFirst}", which isn't in this folder. Re-download it from the same source, then pick it instead.`,
+                {issue.kind === "mixed-extensions" && (
+                  <>
+                    <div className="font-medium">
+                      {tr(
+                        "upload_partset_mismatch_title",
+                        {
+                          selected: issue.selectedExt.toUpperCase(),
+                          other: issue.otherExt.toUpperCase(),
+                          count: String(issue.otherCount),
+                        },
+                        `The other ${issue.otherCount} parts are .${issue.otherExt} files, but you picked a .${issue.selectedExt}`,
+                      )}
+                    </div>
+                    <div className="mt-1 text-[var(--color-muted)]">
+                      {tr(
+                        "upload_partset_mismatch_body",
+                        { other: issue.otherExt.toUpperCase() },
+                        `They belong to a different download, so this archive can't open them — uploading it sends only its own files. The parts don't mix.`,
+                      )}
+                    </div>
+                    {issue.missingFirst && (
+                      <div className="mt-1 text-[var(--color-muted)]">
+                        {tr(
+                          "upload_partset_mismatch_fix",
+                          { name: issue.missingFirst },
+                          `To use the other parts you need their first volume, "${issue.missingFirst}", which isn't in this folder. Re-download it from the same source, then pick it instead.`,
+                        )}
+                      </div>
                     )}
-                  </div>
+                  </>
+                )}
+                {issue.kind === "pick-entry-volume" && (
+                  <>
+                    <div className="font-medium">
+                      {tr(
+                        "upload_split_pick_entry_title",
+                        { name: issue.entryName },
+                        `Pick "${issue.entryName}" instead`,
+                      )}
+                    </div>
+                    <div className="mt-1 text-[var(--color-muted)]">
+                      {tr(
+                        "upload_split_pick_entry_body",
+                        { name: issue.entryName },
+                        `This is one volume of a split set, not the whole archive. Choose the file above and the remaining volumes are read automatically — you don't need to upload them separately.`,
+                      )}
+                    </div>
+                  </>
+                )}
+                {issue.kind === "split-unsupported" && (
+                  <>
+                    <div className="font-medium">
+                      {tr(
+                        "upload_split_unsupported_title",
+                        { count: String(issue.volumeCount) },
+                        `This is a split archive (${issue.volumeCount} volumes) that ps5upload can't open`,
+                      )}
+                    </div>
+                    <div className="mt-1 text-[var(--color-muted)]">
+                      {tr(
+                        "upload_split_unsupported_body",
+                        undefined,
+                        "Uploading it sends the raw volume to your PS5, which can't use it. Join the volumes back into one archive first — open the first volume with 7-Zip or WinRAR and extract, then upload the extracted folder or a single archive of it.",
+                      )}
+                    </div>
+                    {issue.entryName && (
+                      <div className="mt-1 font-mono text-[var(--color-muted)]">
+                        {tr(
+                          "upload_split_unsupported_target",
+                          { name: issue.entryName },
+                          `Joins into: ${issue.entryName}`,
+                        )}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             )}

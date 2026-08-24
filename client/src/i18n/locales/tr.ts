@@ -2641,6 +2641,13 @@ upload_partset_mismatch_title: "Diğer {count} parça .{other} dosyası, ancak s
 upload_partset_mismatch_body: "Farklı bir indirmeye ait oldukları için bu arşiv onları açamaz — yüklemek yalnızca kendi dosyalarını gönderir. Parçalar birbirine karışmaz.",
 upload_partset_mismatch_fix: "Diğer parçaları kullanmak için ilk birimleri olan \"{name}\" gerekir, bu klasörde yok. Aynı kaynaktan yeniden indirip onu seçin.",
 
+// --- added v5.4.19: natively-split archive volumes ---
+upload_split_pick_entry_title: "Bunun yerine \"{name}\" dosyasını seçin",
+upload_split_pick_entry_body: "Bu, bölünmüş bir kümenin tek bir birimi; arşivin tamamı değil. Yukarıdaki dosyayı seçin, kalan birimler otomatik olarak okunur — ayrı ayrı yüklemeniz gerekmez.",
+upload_split_unsupported_title: "Bu, ps5upload'ın açamadığı bölünmüş bir arşiv ({count} birim)",
+upload_split_unsupported_body: "Yüklemek ham birimi PS5'inize gönderir ve PS5 bunu kullanamaz. Önce birimleri tek bir arşivde birleştirin: ilk birimi 7-Zip veya WinRAR ile açıp çıkarın, sonra çıkarılan klasörü ya da tek bir arşivini yükleyin.",
+upload_split_unsupported_target: "Birleşince: {name}",
+
 };
 
 export default tr;

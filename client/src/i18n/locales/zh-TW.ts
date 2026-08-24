@@ -2582,6 +2582,13 @@ upload_partset_mismatch_title: "其餘 {count} 個分卷是 .{other} 檔案，�
 upload_partset_mismatch_body: "它們來自另一次下載，因此該壓縮檔無法開啟它們——上傳只會傳送它自己的檔案。分卷之間不能混用。",
 upload_partset_mismatch_fix: "要使用其餘分卷，需要它們的第一個分卷「{name}」，但該檔案不在此資料夾中。請從相同來源重新下載後改選它。",
 
+// --- added v5.4.19: natively-split archive volumes ---
+upload_split_pick_entry_title: "請改選「{name}」",
+upload_split_pick_entry_body: "這只是分卷壓縮檔中的一個分卷，並非完整壓縮檔。選擇上面那個檔案後，其餘分卷會自動讀取，不需要逐一上傳。",
+upload_split_unsupported_title: "這是 ps5upload 無法開啟的分卷壓縮檔（共 {count} 個分卷）",
+upload_split_unsupported_body: "直接上傳只會把原始分卷傳到 PS5，主機無法使用。請先把分卷合併回一個壓縮檔：用 7-Zip 或 WinRAR 開啟第一個分卷並解壓，然後上傳解壓後的資料夾，或重新打包成單一壓縮檔再上傳。",
+upload_split_unsupported_target: "合併後為：{name}",
+
 };
 
 export default zh_TW;
