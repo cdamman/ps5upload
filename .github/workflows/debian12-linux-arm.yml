@@ -60,9 +60,9 @@ jobs:
           source "$HOME/.cargo/env"
           make dist-linux-arm
 
-      - name: Upload bundle artifacts
+      - name: Upload desktop binary
         uses: actions/upload-artifact@v7
         with:
           name: ps5upload-debian12-linux-arm64
-          path: client/src-tauri/target/**/release/bundle/*
+          path: client/src-tauri/target/aarch64-unknown-linux-gnu/release/ps5upload-desktop
           if-no-files-found: error
