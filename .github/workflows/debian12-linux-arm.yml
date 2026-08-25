@@ -42,7 +42,7 @@ jobs:
       - name: Install base tools
         run: |
           apt update
-          apt install -y make curl
+          apt install -y make curl xdg-utils
 
       - name: Patch install-ubuntu.sh for Debian 12 (LLVM 19, root-safe)
         run: |
