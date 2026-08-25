@@ -1,0 +1,68 @@
+name: debian12-linux-arm
+
+# Builds the Linux ARM64 desktop bundle inside a Debian 12 (bookworm)
+# container, rather than the ubuntu-24.04-arm image publish.yml's
+# build-client matrix normally builds on. Debian 12 ships an older glibc
+# (2.36) than Ubuntu 24.04 (2.39) — see FAQ.md's "Too old" glibc-floor
+# note — so a bundle built here targets older ARM64 distros the regular
+# release artifact can't run on.
+#
+# Two container-specific quirks are patched out of scripts/install-ubuntu.sh
+# before running it:
+#   - LLVM 22 has no apt.llvm.org packages for bookworm yet; 19 does, and
+#     it's within the PS5 SDK's supported prospero-llvm-config search range
+#     (16-21), so no LLVM_CONFIG override is needed either (unlike the
+#     LLVM 22 case in ci.yml/publish.yml).
+#   - The script's Node install step runs `$SUDO -E bash -`. Outside a
+#     container SUDO is always "sudo" or "" with a real `sudo` present, but
+#     running as root (the container default, no sudo binary) collapses
+#     `$SUDO -E` to `-E`, which the shell tries to execute as a command.
+#     Stripping the literal `$SUDO -E` avoids that.
+#
+# Exploratory build, not wired into the release pipeline.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/ci-debian-12-ufha4n]
+
+concurrency:
+  group: debian12-linux-arm-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build (debian 12, arm64)
+    runs-on: ubuntu-24.04-arm
+    container: debian:12
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install base tools
+        run: |
+          apt update
+          apt install -y make curl
+
+      - name: Patch install-ubuntu.sh for Debian 12 (LLVM 19, root-safe)
+        run: |
+          sed -i 's/-22/-19/' scripts/install-ubuntu.sh
+          sed -i 's/$SUDO -E//' scripts/install-ubuntu.sh
+
+      - name: make install
+        run: make install
+
+      - name: Build Linux ARM64 distribution
+        env:
+          PS5_PAYLOAD_SDK: /root/ps5-payload-sdk
+        run: |
+          # shellcheck disable=SC1091
+          source "$HOME/.cargo/env"
+          make dist-linux-arm
+
+      - name: Upload bundle artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: ps5upload-debian12-linux-arm64
+          path: client/src-tauri/target/**/release/bundle/*
+          if-no-files-found: error
