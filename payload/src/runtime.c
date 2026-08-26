@@ -50,6 +50,7 @@
 #include "sys_registry.h"
 #include "profile.h"
 #include "sony_api_lock.h"
+#include "focus_probe.h"
 #include "proc_list.h"
 #include "smp_meta.h"
 #include "blake3.h"
@@ -455,6 +456,12 @@ extern int posix_fallocate(int fd, off_t offset, off_t len);
 /* v4.3: Firmware spoof detection */
 #define FTX2_FRAME_FWSPOOF_STATUS        232u
 #define FTX2_FRAME_FWSPOOF_STATUS_ACK    233u
+/* FOCUS_PROBE: which app currently owns the screen. Read-only, dlsym-only,
+ * never ptrace — see focus_probe.h. Added to diagnose a foregrounded game
+ * dropping back to the dashboard, which ShellUI's own event flags do not
+ * record. */
+#define FTX2_FRAME_FOCUS_PROBE           174u
+#define FTX2_FRAME_FOCUS_PROBE_ACK       175u
 /* Frame numbers 184-187 and 242-245 remain unallocated (removed v4
  * scaffolding). 228-231 reserved for future SMB/Network features. */
 /* Where we place mount points. Scoped under /mnt/ps5upload/ so it
@@ -13697,6 +13704,32 @@ static int handle_process_list(runtime_state_t *state, int client_fd,
     return rc;
 }
 
+/* FOCUS_PROBE: which application currently owns the screen.
+ *
+ * Read-only and dlsym-only. This deliberately does NOT ptrace SceShellUI:
+ * a stopped-and-not-resumed ShellUI freezes the console UI hard enough to
+ * need a power-button recovery, which this codebase has already caused
+ * once. See focus_probe.h. */
+static int handle_focus_probe(runtime_state_t *state, int client_fd,
+                              uint64_t trace_id) {
+    /* The response is a fixed-shape object well under 512 bytes; 1 KiB is
+     * ample and keeps this off the heap so a 1 Hz poller stays cheap. */
+    char buf[1024];
+    size_t written = 0;
+    const char *err = NULL;
+    if (!state) return -1;
+    if (focus_probe_get_json(buf, sizeof buf, &written, &err) != 0) {
+        const char *reason = err ? err : "focus_probe_failed";
+        return send_frame(client_fd, FTX2_FRAME_ERROR, 0, trace_id,
+                          reason, (uint64_t)strlen(reason));
+    }
+    pthread_mutex_lock(&state->state_mtx);
+    state->command_count += 1;
+    pthread_mutex_unlock(&state->state_mtx);
+    return send_frame(client_fd, FTX2_FRAME_FOCUS_PROBE_ACK, 0, trace_id,
+                      buf, (uint64_t)written);
+}
+
 /* PROCESS_KILL: SIGKILL the pid in the request body ({"pid":N}). proc_kill
  * guards self/kernel/init; the UI is responsible for warning before a
  * "system" kill. Ack {"ok":bool,"pid":N[,"err":"..."]}. */
@@ -16101,6 +16134,9 @@ static int handle_binary_frame(runtime_state_t *state, int client_fd,
     }
     if (hdr.frame_type == FTX2_FRAME_PROCESS_LIST) {
         return handle_process_list(state, client_fd, hdr.trace_id);
+    }
+    if (hdr.frame_type == FTX2_FRAME_FOCUS_PROBE) {
+        return handle_focus_probe(state, client_fd, hdr.trace_id);
     }
     if (hdr.frame_type == FTX2_FRAME_PROCESS_KILL) {
         return handle_process_kill(state, client_fd, hdr.trace_id,

@@ -61,6 +61,7 @@ use ps5upload_core::{
         download_to_local_multistream_ex, enumerate_download_set, DownloadKind,
         MAX_DOWNLOAD_STREAMS,
     },
+    focus::{focus_probe, FocusProbe},
     fs_ops::{
         app_launch, app_list_registered, app_register, app_unregister, backup_content_databases,
         fs_copy_robust, fs_delete_with_op_id, fs_mkdir, fs_mount, fs_move_with_timeout,
@@ -2514,6 +2515,23 @@ async fn ps5_process_list(
     let addr = mgmt_addr_or_default(q.addr, &state.default_ps5_addr);
     let r: Result<ProcessListResult, anyhow::Error> =
         tokio::task::spawn_blocking(move || process_list(&addr))
+            .await
+            .map_err(anyhow::Error::from)
+            .and_then(|r| r);
+    match r {
+        Ok(v) => (StatusCode::OK, Json(v)).into_response(),
+        Err(e) => json_err(StatusCode::BAD_GATEWAY, format!("{e:#}")).into_response(),
+    }
+}
+
+/// GET /api/ps5/focus — which app currently owns the screen.
+///
+/// Read-only and cheap enough to poll at 1 Hz. The payload answers via
+/// dlsym'd `sceSystemServiceGetAppIdOfBigApp` and never ptraces ShellUI.
+async fn ps5_focus(State(state): State<AppState>, Query(q): Query<AddrQuery>) -> impl IntoResponse {
+    let addr = mgmt_addr_or_default(q.addr, &state.default_ps5_addr);
+    let r: Result<FocusProbe, anyhow::Error> =
+        tokio::task::spawn_blocking(move || focus_probe(&addr))
             .await
             .map_err(anyhow::Error::from)
             .and_then(|r| r);
@@ -8193,6 +8211,7 @@ async fn run(cfg: EngineConfig) -> anyhow::Result<()> {
         .route("/api/ps5/hw/storage", get(ps5_hw_storage))
         .route("/api/ps5/hw/drive-sensors", get(ps5_hw_drive_sensors))
         .route("/api/ps5/proc/list", get(ps5_proc_list))
+        .route("/api/ps5/focus", get(ps5_focus))
         .route("/api/ps5/process/list", get(ps5_process_list))
         .route("/api/ps5/process/kill", post(ps5_process_kill))
         .route("/api/ps5/power/control", post(ps5_power_control))

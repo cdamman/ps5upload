@@ -510,6 +510,12 @@ pub enum FrameType {
     ProcessListAck = 163,
     ProcessKill = 164,
     ProcessKillAck = 165,
+    /// Which application currently owns the screen. Read-only; the payload
+    /// answers via dlsym'd sceSystemServiceGetAppIdOfBigApp and never
+    /// ptraces ShellUI. Added to diagnose a foregrounded game dropping back
+    /// to the dashboard — ShellUI's own event flags stay silent through it.
+    FocusProbe = 174,
+    FocusProbeAck = 175,
     /// List gameplay video clips stored on the console. Body empty. ACK
     /// body: JSON `{"items":[{"path":"...","size":N,"mtime":<i64>}, …]}`,
     /// same shape as ListScreenshotsAck, where path is a `.webm`/`.mp4`
@@ -855,6 +861,8 @@ impl FrameType {
             163 => Ok(Self::ProcessListAck),
             164 => Ok(Self::ProcessKill),
             165 => Ok(Self::ProcessKillAck),
+            174 => Ok(Self::FocusProbe),
+            175 => Ok(Self::FocusProbeAck),
             166 => Ok(Self::ListVideos),
             167 => Ok(Self::ListVideosAck),
             168 => Ok(Self::HwDriveSensors),
@@ -1429,6 +1437,8 @@ mod tests {
             FrameType::ProcessListAck,
             FrameType::ProcessKill,
             FrameType::ProcessKillAck,
+            FrameType::FocusProbe,
+            FrameType::FocusProbeAck,
             FrameType::ListVideos,
             FrameType::ListVideosAck,
             FrameType::HwDriveSensors,

@@ -9,6 +9,7 @@ pub mod diagnostics;
 pub mod download;
 pub mod excludes;
 pub mod fan_curve;
+pub mod focus;
 pub mod fs_ops;
 pub mod ftp;
 pub mod fw_spoof;

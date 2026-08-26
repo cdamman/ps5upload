@@ -75,7 +75,7 @@ SRCS := src/main.c src/runtime.c src/shell_builtin.c src/takeover.c src/register
         src/sys_registry.c src/smp_meta.c src/profile.c \
         src/backup.c src/remoteplay.c src/fan_curve.c src/notif.c \
         src/wake_watchdog.c src/cheats.c src/activity.c src/sdk_changer.c \
-        src/tmdb.c src/fw_spoof.c src/ftp_server.c \
+        src/tmdb.c src/fw_spoof.c src/ftp_server.c src/focus_probe.c \
         $(BLAKE3_SRCS)
 
 # Headers as Make prerequisites so editing a .h triggers a rebuild. This
