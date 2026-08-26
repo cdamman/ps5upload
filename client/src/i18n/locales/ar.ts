@@ -2684,6 +2684,10 @@ installed_bring_to_front_confirm_title: "{name} قيد التشغيل لكنها
 installed_bring_to_front_confirm_body: "أضمن طريقة للانتقال إليها هي من الجهاز نفسه — اضغط زر PS واختر اللعبة.\n\nهذا الخيار يطلب من PS5 إحضارها إلى الواجهة بدلًا من ذلك، ولا ينجح إلا بعد انتهاء تحميل اللعبة؛ فأثناء بدء التشغيل يتجاهل الجهاز الطلب ولا يحدث شيء ظاهر.",
 installed_bring_to_front_confirm_ok: "اطلب من PS5 على أي حال",
 
+helper_mismatch_title: "مساعد PS5 بإصدار v{payload} بينما هذا التطبيق v{app}",
+helper_mismatch_body: "لن تعمل إصلاحات وميزات الإصدار الأحدث حتى يتطابق المساعد على الجهاز. أعد تحميله من شاشة الاتصال.",
+helper_mismatch_go: "إعادة تحميل المساعد",
+
 };
 
 export default ar;

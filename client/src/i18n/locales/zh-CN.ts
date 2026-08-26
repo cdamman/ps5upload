@@ -2637,6 +2637,10 @@ installed_bring_to_front_confirm_title: "{name} 正在运行，但不在屏幕�
 installed_bring_to_front_confirm_body: "最可靠的切换方式是在主机上操作——按 PS 键并选择该游戏。\n\n此操作改为请求 PS5 把它切到前台。只有在游戏加载完成后才有效；标题还在启动时，主机会忽略请求，看上去什么也不会发生。",
 installed_bring_to_front_confirm_ok: "仍然请求 PS5",
 
+helper_mismatch_title: "PS5 助手为 v{payload}，而此应用为 v{app}",
+helper_mismatch_body: "新版本的修复和功能要等主机上的助手版本一致后才生效。请在“连接”界面重新加载。",
+helper_mismatch_go: "重新加载助手",
+
 };
 
 export default zh_CN;

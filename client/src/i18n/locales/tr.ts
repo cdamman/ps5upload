@@ -2691,6 +2691,10 @@ installed_bring_to_front_confirm_title: "{name} çalışıyor ama ekranda değil
 installed_bring_to_front_confirm_body: "Ona geçmenin en güvenilir yolu konsolun kendisi — PS düğmesine basıp oyunu seç.\n\nBu ise PS5'ten onu öne getirmesini ister. Yalnızca oyun yüklenmeyi bitirdikten sonra işe yarar; bir oyun açılırken konsol isteği yok sayar ve gözle görülür bir şey olmaz.",
 installed_bring_to_front_confirm_ok: "Yine de PS5'e sor",
 
+helper_mismatch_title: "PS5 yardımcısı v{payload}, bu uygulama ise v{app}",
+helper_mismatch_body: "Yeni sürümdeki düzeltmeler ve özellikler, konsoldaki yardımcı eşleşene kadar çalışmaz. Bağlantı ekranından yeniden yükle.",
+helper_mismatch_go: "Yardımcıyı yükle",
+
 };
 
 export default tr;

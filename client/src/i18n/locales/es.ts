@@ -2631,6 +2631,10 @@ installed_bring_to_front_confirm_title: "{name} se está ejecutando, pero no est
 installed_bring_to_front_confirm_body: "La forma más fiable de cambiar a él es en la propia consola: pulsa el botón PS y elige el juego.\n\nEsto pide a la PS5 que lo traiga al frente. Solo funciona cuando el juego ha terminado de cargar; mientras arranca, la consola ignora la petición y no pasa nada visible.",
 installed_bring_to_front_confirm_ok: "Pedírselo igualmente a la PS5",
 
+helper_mismatch_title: "El asistente de la PS5 es v{payload} pero esta app es v{app}",
+helper_mismatch_body: "Las correcciones y funciones de la versión más nueva no funcionarán hasta que el asistente de la consola coincida. Recárgalo desde la pantalla Conexión.",
+helper_mismatch_go: "Recargar asistente",
+
 };
 
 export default es;

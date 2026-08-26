@@ -2981,6 +2981,10 @@ installed_bring_to_front_confirm_title: "{name} działa, ale nie jest na ekranie
 installed_bring_to_front_confirm_body: "Najpewniej przełączysz się na nią na samej konsoli — naciśnij przycisk PS i wybierz grę.\n\nTo zamiast tego prosi PS5 o pokazanie jej. Zadziała dopiero, gdy gra skończy się wczytywać; dopóki tytuł startuje, konsola ignoruje prośbę i nic widocznego się nie dzieje.",
 installed_bring_to_front_confirm_ok: "Mimo to poproś PS5",
 
+helper_mismatch_title: "Pomocnik PS5 ma v{payload}, a ta aplikacja v{app}",
+helper_mismatch_body: "Poprawki i funkcje nowszej wersji nie zadziałają, dopóki pomocnik na konsoli się nie zgadza. Załaduj go ponownie z ekranu Połączenie.",
+helper_mismatch_go: "Załaduj pomocnika",
+
 };
 
 export default pl;

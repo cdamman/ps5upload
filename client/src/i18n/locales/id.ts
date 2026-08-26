@@ -2693,6 +2693,10 @@ installed_bring_to_front_confirm_title: "{name} sedang berjalan tapi tidak di la
 installed_bring_to_front_confirm_body: "Cara paling andal untuk beralih ke sana adalah lewat konsolnya — tekan tombol PS lalu pilih game-nya.\n\nIni justru meminta PS5 membawanya ke depan. Baru berhasil setelah game selesai dimuat; selama judul masih start, konsol mengabaikan permintaan dan tidak ada yang terlihat berubah.",
 installed_bring_to_front_confirm_ok: "Tetap minta ke PS5",
 
+helper_mismatch_title: "Helper PS5 v{payload}, tapi aplikasi ini v{app}",
+helper_mismatch_body: "Perbaikan dan fitur versi yang lebih baru tidak akan jalan sampai helper di konsol cocok. Muat ulang dari layar Koneksi.",
+helper_mismatch_go: "Muat ulang helper",
+
 };
 
 export default id;

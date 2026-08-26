@@ -2692,6 +2692,10 @@ installed_bring_to_front_confirm_title: "{name} läuft, ist aber nicht auf dem B
 installed_bring_to_front_confirm_body: "Am zuverlässigsten wechselst du direkt an der Konsole dorthin — PS-Taste drücken und das Spiel auswählen.\n\nHiermit wird stattdessen die PS5 gebeten, es in den Vordergrund zu holen. Das klappt erst, wenn das Spiel fertig geladen hat; solange ein Titel startet, ignoriert die Konsole die Anfrage und es passiert sichtbar nichts.",
 installed_bring_to_front_confirm_ok: "Trotzdem die PS5 fragen",
 
+helper_mismatch_title: "Der PS5-Helfer ist v{payload}, diese App ist v{app}",
+helper_mismatch_body: "Korrekturen und Funktionen der neueren Version wirken erst, wenn der Helfer auf der Konsole dazu passt. Lade ihn im Verbindungs-Bildschirm neu.",
+helper_mismatch_go: "Helfer neu laden",
+
 };
 
 export default de;

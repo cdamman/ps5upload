@@ -2632,6 +2632,10 @@ installed_bring_to_front_confirm_title: "{name} 正在執行，但不在畫面�
 installed_bring_to_front_confirm_body: "最可靠的切換方式是在主機上操作——按 PS 鍵並選擇該遊戲。\n\n此操作改為請求 PS5 把它切到前景。只有在遊戲載入完成後才有效；標題還在啟動時，主機會忽略請求，看起來什麼都不會發生。",
 installed_bring_to_front_confirm_ok: "仍然請求 PS5",
 
+helper_mismatch_title: "PS5 小幫手為 v{payload}，而此應用程式為 v{app}",
+helper_mismatch_body: "新版本的修正與功能要等主機上的小幫手版本一致後才生效。請在「連線」畫面重新載入。",
+helper_mismatch_go: "重新載入小幫手",
+
 };
 
 export default zh_TW;

@@ -2631,6 +2631,10 @@ installed_bring_to_front_confirm_title: "{name} è in esecuzione ma non è a sch
 installed_bring_to_front_confirm_body: "Il modo più affidabile per passare al gioco è dalla console stessa: premi il tasto PS e selezionalo.\n\nQuesto invece chiede alla PS5 di portarlo in primo piano. Funziona solo quando il gioco ha finito di caricare; mentre un titolo si avvia la console ignora la richiesta e non succede nulla di visibile.",
 installed_bring_to_front_confirm_ok: "Chiedilo comunque alla PS5",
 
+helper_mismatch_title: "L'helper della PS5 è v{payload} ma questa app è v{app}",
+helper_mismatch_body: "Le correzioni e le funzioni della versione più recente non funzioneranno finché l'helper sulla console non corrisponde. Ricaricalo dalla schermata Connessione.",
+helper_mismatch_go: "Ricarica helper",
+
 };
 
 export default it;

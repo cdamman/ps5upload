@@ -777,6 +777,91 @@ function useRoutePersistence() {
   }, [location.pathname, location.search]);
 }
 
+/**
+ * Stale-helper banner.
+ *
+ * When the app updates but the PS5 still runs the previous payload, the two
+ * halves disagree about what exists — features land in the app that the
+ * console can't serve, and fixes look like they haven't worked. This was
+ * logged as a warning and NOTHING else, so a user could run a 2½-version-old
+ * app against a newer helper and have no way to see it: they simply saw
+ * behaviour that didn't match the release notes and reasonably concluded the
+ * fix was broken. A log line nobody opens is not user-visible.
+ *
+ * Dismissible per version pair, so re-loading the payload isn't nagged about
+ * forever, but a NEW mismatch (next update) surfaces again.
+ */
+function HelperVersionBanner() {
+  const tr = useTr();
+  const navigate = useNavigate();
+  const payloadVersion = useConnectionStore((s) => s.payloadVersion);
+  const payloadStatus = useConnectionStore((s) => s.payloadStatus);
+  const [appVersion, setAppVersion] = useState<string | null>(null);
+  const [dismissed, setDismissed] = useState<string | null>(() =>
+    safeGetItem("ps5upload.helper-mismatch.dismissed"),
+  );
+  useEffect(() => {
+    let cancelled = false;
+    void getAppVersion()
+      .then((v) => {
+        if (!cancelled) setAppVersion(v);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const mismatch =
+    payloadStatus === "up" &&
+    !!appVersion &&
+    !!payloadVersion &&
+    payloadVersion !== appVersion;
+  const pair = `${payloadVersion}->${appVersion}`;
+  if (!mismatch || dismissed === pair) return null;
+
+  return (
+    <div className="border-b border-[var(--color-border)] bg-[var(--color-warn-soft)] px-3 py-2 text-[var(--color-text)]">
+      <div className="mx-auto flex max-w-6xl flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+        <div className="flex min-w-0 flex-1 items-start gap-3">
+          <RefreshCw size={18} className="mt-0.5 shrink-0 text-[var(--color-warn)]" />
+          <div className="min-w-0">
+            <p className="text-sm font-medium">
+              {tr(
+                "helper_mismatch_title",
+                { payload: payloadVersion ?? "?", app: appVersion ?? "?" },
+                `The PS5 helper is v${payloadVersion} but this app is v${appVersion}`,
+              )}
+            </p>
+            <p className="text-xs text-[var(--color-muted)]">
+              {tr(
+                "helper_mismatch_body",
+                undefined,
+                "Fixes and features from the newer version won't work until the helper on the console matches. Reload it from the Connection screen.",
+              )}
+            </p>
+          </div>
+        </div>
+        <div className="flex shrink-0 gap-2">
+          <Button size="sm" variant="primary" onClick={() => navigate("/connection")}>
+            {tr("helper_mismatch_go", undefined, "Reload helper")}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              safeSetItem("ps5upload.helper-mismatch.dismissed", pair);
+              setDismissed(pair);
+            }}
+          >
+            {tr("dismiss", undefined, "Dismiss")}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AndroidStorageAccessBanner() {
   const tr = useTr();
   const [visible, setVisible] = useState(false);
@@ -1003,6 +1088,7 @@ export default function AppShell() {
         />
         <span className="text-base font-bold tracking-tight">PS5Upload</span>
       </div>
+      <HelperVersionBanner />
       <AndroidStorageAccessBanner />
 
       <div className="flex min-h-0 flex-1">

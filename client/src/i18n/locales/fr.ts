@@ -2721,6 +2721,10 @@ installed_bring_to_front_confirm_title: "{name} tourne mais n'est pas à l'écra
 installed_bring_to_front_confirm_body: "Le plus fiable est de basculer dessus depuis la console : appuyez sur le bouton PS et choisissez le jeu.\n\nCeci demande plutôt à la PS5 de le mettre au premier plan. Cela ne fonctionne qu'une fois le jeu chargé ; tant qu'un titre démarre, la console ignore la demande et rien ne se passe visiblement.",
 installed_bring_to_front_confirm_ok: "Demander quand même à la PS5",
 
+helper_mismatch_title: "L'assistant PS5 est en v{payload} mais cette application est en v{app}",
+helper_mismatch_body: "Les correctifs et fonctionnalités de la version plus récente ne fonctionneront pas tant que l'assistant de la console ne correspondra pas. Rechargez-le depuis l'écran Connexion.",
+helper_mismatch_go: "Recharger l'assistant",
+
 };
 
 export default fr;

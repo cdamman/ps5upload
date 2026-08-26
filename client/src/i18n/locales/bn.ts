@@ -2684,6 +2684,10 @@ installed_bring_to_front_confirm_title: "{name} চলছে কিন্তু 
 installed_bring_to_front_confirm_body: "এতে যাওয়ার সবচেয়ে নির্ভরযোগ্য উপায় কনসোলেই — PS বোতাম চেপে গেমটি বেছে নিন।\n\nএটি বরং PS5-কে সামনে আনতে বলে। গেম লোড শেষ হওয়ার পরেই কাজ করে; টাইটেল চালু হওয়ার সময় কনসোল অনুরোধ উপেক্ষা করে এবং দৃশ্যত কিছুই ঘটে না।",
 installed_bring_to_front_confirm_ok: "তবুও PS5-কে বলুন",
 
+helper_mismatch_title: "PS5 হেল্পার v{payload}, কিন্তু এই অ্যাপ v{app}",
+helper_mismatch_body: "নতুন সংস্করণের সংশোধন ও ফিচার কনসোলের হেল্পার না মেলা পর্যন্ত কাজ করবে না। সংযোগ স্ক্রিন থেকে এটি আবার লোড করুন।",
+helper_mismatch_go: "হেল্পার লোড করুন",
+
 };
 
 export default bn;

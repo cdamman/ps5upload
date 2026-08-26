@@ -3080,6 +3080,10 @@ installed_bring_to_front_confirm_title: "{name} is running but not on screen",
 installed_bring_to_front_confirm_body: "The most reliable way to switch to it is on the console itself — press the PS button and pick the game.\n\nThis asks the PS5 to bring it forward instead. It only works once the game has finished loading; while a title is still starting the console ignores the request and nothing visible happens.",
 installed_bring_to_front_confirm_ok: "Ask the PS5 anyway",
 
+helper_mismatch_title: "The PS5 helper is v{payload} but this app is v{app}",
+helper_mismatch_body: "Fixes and features from the newer version won't work until the helper on the console matches. Reload it from the Connection screen.",
+helper_mismatch_go: "Reload helper",
+
 };
 
 export default en;

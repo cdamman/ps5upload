@@ -2686,6 +2686,10 @@ installed_bring_to_front_confirm_title: "{name} đang chạy nhưng không hiể
 installed_bring_to_front_confirm_body: "Cách chuyển sang nó đáng tin cậy nhất là làm trên máy — nhấn nút PS rồi chọn game.\n\nThao tác này thay vào đó yêu cầu PS5 đưa nó lên trước. Chỉ hiệu quả khi game đã tải xong; trong lúc một tựa game đang khởi động, máy sẽ bỏ qua yêu cầu và không có gì thay đổi.",
 installed_bring_to_front_confirm_ok: "Vẫn yêu cầu PS5",
 
+helper_mismatch_title: "Trình trợ giúp PS5 là v{payload} còn ứng dụng này là v{app}",
+helper_mismatch_body: "Các bản sửa lỗi và tính năng của phiên bản mới sẽ không hoạt động cho tới khi trình trợ giúp trên máy khớp. Hãy tải lại từ màn hình Kết nối.",
+helper_mismatch_go: "Tải lại trợ giúp",
+
 };
 
 export default vi;

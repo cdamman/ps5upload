@@ -2722,6 +2722,10 @@ installed_bring_to_front_confirm_title: "{name}이(가) 실행 중이지만 화�
 installed_bring_to_front_confirm_body: "가장 확실한 방법은 콘솔에서 직접 전환하는 것입니다 — PS 버튼을 누르고 게임을 고르세요.\n\n이 버튼은 대신 PS5에 앞으로 가져오도록 요청합니다. 게임 로딩이 끝난 뒤에만 동작하며, 타이틀이 시작 중이면 콘솔이 요청을 무시해 아무 변화도 없습니다.",
 installed_bring_to_front_confirm_ok: "그래도 PS5에 요청",
 
+helper_mismatch_title: "PS5 헬퍼는 v{payload}, 이 앱은 v{app}입니다",
+helper_mismatch_body: "최신 버전의 수정 사항과 기능은 콘솔의 헬퍼가 일치할 때까지 동작하지 않습니다. 연결 화면에서 다시 불러오세요.",
+helper_mismatch_go: "헬퍼 다시 불러오기",
+
 };
 
 export default ko;

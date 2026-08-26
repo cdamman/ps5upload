@@ -2711,6 +2711,10 @@ installed_bring_to_front_confirm_title: "{name} กำลังทำงาน�
 installed_bring_to_front_confirm_body: "วิธีที่แน่นอนที่สุดคือสลับไปที่เกมบนเครื่อง — กดปุ่ม PS แล้วเลือกเกม\n\nปุ่มนี้จะขอให้ PS5 นำเกมขึ้นมาแทน ใช้ได้เฉพาะเมื่อเกมโหลดเสร็จแล้ว ระหว่างที่เกมกำลังเริ่ม เครื่องจะไม่สนใจคำขอและจะไม่มีอะไรเปลี่ยน",
 installed_bring_to_front_confirm_ok: "ขอให้ PS5 อยู่ดี",
 
+helper_mismatch_title: "ตัวช่วย PS5 เป็น v{payload} แต่แอปนี้เป็น v{app}",
+helper_mismatch_body: "การแก้ไขและฟีเจอร์ของเวอร์ชันใหม่จะยังไม่ทำงานจนกว่าตัวช่วยบนเครื่องจะตรงกัน โหลดใหม่ได้จากหน้าการเชื่อมต่อ",
+helper_mismatch_go: "โหลดตัวช่วยใหม่",
+
 };
 
 export default th;

@@ -2719,6 +2719,10 @@ installed_bring_to_front_confirm_title: "{name} está em execução, mas não na
 installed_bring_to_front_confirm_body: "O jeito mais confiável de alternar para ele é no próprio console — pressione o botão PS e escolha o jogo.\n\nIsto pede ao PS5 que o traga para frente. Só funciona depois que o jogo terminar de carregar; enquanto um título está iniciando, o console ignora o pedido e nada visível acontece.",
 installed_bring_to_front_confirm_ok: "Pedir ao PS5 mesmo assim",
 
+helper_mismatch_title: "O auxiliar do PS5 é v{payload}, mas este app é v{app}",
+helper_mismatch_body: "Correções e recursos da versão mais nova não funcionarão até o auxiliar no console corresponder. Recarregue-o na tela Conexão.",
+helper_mismatch_go: "Recarregar auxiliar",
+
 };
 
 export default pt_BR;

@@ -2726,6 +2726,10 @@ installed_bring_to_front_confirm_title: "{name} は実行中ですが画面に�
 installed_bring_to_front_confirm_body: "確実に切り替えるには本体で操作してください。PS ボタンを押してゲームを選びます。\n\nこちらは代わりに PS5 へ前面表示を要求します。ゲームの読み込みが終わってからでないと効きません。起動中は本体が要求を無視し、見た目には何も起きません。",
 installed_bring_to_front_confirm_ok: "それでも PS5 に要求する",
 
+helper_mismatch_title: "PS5 ヘルパーは v{payload}、このアプリは v{app} です",
+helper_mismatch_body: "新しいバージョンの修正や機能は、本体のヘルパーが一致するまで動作しません。接続画面から再読み込みしてください。",
+helper_mismatch_go: "ヘルパーを再読み込み",
+
 };
 
 export default ja;

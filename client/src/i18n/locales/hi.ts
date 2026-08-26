@@ -2721,6 +2721,10 @@ installed_bring_to_front_confirm_title: "{name} चल रहा है पर �
 installed_bring_to_front_confirm_body: "इस पर जाने का सबसे भरोसेमंद तरीका कंसोल पर ही है — PS बटन दबाएँ और गेम चुनें।\n\nयह इसके बजाय PS5 से इसे सामने लाने को कहता है। यह तभी काम करता है जब गेम लोड हो चुका हो; टाइटल शुरू होते समय कंसोल अनुरोध अनदेखा कर देता है और दिखने में कुछ नहीं होता।",
 installed_bring_to_front_confirm_ok: "फिर भी PS5 से कहें",
 
+helper_mismatch_title: "PS5 हेल्पर v{payload} है पर यह ऐप v{app} है",
+helper_mismatch_body: "नए संस्करण के सुधार और सुविधाएँ तब तक काम नहीं करेंगी जब तक कंसोल का हेल्पर मेल न खाए। कनेक्शन स्क्रीन से इसे फिर से लोड करें।",
+helper_mismatch_go: "हेल्पर फिर लोड करें",
+
 };
 
 export default hi;
