@@ -2711,6 +2711,12 @@ fs_add_files_conflict_ok: "上書き",
 
 library_edit_files_short: "ファイルを編集",
 
+library_images_capabilities: "マウントするとゲームを遊べます。「ファイルを編集」では中身を変更でき、DLC の追加、アセットの差し替え、バックポートパッチの適用ができます。編集内容はイメージに直接書き込まれます。",
+
+library_edit_modal_title: "「{name}」を編集",
+library_edit_modal_intro: "作業中のマウント先を選んでください。その間このイメージは ShadowMount+ から取り出され、終了時に戻されます。それまでゲームは PS5 のホーム画面に表示されません。",
+library_mount_tooltip_smp: "このイメージを ShadowMount+ に渡します。マウントと登録が行われ、プレイできるようになります（読み取り専用）",
+
 };
 
 export default ja;

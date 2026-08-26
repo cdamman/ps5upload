@@ -2781,6 +2781,57 @@ async fn ps5_smp_checkout_finish(
 }
 
 #[derive(Debug, serde::Deserialize)]
+struct FsWriteBytesReq {
+    addr: Option<String>,
+    path: String,
+    /// Base64 of the file contents. Base64 because this is a JSON body and the
+    /// payload's FS_WRITE_BYTES frame takes base64 anyway.
+    bytes_b64: String,
+    /// Refuse if the path already exists. Default false (overwrite).
+    #[serde(default)]
+    create_only: bool,
+}
+
+/// POST /api/ps5/fs/write-bytes — atomic small-file write (≤256 KB).
+///
+/// Exists so the engine's browser UI can do what the desktop app already
+/// does through the `fs_write_bytes_run` Tauri command. Without it, anything
+/// that writes a small config file to the console — notably handing a game to
+/// ShadowMount+ by appending to its `manual.lst` — simply failed in the web
+/// UI.
+///
+/// This grants the browser no capability the engine did not already expose:
+/// `/api/transfer/file` writes arbitrary bytes to an arbitrary console path,
+/// and fs/mkdir, fs/move, fs/copy and fs/delete are all already routed. The
+/// payload applies the same `is_path_allowed` check regardless of caller, and
+/// the loopback + cross-site guards cover this route like every other one.
+async fn ps5_fs_write_bytes(
+    State(state): State<AppState>,
+    Json(req): Json<FsWriteBytesReq>,
+) -> impl IntoResponse {
+    use base64::Engine as _;
+    let addr = mgmt_addr_or_default(req.addr, &state.default_ps5_addr);
+    let raw = match base64::engine::general_purpose::STANDARD.decode(req.bytes_b64.as_bytes()) {
+        Ok(v) => v,
+        Err(e) => {
+            return json_err(StatusCode::BAD_REQUEST, format!("base64 decode: {e}")).into_response()
+        }
+    };
+    let path = req.path;
+    let create_only = req.create_only;
+    let r = tokio::task::spawn_blocking(move || {
+        ps5upload_core::diagnostics::fs_write_bytes(&addr, &path, &raw, create_only)
+    })
+    .await
+    .map_err(anyhow::Error::from)
+    .and_then(|inner| inner);
+    match r {
+        Ok(v) => (StatusCode::OK, Json(v)).into_response(),
+        Err(e) => json_err(StatusCode::BAD_GATEWAY, format!("{e:#}")).into_response(),
+    }
+}
+
+#[derive(Debug, serde::Deserialize)]
 struct FanThresholdReq {
     addr: Option<String>,
     threshold_c: u8,
@@ -8227,6 +8278,7 @@ async fn run(cfg: EngineConfig) -> anyhow::Result<()> {
         .route("/api/ps5/hw/fan-threshold", post(ps5_hw_set_fan_threshold))
         .route("/api/ps5/fs/chmod", post(ps5_fs_chmod))
         .route("/api/ps5/fs/mkdir", post(ps5_fs_mkdir))
+        .route("/api/ps5/fs/write-bytes", post(ps5_fs_write_bytes))
         .route("/api/ps5/game-meta", get(ps5_game_meta))
         .route("/api/ps5/game-icon", get(ps5_game_icon))
         .route("/api/ps5/apps/installed", get(ps5_apps_installed))

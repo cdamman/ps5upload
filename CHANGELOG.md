@@ -4,6 +4,40 @@ What's new in ps5upload, written for humans.
 
 ---
 
+## 5.7.1
+
+**Mount and Edit files stopped opening the same window, and a failed
+hand-off no longer quietly mounts the image somewhere else.**
+
+- **Mount and Edit files are now visibly different actions.** They opened
+  an identical window, which is a fair reason to think they did the same
+  thing. Worse, that shared window was misleading in both directions: with
+  ShadowMount+ running, Mount asked you to pick a mount point and then
+  discarded your choice (ShadowMount+ picks it), and Edit files offered a
+  "read-only" tickbox that contradicts the button you just pressed. Mount
+  now hands off with no dialog at all — there was never a choice to make —
+  and Edit files has its own window without the tickbox.
+- **A failed hand-off says so instead of doing something else.** If
+  ShadowMount+ owns an image and handing it over fails, the app used to
+  fall back to mounting the image itself — silently putting it somewhere
+  ShadowMount+ doesn't manage, which is the opposite of what the button
+  said. It now reports the problem and changes nothing.
+- **The web UI can hand games to ShadowMount+ again.** Writing a small
+  file to the console had no browser-mode route, so this failed every
+  time there (and, before the fix above, failed silently).
+- Deciding whether ShadowMount+ is running no longer re-probes it on every
+  click. That probe reads a 256 KB log, and a slow one was enough to send
+  a mount or a register down the wrong path — the register case races
+  ShadowMount+ for the home-screen entry.
+- The disk-images list now says what you can do with an image — mount it
+  to play, or edit it to add DLC or apply a backport — instead of leaving
+  that to be discovered by pressing something.
+- "Not seen playing" was styled as a warning via a colour token that
+  doesn't exist, so it silently had no colour at all. It's information,
+  not a warning, and now reads as such.
+
+---
+
 ## 5.7.0
 
 **Pasting and adding files now merges instead of failing, Play and Close

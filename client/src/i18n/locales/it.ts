@@ -2616,6 +2616,12 @@ fs_add_files_conflict_ok: "Sovrascrivi",
 
 library_edit_files_short: "Modifica file",
 
+library_images_capabilities: "Monta per giocare, oppure usa Modifica file per cambiare ciò che contiene: aggiungere DLC, sostituire asset o applicare una patch di backport. Le modifiche vengono scritte direttamente nell'immagine.",
+
+library_edit_modal_title: "Modifica «{name}»",
+library_edit_modal_intro: "Scegli dove montarla mentre ci lavori. Viene tolta da ShadowMount+ per tutta la durata e rimessa a posto al termine, quindi fino ad allora il gioco resta nascosto dalla schermata principale della PS5.",
+library_mount_tooltip_smp: "Affida questa immagine a ShadowMount+, che la monta e la registra così puoi giocarci (sola lettura)",
+
 };
 
 export default it;

@@ -2617,6 +2617,12 @@ fs_add_files_conflict_ok: "覆寫",
 
 library_edit_files_short: "編輯檔案",
 
+library_images_capabilities: "掛載即可遊玩，或用「編輯檔案」修改其中內容——新增 DLC、替換素材或套用 backport 修補。修改會直接寫入映像檔。",
+
+library_edit_modal_title: "編輯「{name}」",
+library_edit_modal_intro: "選擇工作期間掛載到哪裡。這段時間映像檔會從 ShadowMount+ 中取出，完成後放回——在此之前遊戲不會出現在 PS5 主畫面。",
+library_mount_tooltip_smp: "把此映像檔交給 ShadowMount+，由它掛載並註冊，讓你可以遊玩（唯讀）",
+
 };
 
 export default zh_TW;

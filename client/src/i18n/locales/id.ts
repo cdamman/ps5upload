@@ -2678,6 +2678,12 @@ fs_add_files_conflict_ok: "Timpa",
 
 library_edit_files_short: "Edit berkas",
 
+library_images_capabilities: "Pasang untuk bermain, atau pakai Edit berkas untuk mengubah isinya — menambah DLC, mengganti aset, atau menerapkan patch backport. Perubahan ditulis langsung ke image.",
+
+library_edit_modal_title: "Edit isi \"{name}\"",
+library_edit_modal_intro: "Pilih lokasi pemasangan selama kamu bekerja. Image dikeluarkan dari ShadowMount+ selama itu dan dikembalikan saat selesai — jadi game tersembunyi dari layar utama PS5 sampai saat itu.",
+library_mount_tooltip_smp: "Serahkan image ini ke ShadowMount+, yang memasang dan mendaftarkannya agar bisa kamu mainkan (hanya-baca)",
+
 };
 
 export default id;

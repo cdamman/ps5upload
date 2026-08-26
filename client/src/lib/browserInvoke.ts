@@ -591,6 +591,18 @@ export async function browserInvoke<T>(
     case "smp_status":
       return getJson<T>(addrUrl("/api/ps5/smp/status", args["addr"]));
 
+    // Small-file write. The desktop app has this as a Tauri command; without
+    // the browser counterpart anything that writes a config file to the
+    // console failed here — including handing a game to ShadowMount+, which
+    // appends to its manual.lst.
+    case "fs_write_bytes_run":
+      return postJson<T>("/api/ps5/fs/write-bytes", {
+        addr: args["addr"],
+        path: args["path"],
+        bytes_b64: args["bytesB64"],
+        create_only: args["createOnly"] ?? false,
+      });
+
     // ── ShadowMount+ edit sessions ──────────────────────────────────────────
     // The engine wraps these in `{ checkout: ... }` so the GET can express
     // "nothing is checked out" as a null field rather than a 404; unwrap here

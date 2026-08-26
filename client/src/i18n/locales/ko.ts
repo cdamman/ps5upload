@@ -2707,6 +2707,12 @@ fs_add_files_conflict_ok: "덮어쓰기",
 
 library_edit_files_short: "파일 편집",
 
+library_images_capabilities: "마운트하면 게임을 플레이할 수 있고, 「파일 편집」으로 내용을 바꿀 수 있습니다 — DLC 추가, 에셋 교체, 백포트 패치 적용. 편집 내용은 이미지에 바로 기록됩니다.",
+
+library_edit_modal_title: "「{name}」 편집",
+library_edit_modal_intro: "작업하는 동안 마운트할 위치를 고르세요. 그동안 이미지는 ShadowMount+에서 빠지고 끝내면 되돌아갑니다 — 그때까지 게임은 PS5 홈 화면에서 숨겨집니다.",
+library_mount_tooltip_smp: "이 이미지를 ShadowMount+에 넘깁니다. 마운트하고 등록해 플레이할 수 있게 합니다(읽기 전용)",
+
 };
 
 export default ko;

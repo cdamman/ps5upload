@@ -2671,6 +2671,12 @@ fs_add_files_conflict_ok: "Ghi đè",
 
 library_edit_files_short: "Sửa tệp",
 
+library_images_capabilities: "Gắn kết để chơi, hoặc dùng Sửa tệp để thay đổi nội dung bên trong — thêm DLC, đổi tài nguyên, hoặc áp bản vá backport. Thay đổi được ghi thẳng vào ảnh đĩa.",
+
+library_edit_modal_title: "Sửa \"{name}\"",
+library_edit_modal_intro: "Chọn nơi gắn kết trong lúc bạn làm việc. Ảnh đĩa được lấy khỏi ShadowMount+ trong thời gian đó và trả lại khi bạn xong — nên đến lúc đó game bị ẩn khỏi màn hình chính PS5.",
+library_mount_tooltip_smp: "Giao ảnh đĩa này cho ShadowMount+, nó sẽ gắn kết và đăng ký để bạn chơi (chỉ đọc)",
+
 };
 
 export default vi;

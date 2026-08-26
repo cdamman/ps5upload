@@ -3065,6 +3065,12 @@ fs_add_files_conflict_ok: "Overwrite",
 
 library_edit_files_short: "Edit files",
 
+library_images_capabilities: "Mount to play a game, or Edit files to change what's inside it — adding DLC, swapping assets, or applying a backport patch. Edits are written straight into the image.",
+
+library_edit_modal_title: "Edit \"{name}\"",
+library_edit_modal_intro: "Choose where to mount it while you work. It's taken out of ShadowMount+ for the duration and put back when you finish — so the game is hidden from the PS5 home screen until then.",
+library_mount_tooltip_smp: "Hand this image to ShadowMount+, which mounts and registers it so you can play it (read-only)",
+
 };
 
 export default en;

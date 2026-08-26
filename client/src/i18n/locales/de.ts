@@ -2677,6 +2677,12 @@ fs_add_files_conflict_ok: "Überschreiben",
 
 library_edit_files_short: "Dateien bearbeiten",
 
+library_images_capabilities: "Zum Spielen einhängen, oder mit „Dateien bearbeiten“ den Inhalt ändern — DLC hinzufügen, Assets austauschen oder einen Backport-Patch anwenden. Änderungen werden direkt ins Abbild geschrieben.",
+
+library_edit_modal_title: "„{name}“ bearbeiten",
+library_edit_modal_intro: "Wähle, wo es während der Arbeit eingehängt wird. Es wird so lange aus ShadowMount+ herausgenommen und danach zurückgelegt — das Spiel ist bis dahin vom PS5-Startbildschirm verschwunden.",
+library_mount_tooltip_smp: "Dieses Abbild an ShadowMount+ übergeben, das es einhängt und registriert, damit du es spielen kannst (schreibgeschützt)",
+
 };
 
 export default de;

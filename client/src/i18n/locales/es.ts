@@ -2616,6 +2616,12 @@ fs_add_files_conflict_ok: "Sobrescribir",
 
 library_edit_files_short: "Editar archivos",
 
+library_images_capabilities: "Monta para jugar, o usa Editar archivos para cambiar lo que hay dentro: añadir DLC, sustituir recursos o aplicar un parche de backport. Los cambios se escriben directamente en la imagen.",
+
+library_edit_modal_title: "Editar «{name}»",
+library_edit_modal_intro: "Elige dónde montarla mientras trabajas. Se saca de ShadowMount+ durante ese tiempo y se devuelve al terminar, así que el juego queda oculto en la pantalla de inicio de la PS5 hasta entonces.",
+library_mount_tooltip_smp: "Entregar esta imagen a ShadowMount+, que la monta y registra para que puedas jugarla (solo lectura)",
+
 };
 
 export default es;

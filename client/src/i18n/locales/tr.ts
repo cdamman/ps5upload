@@ -2676,6 +2676,12 @@ fs_add_files_conflict_ok: "Üzerine yaz",
 
 library_edit_files_short: "Dosyaları düzenle",
 
+library_images_capabilities: "Oynamak için bağla ya da içindekini değiştirmek için Dosyaları düzenle'yi kullan — DLC ekleme, varlık değiştirme veya backport yaması uygulama. Değişiklikler doğrudan imaja yazılır.",
+
+library_edit_modal_title: "\"{name}\" düzenle",
+library_edit_modal_intro: "Çalışırken nereye bağlanacağını seç. Bu süre boyunca ShadowMount+ içinden çıkarılır ve bitirdiğinde geri konur — o zamana kadar oyun PS5 ana ekranında görünmez.",
+library_mount_tooltip_smp: "Bu imajı ShadowMount+'a devret; onu bağlayıp kaydeder, böylece oynayabilirsin (salt okunur)",
+
 };
 
 export default tr;

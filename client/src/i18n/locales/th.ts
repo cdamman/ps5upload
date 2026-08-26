@@ -2696,6 +2696,12 @@ fs_add_files_conflict_ok: "เขียนทับ",
 
 library_edit_files_short: "แก้ไขไฟล์",
 
+library_images_capabilities: "เมานต์เพื่อเล่นเกม หรือใช้ “แก้ไขไฟล์” เพื่อเปลี่ยนสิ่งที่อยู่ข้างใน — เพิ่ม DLC เปลี่ยนแอสเซ็ต หรือใส่แพตช์ backport การแก้ไขจะถูกเขียนลงอิมเมจโดยตรง",
+
+library_edit_modal_title: "แก้ไข “{name}”",
+library_edit_modal_intro: "เลือกตำแหน่งเมานต์ระหว่างที่คุณทำงาน อิมเมจจะถูกนำออกจาก ShadowMount+ ชั่วคราวและนำกลับเมื่อเสร็จ — จนถึงตอนนั้นเกมจะถูกซ่อนจากหน้าหลักของ PS5",
+library_mount_tooltip_smp: "ส่งอิมเมจนี้ให้ ShadowMount+ ซึ่งจะเมานต์และลงทะเบียนให้คุณเล่นได้ (อ่านอย่างเดียว)",
+
 };
 
 export default th;

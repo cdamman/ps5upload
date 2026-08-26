@@ -2669,6 +2669,12 @@ fs_add_files_conflict_ok: "استبدال",
 
 library_edit_files_short: "تحرير الملفات",
 
+library_images_capabilities: "ثبِّت الصورة للعب، أو استخدم «تحرير الملفات» لتغيير ما بداخلها — إضافة محتوى إضافي أو استبدال الموارد أو تطبيق رقعة backport. تُكتب التعديلات مباشرة داخل الصورة.",
+
+library_edit_modal_title: "تحرير «{name}»",
+library_edit_modal_intro: "اختر مكان تثبيتها أثناء عملك. تُخرَج من ShadowMount+ طوال تلك المدة وتُعاد عند الانتهاء — لذا تبقى اللعبة مخفية عن الشاشة الرئيسية لجهاز PS5 حتى ذلك الحين.",
+library_mount_tooltip_smp: "سلِّم هذه الصورة إلى ShadowMount+ الذي يثبّتها ويسجّلها كي تتمكن من لعبها (للقراءة فقط)",
+
 };
 
 export default ar;

@@ -680,6 +680,19 @@ export default function LibraryScreen({
                     )}
                     count={split.images.length}
                   />
+                  {/* What you can actually DO with a disk image. Both verbs
+                      are on every row below, but until you press one nothing
+                      says that editing an image is how you add DLC or apply a
+                      backport — that knowledge lived only in the FAQ, and
+                      users were finding it by accident. One quiet line, not a
+                      card: it's orientation, not a warning. */}
+                  <p className="mb-2 text-xs text-[var(--color-muted)]">
+                    {tr(
+                      "library_images_capabilities",
+                      undefined,
+                      "Mount to play a game, or Edit files to change what's inside it — adding DLC, swapping assets, or applying a backport patch. Edits are written straight into the image.",
+                    )}
+                  </p>
                   <FpkgKstuffTip />
                   <CappedRows
                     entries={split.images}
@@ -1165,10 +1178,25 @@ function LibraryRowImpl({
       // don't race it. Early-return — the finally below still runs (clears
       // busy + finishes the activity). Best-effort: any error falls through to
       // our native mount.
-      try {
+      // Use the screen-level probe, not a fresh one. smpStatus reads
+      // config.ini + autotune.ini + a 256 KiB log tail + the process list; a
+      // slow or failed call here used to fall through to a NATIVE mount,
+      // which silently put the image somewhere ShadowMount+ doesn't manage.
+      // That was survivable while a modal made the destination explicit, but
+      // the hand-off has no dialog — so a hiccup would mount the image with
+      // nothing on screen to say what happened. The screen-level flag is the
+      // same one that decides whether "Edit files" is offered, so this also
+      // keeps the row self-consistent.
+      if (smpRunning) {
+        // No catch-and-fall-through here. If ShadowMount+ owns this image and
+        // the hand-off fails, mounting it OURSELVES instead is not a graceful
+        // degradation — it silently puts the image somewhere ShadowMount+
+        // doesn't manage, which is the opposite of what the button says. Say
+        // what went wrong and change nothing. (It is genuinely reachable: the
+        // hand-off writes manual.lst via fs_write_bytes_run, which has no
+        // browser-mode route, so the engine's web UI hits it every time.)
         const mgmt = mgmtAddr(host);
-        const smp = await smpStatus(mgmt);
-        if (smp.running) {
+        try {
           const r = await smpManualInstall(mgmt, entry.path);
           // Be explicit that ShadowMount+ — not us — chose the mount point,
           // and that a path the user picked in the modal was NOT used. The
@@ -1189,9 +1217,15 @@ function LibraryRowImpl({
           );
           onChanged();
           return;
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          setError(
+            humanizePs5Error(
+              `Couldn't hand "${entry.name}" to ShadowMount+, so nothing was mounted: ${msg}`,
+            ),
+          );
+          return;
         }
-      } catch {
-        // SMP unreachable → mount it ourselves below.
       }
       // First-mount-of-a-session for an image path occasionally hits
       // a transient lvd/md driver init or device-node race that
@@ -2183,13 +2217,16 @@ function LibraryRowImpl({
       // ShadowMount+ hand-off: when SMP is running it OWNS register (stages
       // sce_sys, copies trophy data, nullfs-binds, calls AppInstUtil). Append
       // this source to its watched manual.lst instead of registering it
-      // ourselves — doing both races SMP for /user/app + app.db. Best-effort:
-      // fall back to our own register if SMP is unreachable.
+      // ourselves — doing both races SMP for /user/app + app.db.
+      //
+      // Gated on the screen-level probe rather than a fresh smpStatus: that
+      // call is expensive (256 KiB log tail + process list), and a slow one
+      // here meant falling through to our OWN register — precisely the race
+      // the hand-off exists to avoid.
       const mgmt = mgmtAddr(host);
       let handedToSmp = false;
       try {
-        const smp = await smpStatus(mgmt);
-        if (smp.running) {
+        if (smpRunning) {
           const r = await smpManualInstall(mgmt, entry.path);
           handedToSmp = true;
           setMountNote(
@@ -2505,6 +2542,15 @@ function LibraryRowImpl({
                 size="sm"
                 leftIcon={<Play size={12} />}
                 onClick={() => {
+                  // When ShadowMount+ is running it OWNS the mount: it picks
+                  // the mount point and registers the title. Opening the
+                  // destination picker here offered a choice we then threw
+                  // away — which is also why Mount and Edit appeared to open
+                  // "the same window". No decision to make, so no dialog.
+                  if (smpRunning) {
+                    void runMount({});
+                    return;
+                  }
                   setMountIntent("mount");
                   setMountOpen(true);
                 }}
@@ -2521,17 +2567,23 @@ function LibraryRowImpl({
                 disabled={busy !== null || !entry.imageFormat}
                 loading={busy === "mount"}
                 title={
-                  entry.imageFormat
+                  !entry.imageFormat
                     ? tr(
-                        "library_mount_tooltip",
-                        undefined,
-                        "Mount this image on your PS5",
-                      )
-                    : tr(
                         "library_mount_unsupported_tooltip",
                         undefined,
                         "Unsupported image format — only .exfat, .ffpkg and .ffpfs can be mounted",
                       )
+                    : smpRunning
+                      ? tr(
+                          "library_mount_tooltip_smp",
+                          undefined,
+                          "Hand this image to ShadowMount+, which mounts and registers it so you can play it (read-only)",
+                        )
+                      : tr(
+                          "library_mount_tooltip",
+                          undefined,
+                          "Mount this image on your PS5",
+                        )
                 }
               >
                 {tr("library_mount", undefined, "Mount")}
@@ -3683,13 +3735,28 @@ function MountModal({
         onClick={(e) => e.stopPropagation()}
       >
         <header className="mb-3 flex items-center gap-2 text-sm font-semibold">
-          <Play size={14} />
-          {tr(
-            "library_mount_modal_title",
-            { name: entry.name },
-            `Mount "${entry.name}"`,
-          )}
+          {intent === "edit" ? <FilePenLine size={14} /> : <Play size={14} />}
+          {intent === "edit"
+            ? tr(
+                "library_edit_modal_title",
+                { name: entry.name },
+                `Edit "${entry.name}"`,
+              )
+            : tr(
+                "library_mount_modal_title",
+                { name: entry.name },
+                `Mount "${entry.name}"`,
+              )}
         </header>
+        {intent === "edit" && (
+          <p className="mb-3 text-xs text-[var(--color-muted)]">
+            {tr(
+              "library_edit_modal_intro",
+              undefined,
+              "Choose where to mount it while you work. It's taken out of ShadowMount+ for the duration and put back when you finish — so the game is hidden from the PS5 home screen until then.",
+            )}
+          </p>
+        )}
 
         <dl className="mb-4 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
           <dt className="text-[var(--color-muted)]">
@@ -3839,7 +3906,10 @@ function MountModal({
           </div>
         )}
 
-        {supportsReadOnly && (
+        {/* Hidden for an edit checkout: that path is read-write by
+            definition, so offering "Mount read-only" here would contradict
+            the button the user just pressed. */}
+        {supportsReadOnly && intent !== "edit" && (
           <label className="mb-3 flex cursor-pointer items-start gap-2 text-xs">
             <input
               type="checkbox"
@@ -3869,7 +3939,7 @@ function MountModal({
         {/* Read-write is the whole point for anyone patching a game, but it
             edits the image file in place with no undo. State both halves at
             the moment of the choice rather than after something breaks. */}
-        {supportsReadOnly && !readOnly && (
+        {supportsReadOnly && !readOnly && intent !== "edit" && (
           <div className="mb-3 rounded-md border border-[var(--color-warn)] bg-[var(--color-surface)] p-2 text-xs text-[var(--color-warn)]">
             <div className="mb-1 font-semibold">
               {tr(
