@@ -2650,6 +2650,23 @@ upload_split_unsupported_title: "Ini arsip terpisah ({count} volume) yang tidak 
 upload_split_unsupported_body: "Mengunggahnya mengirim volume mentah ke PS5 Anda, yang tidak bisa memakainya. Gabungkan dulu volume-volumenya jadi satu arsip: buka volume pertama dengan 7-Zip atau WinRAR lalu ekstrak, kemudian unggah folder hasil ekstrak atau satu arsip darinya.",
 upload_split_unsupported_target: "Tergabung jadi: {name}",
 
+
+// Editing a game image in place (ShadowMount+ checkout)
+library_edit_files: "Edit berkas…",
+library_edit_files_tooltip: "Keluarkan image ini dari ShadowMount+ dan pasang dengan izin tulis agar kamu bisa menambah atau mengganti berkas di dalamnya",
+library_edit_modal_run: "Ambil untuk diedit",
+library_edit_confirm_title: "Edit image game ini?",
+library_edit_confirm_body: "{name} akan dipindahkan keluar dari folder ShadowMount+ dan dipasang dengan izin tulis di {mountPoint}.\n\nSelama kamu mengedit, game hilang dari layar utama PS5. Game kembali setelah sesi edit selesai.\n\nMengubah berkas yang salah di dalam image game bisa membuatnya gagal dijalankan, dan tidak bisa dibatalkan. Cadangkan dulu kalau kamu ragu.",
+library_edit_confirm_ok: "Ambil untuk diedit",
+library_edit_needs_mount_point: "Pengeditan memerlukan titik pemasangan yang ditentukan. Perbarui helper PS5 ke versi yang mendukung pemilihan titik pemasangan.",
+notif_library_edit_failed: "Gagal mengambil untuk diedit",
+edit_session_title: "Mengedit {name}",
+edit_session_body: "Selama sesi ini terbuka, game tetap tersembunyi dari layar utama PS5 — ShadowMount+ tidak melihat image di lokasinya sekarang. Selesaikan pengeditan untuk mengembalikannya.",
+edit_session_open: "Buka berkas",
+edit_session_finish: "Selesai mengedit",
+edit_session_done: "Sesi edit selesai",
+edit_session_done_body: "{name} sudah kembali ke folder aslinya. ShadowMount+ akan memasang dan mendaftarkannya lagi dalam waktu sekitar satu menit.",
+
 };
 
 export default id;

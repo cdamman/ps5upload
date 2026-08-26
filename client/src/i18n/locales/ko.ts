@@ -2679,6 +2679,23 @@ upload_split_unsupported_title: "ps5upload가 열 수 없는 분할 압축 파�
 upload_split_unsupported_body: "업로드하면 원본 볼륨이 그대로 PS5로 전송되어 사용할 수 없습니다. 먼저 볼륨을 하나의 압축 파일로 합치세요. 7-Zip이나 WinRAR로 첫 볼륨을 열어 압축을 푼 뒤, 풀어낸 폴더나 그것을 하나로 묶은 파일을 업로드하면 됩니다.",
 upload_split_unsupported_target: "합치면: {name}",
 
+
+// Editing a game image in place (ShadowMount+ checkout)
+library_edit_files: "파일 편집…",
+library_edit_files_tooltip: "이 이미지를 ShadowMount+에서 꺼내 쓰기 가능하게 마운트하여 내부 파일을 추가하거나 교체합니다",
+library_edit_modal_run: "편집용으로 꺼내기",
+library_edit_confirm_title: "이 게임 이미지를 편집할까요?",
+library_edit_confirm_body: "{name}을(를) ShadowMount+ 폴더 밖으로 옮기고 {mountPoint}에 쓰기 가능하게 마운트합니다.\n\n편집하는 동안 게임은 PS5 홈 화면에서 사라집니다. 편집 세션을 마치면 다시 나타납니다.\n\n게임 이미지 안에서 잘못된 파일을 바꾸면 실행되지 않을 수 있으며 되돌릴 수 없습니다. 확실하지 않다면 먼저 백업하세요.",
+library_edit_confirm_ok: "편집용으로 꺼내기",
+library_edit_needs_mount_point: "편집하려면 마운트 위치를 명시해야 합니다. 마운트 위치를 선택할 수 있는 버전으로 PS5 도우미를 업데이트하세요.",
+notif_library_edit_failed: "편집용으로 꺼내지 못했습니다",
+edit_session_title: "{name} 편집 중",
+edit_session_body: "이 세션이 열려 있는 동안 게임은 PS5 홈 화면에서 숨겨집니다. ShadowMount+가 현재 위치의 이미지를 찾지 못하기 때문입니다. 편집을 마치면 되돌아갑니다.",
+edit_session_open: "파일 열기",
+edit_session_finish: "편집 마치기",
+edit_session_done: "편집 세션이 끝났습니다",
+edit_session_done_body: "{name}이(가) 원래 폴더로 돌아왔습니다. ShadowMount+가 약 1분 안에 다시 마운트하고 등록합니다.",
+
 };
 
 export default ko;

@@ -2594,6 +2594,23 @@ upload_split_unsupported_title: "这是 ps5upload 无法打开的分卷压缩包
 upload_split_unsupported_body: "直接上传只会把原始分卷传到 PS5，主机无法使用。请先把分卷合并回一个压缩包：用 7-Zip 或 WinRAR 打开第一个分卷并解压，然后上传解压后的文件夹，或将其重新打包成单个压缩包再上传。",
 upload_split_unsupported_target: "合并后为：{name}",
 
+
+// Editing a game image in place (ShadowMount+ checkout)
+library_edit_files: "编辑文件…",
+library_edit_files_tooltip: "把此镜像从 ShadowMount+ 中取出并以可写方式挂载，以便添加或替换其中的文件",
+library_edit_modal_run: "取出以进行编辑",
+library_edit_confirm_title: "要编辑这个游戏镜像吗？",
+library_edit_confirm_body: "{name} 将被移出 ShadowMount+ 的文件夹，并以可写方式挂载到 {mountPoint}。\n\n编辑期间，该游戏会从 PS5 主界面消失。结束编辑后就会回来。\n\n改错游戏镜像里的文件可能导致游戏无法启动，且无法撤销。如不确定，请先备份。",
+library_edit_confirm_ok: "取出以进行编辑",
+library_edit_needs_mount_point: "编辑需要明确指定挂载点。请将 PS5 助手更新到支持选择挂载点的版本。",
+notif_library_edit_failed: "取出以编辑失败",
+edit_session_title: "正在编辑 {name}",
+edit_session_body: "在此期间游戏会从 PS5 主界面隐藏——ShadowMount+ 找不到镜像当前所在的位置。结束编辑即可放回。",
+edit_session_open: "打开文件",
+edit_session_finish: "结束编辑",
+edit_session_done: "编辑会话已结束",
+edit_session_done_body: "{name} 已回到原文件夹。ShadowMount+ 将在约一分钟内重新挂载并注册它。",
+
 };
 
 export default zh_CN;

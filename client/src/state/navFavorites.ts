@@ -38,6 +38,11 @@ interface NavFavoritesState {
   isFavorite: (to: string) => boolean;
   toggle: (to: string) => void;
   dismissHint: () => void;
+  /** Replace the whole list — used when hydrating from the
+   *  `~/.ps5upload/settings.json` mirror at startup. Non-string entries are
+   *  dropped for the same reason `loadFavorites` filters them: the value is
+   *  hand-editable on disk. */
+  setFavorites: (paths: string[], hintDismissed?: boolean) => void;
 }
 
 export const useNavFavoritesStore = create<NavFavoritesState>((set, get) => ({
@@ -65,4 +70,13 @@ export const useNavFavoritesStore = create<NavFavoritesState>((set, get) => ({
     safeSetItem(HINT_DISMISSED_KEY, "1");
     set({ hintDismissed: true });
   },
+
+  setFavorites: (paths, hintDismissed) =>
+    set((s) => {
+      const next = paths.filter((p): p is string => typeof p === "string");
+      safeSetItem(FAVORITES_KEY, JSON.stringify(next));
+      const nextHint = hintDismissed ?? (s.hintDismissed || next.length > 0);
+      safeSetItem(HINT_DISMISSED_KEY, nextHint ? "1" : "0");
+      return { favorites: next, hintDismissed: nextHint };
+    }),
 }));

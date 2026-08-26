@@ -2641,6 +2641,23 @@ upload_split_unsupported_title: "এটি একটি বিভক্ত আ�
 upload_split_unsupported_body: "আপলোড করলে কাঁচা ভলিউমটিই আপনার PS5-তে যাবে, যা সেটি ব্যবহার করতে পারবে না। আগে ভলিউমগুলো একটি আর্কাইভে জোড়া লাগান: 7-Zip বা WinRAR দিয়ে প্রথম ভলিউমটি খুলে এক্সট্র্যাক্ট করুন, তারপর এক্সট্র্যাক্ট করা ফোল্ডার বা তার একটিমাত্র আর্কাইভ আপলোড করুন।",
 upload_split_unsupported_target: "জোড়া লাগলে হয়: {name}",
 
+
+// Editing a game image in place (ShadowMount+ checkout)
+library_edit_files: "ফাইল সম্পাদনা…",
+library_edit_files_tooltip: "এই ইমেজটি ShadowMount+ থেকে বের করে লেখার অনুমতিসহ মাউন্ট করুন, যাতে ভেতরের ফাইল যোগ বা প্রতিস্থাপন করা যায়",
+library_edit_modal_run: "সম্পাদনার জন্য বের করুন",
+library_edit_confirm_title: "এই গেম ইমেজ সম্পাদনা করবেন?",
+library_edit_confirm_body: "{name} ShadowMount+ এর ফোল্ডার থেকে সরিয়ে {mountPoint} এ লেখার অনুমতিসহ মাউন্ট করা হবে।\n\nসম্পাদনার সময় গেমটি PS5 এর হোম স্ক্রিন থেকে অদৃশ্য হয়ে যায়। সম্পাদনা সেশন শেষ করলে এটি ফিরে আসে।\n\nগেম ইমেজের ভেতরে ভুল ফাইল বদলালে গেমটি আর চালু নাও হতে পারে, এবং এটি ফেরানো যায় না। নিশ্চিত না হলে আগে ব্যাকআপ নিন।",
+library_edit_confirm_ok: "সম্পাদনার জন্য বের করুন",
+library_edit_needs_mount_point: "সম্পাদনার জন্য একটি সুনির্দিষ্ট মাউন্ট পয়েন্ট দরকার। PS5 হেল্পারকে এমন সংস্করণে হালনাগাদ করুন যা মাউন্ট পয়েন্ট বেছে নিতে দেয়।",
+notif_library_edit_failed: "সম্পাদনার জন্য বের করা যায়নি",
+edit_session_title: "{name} সম্পাদনা করা হচ্ছে",
+edit_session_body: "এই সেশন খোলা থাকা অবস্থায় গেমটি PS5 এর হোম স্ক্রিনে লুকানো থাকে — ShadowMount+ ইমেজটিকে বর্তমান জায়গায় দেখতে পায় না। ফেরত রাখতে সম্পাদনা শেষ করুন।",
+edit_session_open: "ফাইল খুলুন",
+edit_session_finish: "সম্পাদনা শেষ করুন",
+edit_session_done: "সম্পাদনা সেশন শেষ",
+edit_session_done_body: "{name} তার আসল ফোল্ডারে ফিরে এসেছে। ShadowMount+ প্রায় এক মিনিটের মধ্যে এটি আবার মাউন্ট ও নিবন্ধন করবে।",
+
 };
 
 export default bn;

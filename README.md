@@ -49,6 +49,12 @@
   assets, or apply a backport patch to a game that ships as an image
   rather than a folder. Edits go straight into the image file, so the
   app warns before you start.
+  When ShadowMount+ owns the image (it mounts everything read-only and
+  re-adopts anything it finds), **Edit files…** checks the image out —
+  moving it out of ShadowMount+'s scan folder, mounting it read-write
+  where you choose, and putting it back when you finish. The checkout is
+  journalled on the console, so an edit interrupted by a crash or a
+  reboot can still be finished later, from any machine.
 - **Browse everything** — list games anywhere on the PS5 (including
   inside mounted images), disk images, files, and volumes. Run FS
   ops (add files, replace a file, chmod, delete, move, copy, mkdir)

@@ -2,6 +2,15 @@ import { create } from "zustand";
 import type { LibraryEntry, Volume } from "../api/ps5";
 import { hostOf } from "../lib/addr";
 
+/** What the console knows about a title we registered from a given source
+ *  path. A `.exfat`/`.ffpkg` row has no readable `sce_sys/` of its own (the
+ *  metadata lives *inside* the image), so this is the only way to put a real
+ *  name and cover on a disk-image row without mounting it first. */
+export interface RegisteredTitle {
+  titleId: string;
+  titleName: string;
+}
+
 /**
  * Library state lives in a zustand store (not `useState` in the component) so
  * entries survive navigation. When the user clicks Library → Upload → Library
@@ -30,6 +39,12 @@ export interface LibrarySlot {
   /** Writable, non-placeholder volumes the PS5 reports — used by the Move
    *  modal so the user picks a destination from real attached drives. */
   volumes: Volume[];
+  /** source_path → the title registered from it, from the console's
+   *  /user/appmeta inventory. Keyed by the SOURCE path (not the mount point)
+   *  so a disk-image row can look itself up directly. Empty when the probe
+   *  failed or the payload is too old to report the registered set — rows
+   *  then fall back to the filename, exactly as before. */
+  registeredBySource: Map<string, RegisteredTitle>;
   /** When the data was last refreshed (unix ms). null = never loaded. */
   lastRefreshedAt: number | null;
   /** True while a refresh is in flight. Used for the header spinner without
@@ -47,6 +62,7 @@ export const IDLE_LIBRARY: LibrarySlot = {
   mountMap: new Map(),
   pendingMounts: new Map(),
   volumes: [],
+  registeredBySource: new Map(),
   lastRefreshedAt: null,
   loading: false,
   error: null,
@@ -65,6 +81,7 @@ interface LibraryStore {
     entries: LibraryEntry[],
     mountMap: Map<string, string>,
     volumes: Volume[],
+    registeredBySource: Map<string, RegisteredTitle>,
   ) => void;
   setLoading: (host: string, loading: boolean) => void;
   setError: (host: string, error: string | null) => void;
@@ -128,7 +145,7 @@ export const useLibraryStore = create<LibraryStore>((set) => {
     });
   return {
     byHost: {},
-    setData: (host, entries, mountMap, volumes) =>
+    setData: (host, entries, mountMap, volumes, registeredBySource) =>
       set((s) => {
         const key = keyOf(host);
         const cur = s.byHost[key] ?? IDLE_LIBRARY;
@@ -158,6 +175,7 @@ export const useLibraryStore = create<LibraryStore>((set) => {
               mountMap,
               pendingMounts: prunedPending,
               volumes,
+              registeredBySource,
               lastRefreshedAt: Date.now(),
               error: null,
             },

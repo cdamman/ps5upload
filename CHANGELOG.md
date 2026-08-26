@@ -4,6 +4,47 @@ What's new in ps5upload, written for humans.
 
 ---
 
+## 5.6.0
+
+**Disk images show their real name and cover art, editing a game
+ShadowMount+ owns now works end to end, and Favorites stick.**
+
+- **Cover art and real names for disk images.** In *Games → Game files*
+  every `.exfat`/`.ffpkg` row showed a grey placeholder and a bare
+  filename like `PPSA30223.exfat`. The image itself has no readable
+  metadata — it's all sealed inside — but the console already knows the
+  title, so those rows now read *Yakuza Kiwami 3 & Dark Ties ·
+  PPSA30223* with the cover next to them.
+- **Edit a game image that ShadowMount+ is holding.** ShadowMount+
+  mounts everything read-only, and it re-attaches any image whose mount
+  disappears within about 15 seconds — so there was no safe way to open
+  one for writing. The new **Edit files…** action checks the image out:
+  it moves the image out of ShadowMount+'s scan folder, waits for it to
+  let go, and mounts it read-write where you choose. **Finish editing**
+  puts it back and ShadowMount+ re-registers it. While a session is
+  open the game is hidden from the PS5 home screen, so a banner says so
+  on the screens you'll be using.
+- **An interrupted edit is recoverable.** The checkout is recorded on
+  the console, not on your computer. If the app crashes, the console
+  reboots, or you just close the window mid-edit, the banner comes back
+  the next time you connect — from any machine — and finishing still
+  puts the image back where it belongs.
+- **Mounting an image ShadowMount+ owns no longer lies about it.** The
+  old message said the image had been "handed to ShadowMount+" without
+  mentioning that the mount point you had just chosen was discarded. It
+  now says where the image actually landed, and what to do if you wanted
+  it somewhere of your own.
+- **Favorites survive.** Pinned sidebar screens were the one preference
+  that lived only in browser storage and were never written to
+  `~/.ps5upload/settings.json`, so they were the one thing you could
+  lose. They're now saved alongside theme, language and everything else.
+- **The ShadowMount+ log panel shows recent lines.** It was reading the
+  *start* of `debug.log` rather than the end, so on a console that had
+  been up for a while it showed hours-old startup output and never the
+  event you were troubleshooting.
+
+---
+
 ## 5.5.0
 
 **Uploads that can't fit are now refused before they start, big folders

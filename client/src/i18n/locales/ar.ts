@@ -2641,6 +2641,23 @@ upload_split_unsupported_title: "هذا أرشيف مقسّم ({count} مجلد�
 upload_split_unsupported_body: "رفعه يُرسل المجلد الخام إلى جهاز PS5 وهو لا يستطيع استخدامه. اجمع المجلدات أولاً في أرشيف واحد: افتح المجلد الأول ببرنامج 7-Zip أو WinRAR واستخرجه، ثم ارفع المجلد المستخرج أو أرشيفًا واحدًا منه.",
 upload_split_unsupported_target: "يُجمَع ليصبح: {name}",
 
+
+// Editing a game image in place (ShadowMount+ checkout)
+library_edit_files: "تحرير الملفات…",
+library_edit_files_tooltip: "أخرج هذه الصورة من ShadowMount+ وثبّتها للقراءة والكتابة كي تتمكن من إضافة الملفات بداخلها أو استبدالها",
+library_edit_modal_run: "سحب للتحرير",
+library_edit_confirm_title: "هل تريد تحرير صورة اللعبة هذه؟",
+library_edit_confirm_body: "سيُنقل {name} خارج مجلد ShadowMount+ وسيُثبَّت للكتابة في {mountPoint}.\n\nأثناء التحرير تختفي اللعبة من الشاشة الرئيسية لجهاز PS5، وتعود عند إنهاء جلسة التحرير.\n\nتغيير الملف الخطأ داخل صورة اللعبة قد يمنعها من العمل، ولا يمكن التراجع عن ذلك. خذ نسخة احتياطية أولاً إن لم تكن متأكدًا.",
+library_edit_confirm_ok: "سحب للتحرير",
+library_edit_needs_mount_point: "يحتاج التحرير إلى نقطة تثبيت محددة. حدّث مساعد PS5 إلى إصدار يتيح اختيارها.",
+notif_library_edit_failed: "فشل السحب للتحرير",
+edit_session_title: "جارٍ تحرير {name}",
+edit_session_body: "ما دامت هذه الجلسة مفتوحة تبقى اللعبة مخفية عن الشاشة الرئيسية لجهاز PS5، لأن ShadowMount+ لا يرى الصورة في موضعها الحالي. أنهِ التحرير لإعادتها إلى مكانها.",
+edit_session_open: "فتح الملفات",
+edit_session_finish: "إنهاء التحرير",
+edit_session_done: "انتهت جلسة التحرير",
+edit_session_done_body: "عاد {name} إلى مجلده الأصلي. سيقوم ShadowMount+ بتثبيته وتسجيله مجددًا خلال دقيقة تقريبًا.",
+
 };
 
 export default ar;

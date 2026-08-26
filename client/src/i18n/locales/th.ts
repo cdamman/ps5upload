@@ -2668,6 +2668,23 @@ upload_split_unsupported_title: "นี่คือไฟล์บีบอั�
 upload_split_unsupported_body: "การอัปโหลดจะส่งไฟล์ย่อยดิบไปยัง PS5 ซึ่งใช้งานไม่ได้ กรุณารวมไฟล์ย่อยกลับเป็นไฟล์เดียวก่อน โดยเปิดไฟล์ย่อยแรกด้วย 7-Zip หรือ WinRAR แล้วแตกไฟล์ จากนั้นอัปโหลดโฟลเดอร์ที่แตกได้ หรือไฟล์บีบอัดไฟล์เดียวของโฟลเดอร์นั้น",
 upload_split_unsupported_target: "รวมแล้วได้: {name}",
 
+
+// Editing a game image in place (ShadowMount+ checkout)
+library_edit_files: "แก้ไขไฟล์…",
+library_edit_files_tooltip: "นำอิมเมจนี้ออกจาก ShadowMount+ แล้วเมานต์แบบเขียนได้ เพื่อเพิ่มหรือแทนที่ไฟล์ข้างใน",
+library_edit_modal_run: "นำออกมาเพื่อแก้ไข",
+library_edit_confirm_title: "แก้ไขอิมเมจเกมนี้หรือไม่",
+library_edit_confirm_body: "{name} จะถูกย้ายออกจากโฟลเดอร์ของ ShadowMount+ และเมานต์แบบเขียนได้ที่ {mountPoint}\n\nระหว่างที่แก้ไข เกมจะหายไปจากหน้าหลักของ PS5 และจะกลับมาเมื่อคุณจบเซสชันการแก้ไข\n\nการแก้ไฟล์ผิดในอิมเมจเกมอาจทำให้เกมเปิดไม่ได้ และย้อนกลับไม่ได้ หากไม่แน่ใจ ให้สำรองข้อมูลไว้ก่อน",
+library_edit_confirm_ok: "นำออกมาเพื่อแก้ไข",
+library_edit_needs_mount_point: "การแก้ไขต้องระบุจุดเมานต์อย่างชัดเจน โปรดอัปเดตตัวช่วย PS5 เป็นเวอร์ชันที่เลือกจุดเมานต์ได้",
+notif_library_edit_failed: "นำออกมาเพื่อแก้ไขไม่สำเร็จ",
+edit_session_title: "กำลังแก้ไข {name}",
+edit_session_body: "ตราบใดที่เซสชันนี้เปิดอยู่ เกมจะถูกซ่อนจากหน้าหลักของ PS5 เพราะ ShadowMount+ มองไม่เห็นอิมเมจในตำแหน่งปัจจุบัน จบการแก้ไขเพื่อนำกลับไปไว้ที่เดิม",
+edit_session_open: "เปิดไฟล์",
+edit_session_finish: "จบการแก้ไข",
+edit_session_done: "จบเซสชันการแก้ไขแล้ว",
+edit_session_done_body: "{name} กลับไปอยู่ในโฟลเดอร์เดิมแล้ว ShadowMount+ จะเมานต์และลงทะเบียนอีกครั้งภายในประมาณหนึ่งนาที",
+
 };
 
 export default th;

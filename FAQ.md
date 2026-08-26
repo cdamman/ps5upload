@@ -1086,6 +1086,36 @@ of a UFS `.ffpkg` regardless of what you asked for — when that happens
 the app tells you the mount came back read-only, and writes will fail
 until you convert or re-create the image.
 
+**Q: ShadowMount+ mounts my game read-only — how do I edit it?**
+Use **Library → the image → ⋯ → Edit files…**. That is a *checkout*: the
+app moves the image out of ShadowMount+'s scan folder, waits for
+ShadowMount+ to let go of it, and mounts it read-write where you choose.
+When you press **Finish editing** it unmounts (which is what flushes your
+changes into the image file), moves the image back, and ShadowMount+
+picks it up and re-registers it within about a minute.
+
+The detour is not busywork. ShadowMount+ mounts everything it manages
+read-only by default, and it re-attaches any image whose mount
+disappears on its next scan sweep (15 s by default) — so simply
+unmounting its mount and re-mounting the image yourself would leave two
+attachments on one image file, one of them writable. Moving the image
+out of its view is the only way to get exclusive access.
+
+Two consequences worth knowing before you start:
+
+- **While the session is open, the game is gone from the PS5 home
+  screen.** ShadowMount+ can't see the image where it now is, so the
+  tile disappears until you finish. The app shows a standing banner on
+  the Games and Files screens for exactly this reason.
+- **An interrupted session is recoverable.** The checkout is journalled
+  on the console itself, so if the app crashes, the console reboots, or
+  you just close the window mid-edit, the banner comes back the next
+  time you connect — from any machine — and **Finish editing** still
+  puts the image back.
+
+Everything in the previous answer about there being no undo applies with
+full force here: you are editing a real game image in place.
+
 **Q: Can I unmount while a game is running?**
 No — the kernel refuses with `EBUSY` because a process inside the
 mount has files open. The UI surfaces this as: *"the game inside

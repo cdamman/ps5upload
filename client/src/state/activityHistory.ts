@@ -42,7 +42,10 @@ export type ActivityKind =
   | "library-register"
   | "library-unregister"
   | "library-download"
-  | "library-install";
+  | "library-install"
+  /** Checking a disk image out of ShadowMount+ so it can be edited in
+   *  place. Slow (it waits on SMP's scan sweep), so it belongs in Activity. */
+  | "library-edit-checkout";
 
 export type ActivityOutcome = "running" | "done" | "failed" | "stopped";
 

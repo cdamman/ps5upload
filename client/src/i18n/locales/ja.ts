@@ -2683,6 +2683,23 @@ upload_split_unsupported_title: "これは ps5upload が開けない分割アー
 upload_split_unsupported_body: "アップロードすると生のボリュームが PS5 に送られ、そのままでは利用できません。まずボリュームを 1 つのアーカイブに結合してください。7-Zip か WinRAR で最初のボリュームを開いて展開し、展開後のフォルダーか、それを 1 つにまとめた書庫をアップロードします。",
 upload_split_unsupported_target: "結合後: {name}",
 
+
+// Editing a game image in place (ShadowMount+ checkout)
+library_edit_files: "ファイルを編集…",
+library_edit_files_tooltip: "このイメージを ShadowMount+ から取り出し、書き込み可能でマウントして中のファイルを追加・置き換えできるようにします",
+library_edit_modal_run: "編集用に取り出す",
+library_edit_confirm_title: "このゲームイメージを編集しますか？",
+library_edit_confirm_body: "{name} を ShadowMount+ のフォルダーから移動し、{mountPoint} に書き込み可能でマウントします。\n\n編集中はゲームが PS5 のホーム画面から消えます。編集を終了すると元に戻ります。\n\nゲームイメージ内の誤ったファイルを変更すると起動しなくなることがあり、元に戻すことはできません。不安な場合は先にバックアップしてください。",
+library_edit_confirm_ok: "編集用に取り出す",
+library_edit_needs_mount_point: "編集にはマウント先の明示的な指定が必要です。マウント先を選べるバージョンの PS5 ヘルパーに更新してください。",
+notif_library_edit_failed: "編集用の取り出しに失敗しました",
+edit_session_title: "{name} を編集中",
+edit_session_body: "このセッションが開いている間、ゲームは PS5 のホーム画面に表示されません。ShadowMount+ は現在の場所にあるイメージを見つけられないためです。編集を終了すると元に戻ります。",
+edit_session_open: "ファイルを開く",
+edit_session_finish: "編集を終了",
+edit_session_done: "編集セッションを終了しました",
+edit_session_done_body: "{name} は元のフォルダーに戻りました。ShadowMount+ が約1分以内に再びマウントして登録します。",
+
 };
 
 export default ja;

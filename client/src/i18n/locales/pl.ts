@@ -2938,6 +2938,23 @@ upload_split_unsupported_title: "To podzielone archiwum ({count} woluminów), kt
 upload_split_unsupported_body: "Wysłanie go przenosi surowy wolumin na PS5, która nie potrafi go użyć. Najpierw połącz woluminy w jedno archiwum: otwórz pierwszy w 7-Zip lub WinRAR i wypakuj, a następnie wyślij wypakowany folder albo pojedyncze archiwum.",
 upload_split_unsupported_target: "Po połączeniu: {name}",
 
+
+// Editing a game image in place (ShadowMount+ checkout)
+library_edit_files: "Edytuj pliki…",
+library_edit_files_tooltip: "Wyjmij ten obraz z ShadowMount+ i zamontuj go do zapisu, aby dodawać lub podmieniać pliki w środku",
+library_edit_modal_run: "Pobierz do edycji",
+library_edit_confirm_title: "Edytować ten obraz gry?",
+library_edit_confirm_body: "{name} zostanie przeniesiony poza folder ShadowMount+ i zamontowany do zapisu w {mountPoint}.\n\nPodczas edycji gra znika z ekranu głównego PS5. Wróci, gdy zakończysz sesję edycji.\n\nZmiana niewłaściwego pliku w obrazie gry może uniemożliwić jej uruchomienie, a cofnąć się tego nie da. Jeśli nie masz pewności, zrób najpierw kopię zapasową.",
+library_edit_confirm_ok: "Pobierz do edycji",
+library_edit_needs_mount_point: "Edycja wymaga jawnego punktu montowania. Zaktualizuj pomocnika PS5 do wersji, która pozwala go wybrać.",
+notif_library_edit_failed: "Nie udało się pobrać do edycji",
+edit_session_title: "Edycja {name}",
+edit_session_body: "Dopóki ta sesja jest otwarta, gra pozostaje ukryta na ekranie głównym PS5 — ShadowMount+ nie widzi obrazu w jego obecnym miejscu. Zakończ edycję, aby go odłożyć.",
+edit_session_open: "Otwórz pliki",
+edit_session_finish: "Zakończ edycję",
+edit_session_done: "Sesja edycji zakończona",
+edit_session_done_body: "{name} wrócił do pierwotnego folderu. ShadowMount+ zamontuje go i zarejestruje ponownie w ciągu około minuty.",
+
 };
 
 export default pl;

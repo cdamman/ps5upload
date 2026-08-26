@@ -156,7 +156,18 @@ pub fn collect_status(addr: &str) -> Result<SmpStatus> {
     // best-effort — if any fails we still return the others.
     let config_ini = read_text_file_or_record(addr, SMP_CONFIG_PATH, &mut errors);
     let autotune_ini = read_text_file_or_record(addr, SMP_AUTOTUNE_PATH, &mut errors);
-    let debug_log_tail = read_text_file_or_record(addr, SMP_DEBUG_LOG_PATH, &mut errors);
+    // debug.log is append-only and grows without bound, so the interesting
+    // part is always the END. Reading from offset 0 (as this did until the
+    // tail-offset fix) returns SMP's startup banner forever — on a console
+    // that has been up a while the troubleshooting panel showed hours-old
+    // lines and never mentioned the image the user was actually asking about.
+    let debug_log_tail = read_text_file_tail_or_record(
+        addr,
+        SMP_DATA_DIR,
+        SMP_DEBUG_LOG_PATH,
+        "debug.log",
+        &mut errors,
+    );
 
     // List mounted images. SMP creates one subdir per mounted image
     // under /mnt/shadowmnt/. Empty list when nothing is mounted.
@@ -218,6 +229,55 @@ fn read_text_file_or_record(addr: &str, path: &str, errors: &mut Vec<String>) ->
                 // Not an error — file just hasn't been written yet
                 // (e.g. autotune.ini is created lazily on first
                 // tuning event).
+                None
+            } else {
+                errors.push(format!("read {path}: {s}"));
+                None
+            }
+        }
+    }
+}
+
+/// Read the LAST `READ_LIMIT_BYTES` of a file.
+///
+/// FS_READ takes an explicit offset, but the payload exposes no stat, so the
+/// size comes from a directory listing of the parent. If the size can't be
+/// determined we fall back to reading from offset 0 — a head is less useful
+/// than a tail but far better than showing nothing.
+fn read_text_file_tail_or_record(
+    addr: &str,
+    parent_dir: &str,
+    path: &str,
+    file_name: &str,
+    errors: &mut Vec<String>,
+) -> Option<String> {
+    let size = list_dir_with_timeout(
+        addr,
+        parent_dir,
+        ListDirOptions::default(),
+        Some(RPC_TIMEOUT),
+    )
+    .ok()
+    .and_then(|listing| {
+        listing
+            .entries
+            .iter()
+            .find(|e| e.name == file_name)
+            .map(|e| e.size)
+    });
+    let offset = size.map_or(0, |s| s.saturating_sub(READ_LIMIT_BYTES));
+    match fs_read_with_timeout(
+        addr,
+        path,
+        offset,
+        READ_LIMIT_BYTES,
+        Some(RPC_TIMEOUT),
+        false,
+    ) {
+        Ok(bytes) => Some(String::from_utf8_lossy(&bytes).into_owned()),
+        Err(e) => {
+            let s = e.to_string();
+            if is_missing_optional_file_error(&s) {
                 None
             } else {
                 errors.push(format!("read {path}: {s}"));

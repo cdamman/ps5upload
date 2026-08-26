@@ -591,6 +591,29 @@ export async function browserInvoke<T>(
     case "smp_status":
       return getJson<T>(addrUrl("/api/ps5/smp/status", args["addr"]));
 
+    // ── ShadowMount+ edit sessions ──────────────────────────────────────────
+    // The engine wraps these in `{ checkout: ... }` so the GET can express
+    // "nothing is checked out" as a null field rather than a 404; unwrap here
+    // so browser mode and Tauri mode hand the caller the same shape.
+
+    case "smp_checkout_status":
+      return getJson<{ checkout: T }>(
+        addrUrl("/api/ps5/smp/checkout", args["addr"]),
+      ).then((r) => r.checkout);
+
+    case "smp_checkout_begin":
+      return postJson<T>("/api/ps5/smp/checkout/begin", {
+        addr: args["addr"],
+        image_path: args["imagePath"],
+        mount_point: args["mountPoint"],
+        title_id: args["titleId"] ?? "",
+      });
+
+    case "smp_checkout_finish":
+      return postJson<{ checkout: T }>("/api/ps5/smp/checkout/finish", {
+        addr: args["addr"],
+      }).then((r) => r.checkout);
+
     // ── Local (engine host) filesystem browse ───────────────────────────────
     // Browser-mode counterpart to the Tauri file/folder dialog: browses the
     // ENGINE's own filesystem (e.g. a Docker container's mounted volumes),

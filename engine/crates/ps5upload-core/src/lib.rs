@@ -28,6 +28,7 @@ pub mod saves;
 pub mod sdk_changer;
 pub mod search_index;
 pub mod smp;
+pub mod smp_checkout;
 pub mod smp_meta;
 pub mod sys_time;
 pub mod system_control;

@@ -2589,6 +2589,23 @@ upload_split_unsupported_title: "這是 ps5upload 無法開啟的分卷壓縮檔
 upload_split_unsupported_body: "直接上傳只會把原始分卷傳到 PS5，主機無法使用。請先把分卷合併回一個壓縮檔：用 7-Zip 或 WinRAR 開啟第一個分卷並解壓，然後上傳解壓後的資料夾，或重新打包成單一壓縮檔再上傳。",
 upload_split_unsupported_target: "合併後為：{name}",
 
+
+// Editing a game image in place (ShadowMount+ checkout)
+library_edit_files: "編輯檔案…",
+library_edit_files_tooltip: "把這個映像檔從 ShadowMount+ 中取出並以可寫入方式掛載，以便新增或取代其中的檔案",
+library_edit_modal_run: "取出以進行編輯",
+library_edit_confirm_title: "要編輯這個遊戲映像檔嗎？",
+library_edit_confirm_body: "{name} 將被移出 ShadowMount+ 的資料夾，並以可寫入方式掛載到 {mountPoint}。\n\n編輯期間，該遊戲會從 PS5 主畫面消失。結束編輯後就會回來。\n\n改錯遊戲映像檔裡的檔案可能導致遊戲無法啟動，而且無法復原。若不確定，請先備份。",
+library_edit_confirm_ok: "取出以進行編輯",
+library_edit_needs_mount_point: "編輯需要明確指定掛載點。請將 PS5 小幫手更新到支援選擇掛載點的版本。",
+notif_library_edit_failed: "取出以編輯失敗",
+edit_session_title: "正在編輯 {name}",
+edit_session_body: "在此期間遊戲會從 PS5 主畫面隱藏——ShadowMount+ 找不到映像檔目前所在的位置。結束編輯即可放回。",
+edit_session_open: "開啟檔案",
+edit_session_finish: "結束編輯",
+edit_session_done: "編輯工作階段已結束",
+edit_session_done_body: "{name} 已回到原資料夾。ShadowMount+ 將在約一分鐘內重新掛載並註冊它。",
+
 };
 
 export default zh_TW;

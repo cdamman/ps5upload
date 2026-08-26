@@ -2588,6 +2588,23 @@ upload_split_unsupported_title: "Questo è un archivio diviso ({count} volumi) c
 upload_split_unsupported_body: "Caricandolo invii il volume grezzo alla PS5, che non può usarlo. Unisci prima i volumi in un unico archivio: apri il primo con 7-Zip o WinRAR ed estrai, poi carica la cartella estratta o un singolo archivio.",
 upload_split_unsupported_target: "Unito diventa: {name}",
 
+
+// Editing a game image in place (ShadowMount+ checkout)
+library_edit_files: "Modifica file…",
+library_edit_files_tooltip: "Togli questa immagine da ShadowMount+ e montala in lettura/scrittura per aggiungere o sostituire file al suo interno",
+library_edit_modal_run: "Preleva per la modifica",
+library_edit_confirm_title: "Modificare questa immagine di gioco?",
+library_edit_confirm_body: "{name} verrà spostato fuori dalla cartella di ShadowMount+ e montato in scrittura su {mountPoint}.\n\nDurante la modifica il gioco sparisce dalla schermata principale della PS5. Ritorna quando termini la sessione di modifica.\n\nModificare il file sbagliato dentro un'immagine di gioco può impedirne l'avvio, e non è possibile annullare. Se hai dubbi, fai prima un backup.",
+library_edit_confirm_ok: "Preleva per la modifica",
+library_edit_needs_mount_point: "La modifica richiede un punto di montaggio esplicito. Aggiorna l'helper PS5 a una versione che permetta di sceglierlo.",
+notif_library_edit_failed: "Prelievo per la modifica non riuscito",
+edit_session_title: "Modifica di {name}",
+edit_session_body: "Finché questa sessione è aperta il gioco resta nascosto dalla schermata principale della PS5: ShadowMount+ non vede l'immagine dove si trova ora. Termina la modifica per rimetterla a posto.",
+edit_session_open: "Apri file",
+edit_session_finish: "Termina modifica",
+edit_session_done: "Sessione di modifica terminata",
+edit_session_done_body: "{name} è tornato nella cartella originale. ShadowMount+ lo monterà e registrerà di nuovo entro circa un minuto.",
+
 };
 
 export default it;

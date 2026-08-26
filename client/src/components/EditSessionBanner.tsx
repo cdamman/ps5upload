@@ -1,0 +1,130 @@
+import { useEffect } from "react";
+import { useNavigate } from "react-router";
+import { FilePenLine, FolderOpen, X } from "lucide-react";
+
+import { Button } from "./Button";
+import { useConnectionStore } from "../state/connection";
+import { editSessionForHost, useEditSessionStore } from "../state/editSession";
+import { useTr } from "../state/lang";
+import { pushNotification } from "../state/notifications";
+import { withConsolePrefix } from "../state/roster";
+import { saveFsLastPath } from "../lib/fsLastPath";
+
+/**
+ * Standing reminder that an image is checked out of ShadowMount+ for editing.
+ *
+ * This is not decoration. While the session is open the image lives outside
+ * ShadowMount+'s scan folders, which means the game is GONE from the PS5 home
+ * screen until the session is finished. A user who forgets — or who closes the
+ * app mid-edit and comes back later — would otherwise have no way to discover
+ * why their game vanished, so the banner is rendered on every screen the edit
+ * flow passes through and the session is re-probed from the console on mount.
+ */
+export default function EditSessionBanner() {
+  const tr = useTr();
+  const navigate = useNavigate();
+  const host = useConnectionStore((s) => s.host);
+  const payloadStatus = useConnectionStore((s) => s.payloadStatus);
+  const checkout = useEditSessionStore(
+    (s) => editSessionForHost(s, host).checkout,
+  );
+  const busy = useEditSessionStore((s) => editSessionForHost(s, host).busy);
+  const error = useEditSessionStore((s) => editSessionForHost(s, host).error);
+  const refresh = useEditSessionStore((s) => s.refresh);
+  const finish = useEditSessionStore((s) => s.finish);
+
+  // Probe on mount and whenever the console changes. Cheap (one small file
+  // read) and it's the only way a session started elsewhere — or before a
+  // crash — becomes visible again.
+  useEffect(() => {
+    if (payloadStatus !== "up") return;
+    void refresh(host);
+  }, [host, payloadStatus, refresh]);
+
+  if (!checkout) return null;
+
+  const name =
+    checkout.original_path.split("/").pop() ?? checkout.original_path;
+
+  const runFinish = async () => {
+    try {
+      const done = await finish(host);
+      if (done) {
+        pushNotification(
+          "info",
+          withConsolePrefix(
+            host,
+            tr("edit_session_done", undefined, "Edit session finished"),
+          ),
+          {
+            body: tr(
+              "edit_session_done_body",
+              { name },
+              `${name} is back in its original folder. ShadowMount+ will mount and register it again within about a minute.`,
+            ),
+          },
+        );
+      }
+    } catch {
+      // The store already captured the message; it renders below.
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-2 rounded-md border border-[var(--color-accent)] bg-[var(--color-accent-soft)] p-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <FilePenLine
+          size={18}
+          className="shrink-0 text-[var(--color-accent)]"
+        />
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-semibold">
+            {tr("edit_session_title", { name }, `Editing ${name}`)}
+          </div>
+          <div className="mt-0.5 truncate font-mono text-xs text-[var(--color-muted)]">
+            {checkout.mount_point}
+          </div>
+          <div className="mt-1 text-xs text-[var(--color-muted)]">
+            {tr(
+              "edit_session_body",
+              undefined,
+              "While this is open the game is hidden from the PS5 home screen — ShadowMount+ can't see the image where it is now. Finish editing to put it back.",
+            )}
+          </div>
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <Button
+            variant="secondary"
+            size="sm"
+            leftIcon={<FolderOpen size={12} />}
+            onClick={() => {
+              // The File Browser restores its last-browsed path per host, so
+              // seeding that is how you deep-link it somewhere — it reads no
+              // route params of its own.
+              saveFsLastPath(host, checkout.mount_point);
+              navigate("/files");
+            }}
+            disabled={busy}
+          >
+            {tr("edit_session_open", undefined, "Open files")}
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            leftIcon={<X size={12} />}
+            onClick={() => void runFinish()}
+            disabled={busy}
+            loading={busy}
+          >
+            {tr("edit_session_finish", undefined, "Finish editing")}
+          </Button>
+        </div>
+      </div>
+      {error && (
+        <div className="rounded border border-[var(--color-bad)] bg-[var(--color-surface-2)] px-2 py-1 text-xs text-[var(--color-bad)]">
+          {error}
+        </div>
+      )}
+    </div>
+  );
+}

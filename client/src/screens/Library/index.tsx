@@ -27,6 +27,7 @@ import {
   PackageOpen,
   Sparkles,
   type LucideIcon,
+  FilePenLine,
 } from "lucide-react";
 import { pickPath } from "../../lib/pickPath";
 import { openExternalUrl as openExternal } from "../../lib/openExternalUrl";
@@ -52,12 +53,15 @@ import {
   appRegister,
   appUnregister,
   smpManualInstall,
+  smpCheckoutBegin,
   smpStatus,
   fsOpStatus,
   fsOpCancel,
   fetchVolumes,
   fetchGameMeta,
   gameIconUrl,
+  appIconUrl,
+  appsInstalled,
   jobStatus,
   startTransferDownload,
   healAppmeta,
@@ -74,9 +78,18 @@ import {
   sourceBasename,
 } from "../../lib/moveTarget";
 import {
+  imageBasename,
+  SMP_MOUNT_ROOT,
+  smpMountImageBasename,
+} from "../../lib/mountPaths";
+import EditSessionBanner from "../../components/EditSessionBanner";
+import { useConfirm } from "../../components/ConfirmDialog";
+import { useEditSessionStore } from "../../state/editSession";
+import {
   useLibraryStore,
   findOwningImage,
   libraryForHost,
+  type RegisteredTitle,
 } from "../../state/library";
 import { useElapsed } from "../../lib/useElapsed";
 import { formatBytes } from "../../lib/format";
@@ -139,7 +152,11 @@ function formatDuration(sec: number): string {
 
 // formatBytes moved to lib/format.ts — kept consistent across screens.
 
-export default function LibraryScreen({ embedded = false }: { embedded?: boolean }) {
+export default function LibraryScreen({
+  embedded = false,
+}: {
+  embedded?: boolean;
+}) {
   const tr = useTr();
   const host = useConnectionStore((s) => s.host);
   const guard = useStaleHostGuard();
@@ -153,6 +170,32 @@ export default function LibraryScreen({ embedded = false }: { embedded?: boolean
     (s) => libraryForHost(s, host).pendingMounts,
   );
   const volumes = useLibraryStore((s) => libraryForHost(s, host).volumes);
+  const registeredBySource = useLibraryStore(
+    (s) => libraryForHost(s, host).registeredBySource,
+  );
+  // Whether ShadowMount+ is running right now. Gates the per-row "Edit
+  // files…" action: checking an image out only means anything when SMP is the
+  // one holding it. Probed at screen level so ~100 rows don't each ask.
+  const [smpRunning, setSmpRunning] = useState(false);
+  useEffect(() => {
+    if (payloadStatus !== "up" || !host?.trim()) {
+      setSmpRunning(false);
+      return;
+    }
+    let cancelled = false;
+    smpStatus(mgmtAddr(host))
+      .then((s) => {
+        if (!cancelled) setSmpRunning(!!s.running);
+      })
+      .catch(() => {
+        // Unreachable SMP → hide the action rather than offering something
+        // that would fail. Not worth a banner.
+        if (!cancelled) setSmpRunning(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [host, payloadStatus]);
   const loading = useLibraryStore((s) => libraryForHost(s, host).loading);
   const error = useLibraryStore((s) => libraryForHost(s, host).error);
   const lastRefreshedAt = useLibraryStore(
@@ -191,7 +234,7 @@ export default function LibraryScreen({ embedded = false }: { embedded?: boolean
       // still log so diagnosis is possible. Without the log, a
       // transient mgmt-port timeout looked indistinguishable from
       // "no drives attached" — same empty UI, no breadcrumb.
-      const [result, volumes] = await Promise.all([
+      const [result, volumes, registered] = await Promise.all([
         scanLibrary(addr),
         fetchVolumes(addr).catch((e) => {
           console.warn(
@@ -200,7 +243,37 @@ export default function LibraryScreen({ embedded = false }: { embedded?: boolean
           );
           return [];
         }),
+        // Registered-title inventory, keyed by the SOURCE path we registered
+        // from. This is what puts a real name + cover on a `.exfat`/`.ffpkg`
+        // row: the image file itself has no readable `sce_sys/` (the metadata
+        // is inside it), but /user/appmeta does, and the payload reports which
+        // source each registered title came from. Non-fatal like the volume
+        // probe — rows fall back to the bare filename without it.
+        appsInstalled(addr).catch((e) => {
+          console.warn(
+            "[library] installed-apps probe failed; disk-image rows will show filenames only:",
+            e,
+          );
+          return { titles: [], registeredUnavailable: true };
+        }),
       ]);
+      // Two ways a registered title points back at a Library row:
+      //   1. its source IS the row's path — true for folder games and for any
+      //      image ps5upload mounted itself (our mount.lnk records the image).
+      //   2. its source is a ShadowMount+ mount point, which encodes only the
+      //      image's basename. SMP never records the original path, so the
+      //      basename is the only link back to the row.
+      // Both go into one map; images look themselves up under both keys.
+      const registeredBySource = new Map<string, RegisteredTitle>();
+      for (const t of registered.titles) {
+        // Only "registered" titles carry a source path; a plain .pkg install
+        // has none and would collide on the empty-string key.
+        if (!t.source) continue;
+        const title = { titleId: t.titleId, titleName: t.titleName };
+        registeredBySource.set(t.source, title);
+        const smpBasename = smpMountImageBasename(t.source);
+        if (smpBasename) registeredBySource.set(smpBasename, title);
+      }
       // image_path → mount_point. Pre-2.2.36 this gated on the mount
       // landing under /mnt/ps5upload/, which broke the MOUNTED badge
       // and the Unmount button for any user-chosen mount point (e.g.
@@ -236,7 +309,9 @@ export default function LibraryScreen({ embedded = false }: { embedded?: boolean
       // slot: it prunes confirmed pending mounts and keeps the old entries if
       // the rescan came back empty but we had some (the "library goes blank
       // after mounting" fix) — the same logic that used to live inline here.
-      useLibraryStore.getState().setData(host, result, next, writable);
+      useLibraryStore
+        .getState()
+        .setData(host, result, next, writable, registeredBySource);
     } catch (e) {
       if (isStale()) return;
       setError(e instanceof Error ? e.message : String(e));
@@ -370,29 +445,31 @@ export default function LibraryScreen({ embedded = false }: { embedded?: boolean
 
   return (
     <div className={embedded ? "" : "p-6"}>
-      {!embedded && <PageHeader
-        icon={LibraryBig}
-        title={tr("games_title", "Games")}
-        count={entries?.length}
-        loading={loading}
-        description={tr(
-          "library_description",
-          undefined,
-          "Games and disk images anywhere on your PS5. Games are folders containing sce_sys/param.json; disk images are .exfat, .ffpkg, and .ffpfs files.",
-        )}
-        right={
-          <Button
-            variant="secondary"
-            size="sm"
-            leftIcon={<RefreshCw size={12} />}
-            onClick={refresh}
-            disabled={loading || !host?.trim()}
-            loading={loading}
-          >
-            {tr("refresh", undefined, "Refresh")}
-          </Button>
-        }
-      />}
+      {!embedded && (
+        <PageHeader
+          icon={LibraryBig}
+          title={tr("games_title", "Games")}
+          count={entries?.length}
+          loading={loading}
+          description={tr(
+            "library_description",
+            undefined,
+            "Games and disk images anywhere on your PS5. Games are folders containing sce_sys/param.json; disk images are .exfat, .ffpkg, and .ffpfs files.",
+          )}
+          right={
+            <Button
+              variant="secondary"
+              size="sm"
+              leftIcon={<RefreshCw size={12} />}
+              onClick={refresh}
+              disabled={loading || !host?.trim()}
+              loading={loading}
+            >
+              {tr("refresh", undefined, "Refresh")}
+            </Button>
+          }
+        />
+      )}
       {embedded && (
         <div className="mb-4 flex justify-end">
           <Button
@@ -407,6 +484,14 @@ export default function LibraryScreen({ embedded = false }: { embedded?: boolean
           </Button>
         </div>
       )}
+
+      {/* An open edit session hides a game from the PS5 home screen, so the
+          reminder sits above the list rather than inside the row it came
+          from — the user may well arrive here from a different screen, or a
+          different session entirely. */}
+      <div className="mb-4 empty:hidden">
+        <EditSessionBanner />
+      </div>
 
       {error && (
         <div className="mb-4">
@@ -575,6 +660,8 @@ export default function LibraryScreen({ embedded = false }: { embedded?: boolean
                     mountMap={mountMap}
                     pendingMounts={pendingMounts}
                     volumes={volumes}
+                    registeredBySource={registeredBySource}
+                    smpRunning={smpRunning}
                     onChanged={refresh}
                   />
                 </section>
@@ -599,6 +686,8 @@ export default function LibraryScreen({ embedded = false }: { embedded?: boolean
                     mountMap={mountMap}
                     pendingMounts={pendingMounts}
                     volumes={volumes}
+                    registeredBySource={registeredBySource}
+                    smpRunning={smpRunning}
                     onChanged={refresh}
                   />
                 </section>
@@ -618,6 +707,12 @@ export default function LibraryScreen({ embedded = false }: { embedded?: boolean
  *  FILE_LIST_RENDER_CAP). */
 const LIBRARY_SECTION_RENDER_CAP = 100;
 
+/** Where an edit checkout mounts by default: a folder ShadowMount+ does not
+ *  scan. Its default scan roots are `<volume>/homebrew`, which is also the
+ *  recommended preset for ordinary mounts — so the edit flow needs its own
+ *  default or every first attempt is rejected by the scan-root guard. */
+const EDIT_MOUNT_SUBPATH = "ps5upload/mnt";
+
 function CappedRows({
   entries,
   expanded,
@@ -626,6 +721,8 @@ function CappedRows({
   mountMap,
   pendingMounts,
   volumes,
+  registeredBySource,
+  smpRunning,
   onChanged,
 }: {
   entries: LibraryEntry[];
@@ -635,6 +732,8 @@ function CappedRows({
   mountMap: Map<string, string>;
   pendingMounts: Map<string, string>;
   volumes: Volume[];
+  registeredBySource: Map<string, RegisteredTitle>;
+  smpRunning: boolean;
   onChanged: () => void;
 }) {
   const tr = useTr();
@@ -657,6 +756,8 @@ function CappedRows({
           mountMap={mountMap}
           pendingMounts={pendingMounts}
           volumes={volumes}
+          registeredBySource={registeredBySource}
+          smpRunning={smpRunning}
           onChanged={onChanged}
         />
       ))}
@@ -712,6 +813,7 @@ type BusyState =
   | "launch"
   | "register"
   | "unregister"
+  | "edit-checkout"
   | "heal";
 
 interface DownloadProgress {
@@ -725,6 +827,8 @@ function LibraryRowImpl({
   mountMap,
   pendingMounts,
   volumes,
+  registeredBySource,
+  smpRunning,
   onChanged,
 }: {
   entry: LibraryEntry;
@@ -741,6 +845,12 @@ function LibraryRowImpl({
   /** Writable PS5 volumes — surfaced to the Move modal as the
    *  destination dropdown. */
   volumes: Volume[];
+  /** source_path → registered title. Supplies the name + cover for
+   *  disk-image rows, which have no readable `sce_sys/` of their own. */
+  registeredBySource: Map<string, RegisteredTitle>;
+  /** ShadowMount+ is running, so it owns any image in a scan folder. Gates
+   *  the "Edit files…" action, which works by taking the image away from it. */
+  smpRunning: boolean;
   onChanged: () => void;
 }) {
   const tr = useTr();
@@ -751,9 +861,7 @@ function LibraryRowImpl({
     !!entry.titleId &&
     runningTitleIds.has(entry.titleId);
   const playSeconds = usePlayTimeStore((s) =>
-    entry.kind === "game"
-      ? playSecondsFor(s, host, entry.titleId)
-      : undefined,
+    entry.kind === "game" ? playSecondsFor(s, host, entry.titleId) : undefined,
   );
   const kindLabel =
     entry.kind === "game"
@@ -791,6 +899,15 @@ function LibraryRowImpl({
   const [meta, setMeta] = useState<GameMeta | null>(null);
   const [moveOpen, setMoveOpen] = useState(false);
   const [mountOpen, setMountOpen] = useState(false);
+  // What the mount modal is being used FOR. "mount" is the ordinary
+  // mount/hand-off; "edit" runs a ShadowMount+ checkout instead, using the
+  // same destination picker so the user still chooses where it lands.
+  const [mountIntent, setMountIntent] = useState<"mount" | "edit">("mount");
+  // Checking an image out hides the game from the PS5 home screen and edits
+  // are not undoable, so it goes through the shared confirm dialog rather
+  // than the row's inline ConfirmRow (which is for the simple delete/chmod
+  // pair and has no room for the explanation this needs).
+  const { confirm: confirmDialog, dialog: confirmDialogNode } = useConfirm();
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [downloadProgress, setDownloadProgress] =
     useState<DownloadProgress | null>(null);
@@ -856,6 +973,18 @@ function LibraryRowImpl({
       ? (mountMap.get(entry.path) ?? pendingMounts.get(entry.path) ?? null)
       : null;
   const isMounted = currentMount !== null;
+  // A `.exfat`/`.ffpkg` row carries no readable metadata of its own — the
+  // `sce_sys/` folder lives *inside* the image. But if the console has the
+  // title registered from this exact source path, /user/appmeta already holds
+  // its name and cover, so use those. Without this an image row could only
+  // ever show its filename and a generic glyph, which is what made a library
+  // of disk images look like it had no cover art at all.
+  const registeredTitle =
+    entry.kind === "image"
+      ? (registeredBySource.get(entry.path) ??
+        registeredBySource.get(imageBasename(entry.path)) ??
+        null)
+      : null;
 
   // Metadata fetch: skipped for disk images (single file, no sce_sys
   // inside) and for generic "folder" kind under non-game scopes.
@@ -1038,10 +1167,22 @@ function LibraryRowImpl({
         const smp = await smpStatus(mgmt);
         if (smp.running) {
           const r = await smpManualInstall(mgmt, entry.path);
+          // Be explicit that ShadowMount+ — not us — chose the mount point,
+          // and that a path the user picked in the modal was NOT used. The
+          // old note said only "handed off", so someone who had just typed
+          // /data/ps5upload/ went looking for their image there and found
+          // nothing. We can't honour their path here: SMP re-attaches an
+          // image within ~15s of noticing its mount is gone, so a second,
+          // writable mount of the same file would race it.
+          const chosePath = !!(opts.mountPoint || opts.mountName);
+          const where = `ShadowMount+ mounts it under ${SMP_MOUNT_ROOT}/ and registers it (watch your PS5 for the toast).`;
+          const ignored = chosePath
+            ? ` Your chosen mount point wasn't used — ShadowMount+ owns this image while it's in a folder ShadowMount+ scans. To mount it somewhere of your own, move it out of that folder first.`
+            : "";
           setMountNote(
             r.added
-              ? `Handed "${entry.name}" to ShadowMount+ — it will mount + register it shortly (watch your PS5 for the toast).`
-              : `"${entry.name}" is already in ShadowMount+'s install list.`,
+              ? `Handed "${entry.name}" to ShadowMount+. ${where}${ignored}`
+              : `"${entry.name}" is already in ShadowMount+'s install list. ${where}${ignored}`,
           );
           onChanged();
           return;
@@ -1685,6 +1826,115 @@ function LibraryRowImpl({
   /** Unmount: flipped from Mount when the archive is currently
    *  mounted. Runs the same fsUnmount the Volumes screen uses.
    *  onChanged refreshes the volumes list which feeds the mountMap. */
+  /**
+   * Check this image out of ShadowMount+ and mount it read-write so its
+   * contents can be edited.
+   *
+   * ShadowMount+ mounts everything read-only and re-attaches any image whose
+   * mount vanishes within one scan sweep, so "edit in place" means moving the
+   * image out of its scan folders for the duration. The engine owns that
+   * sequence (and journals it on the console so an interrupted session can be
+   * finished); this only collects the destination and reports the outcome.
+   *
+   * Deliberately gated behind a destructive confirm: while the session is open
+   * the game disappears from the PS5 home screen, and a bad edit to a game
+   * image is not undoable.
+   */
+  const runEditCheckout = async (opts: {
+    mountName?: string;
+    mountPoint?: string;
+    persistDest?: { volume: string; subpath: string };
+  }) => {
+    if (entry.kind !== "image") return;
+    setMountOpen(false);
+    if (!opts.mountPoint) {
+      setError(
+        tr(
+          "library_edit_needs_mount_point",
+          undefined,
+          "Editing needs an explicit mount point. Update the PS5 helper to a version that supports choosing one.",
+        ),
+      );
+      return;
+    }
+    const ok = await confirmDialog({
+      title: tr(
+        "library_edit_confirm_title",
+        undefined,
+        "Edit this game image?",
+      ),
+      message: tr(
+        "library_edit_confirm_body",
+        { name: entry.name, mountPoint: opts.mountPoint },
+        `${entry.name} will be moved out of ShadowMount+'s folder and mounted read-write at ${opts.mountPoint}.\n\nWhile you're editing, the game disappears from the PS5 home screen. It comes back when you finish the edit session.\n\nChanging the wrong file inside a game image can stop it launching, and there is no undo. Back it up first if you're not sure.`,
+      ),
+      confirmLabel: tr(
+        "library_edit_confirm_ok",
+        undefined,
+        "Check out for editing",
+      ),
+      destructive: true,
+    });
+    if (!ok) return;
+
+    setBusy("edit-checkout");
+    setError(null);
+    setMountNote(null);
+    const activityId = useActivityHistoryStore
+      .getState()
+      .start(
+        "library-edit-checkout",
+        `Checking out ${entry.name} for editing`,
+        {
+          addr: `${host}:${PS5_PAYLOAD_PORT}`,
+          fromPath: entry.path,
+          toPath: opts.mountPoint,
+        },
+      );
+    let okOutcome = true;
+    let errMsg: string | null = null;
+    try {
+      const res = await smpCheckoutBegin(
+        `${host}:${PS5_PAYLOAD_PORT}`,
+        entry.path,
+        opts.mountPoint,
+        registeredTitle?.titleId ?? "",
+      );
+      if (opts.persistDest) saveMountDest(host, opts.persistDest);
+      // Refresh the shared session store so the banner appears immediately
+      // rather than on the next screen mount.
+      await useEditSessionStore.getState().refresh(host);
+      setMountNote(
+        `Checked out for editing — mounted read-write at ${res.mount.mount_point}. Use "Open files" in the banner above to change its contents, then Finish editing to put it back.`,
+      );
+      onChanged();
+    } catch (e) {
+      okOutcome = false;
+      errMsg = e instanceof Error ? e.message : String(e);
+      const human = humanizePs5Error(errMsg);
+      setError(human);
+      pushNotification(
+        "error",
+        withConsolePrefix(
+          host,
+          tr(
+            "notif_library_edit_failed",
+            undefined,
+            "Checkout for editing failed",
+          ),
+        ),
+        { body: human },
+      );
+    } finally {
+      useActivityHistoryStore
+        .getState()
+        .finish(activityId, okOutcome ? "done" : "failed", {
+          error: errMsg ?? undefined,
+        });
+      setBusy(null);
+    }
+  };
+
   const runUnmount = async () => {
     // 2.2.55: works for both image rows AND game rows whose backing
     // image is mounted. For image rows: mount_point comes from
@@ -2128,19 +2378,20 @@ function LibraryRowImpl({
           entry={entry}
           meta={meta}
           host={host}
+          registeredTitleId={registeredTitle?.titleId ?? null}
           fallbackIcon={Icon}
         />
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium">
-            {meta?.title ?? entry.name}
+            {meta?.title ?? registeredTitle?.titleName ?? entry.name}
           </div>
           <div className="mt-0.5 truncate font-mono text-xs text-[var(--color-muted)]">
-            {meta?.title_id ? (
+            {(meta?.title_id ?? registeredTitle?.titleId) ? (
               <>
                 <span className="text-[var(--color-accent)]">
-                  {meta.title_id}
+                  {meta?.title_id ?? registeredTitle?.titleId}
                 </span>
-                {meta.content_version ? ` · v${meta.content_version}` : ""}
+                {meta?.content_version ? ` · v${meta.content_version}` : ""}
                 {" · "}
               </>
             ) : null}
@@ -2223,7 +2474,10 @@ function LibraryRowImpl({
                 variant="primary"
                 size="sm"
                 leftIcon={<Play size={12} />}
-                onClick={() => setMountOpen(true)}
+                onClick={() => {
+                  setMountIntent("mount");
+                  setMountOpen(true);
+                }}
                 /* Pre-disable on entries with no recognized image
                  * format (imageFormat null/undefined) — the payload
                  * would respond with `fs_mount_unsupported_format`
@@ -2446,6 +2700,28 @@ function LibraryRowImpl({
                 ),
               });
             }
+            // Edit-in-place is only meaningful for a disk image that
+            // ShadowMount+ is managing: it works by taking the image out of
+            // SMP's scan folders, which is a no-op (and a confusing offer)
+            // when SMP isn't running. An image we've mounted ourselves is
+            // already writable through the ordinary Mount flow.
+            if (entry.kind === "image" && smpRunning && !isMounted) {
+              items.push({
+                label: tr("library_edit_files", undefined, "Edit files…"),
+                icon: <FilePenLine size={12} />,
+                onSelect: () => {
+                  setMountIntent("edit");
+                  setMountOpen(true);
+                },
+                disabled: busy !== null || !entry.imageFormat,
+                loading: busy === "edit-checkout",
+                title: tr(
+                  "library_edit_files_tooltip",
+                  undefined,
+                  "Take this image out of ShadowMount+ and mount it read-write so you can add or replace files inside it",
+                ),
+              });
+            }
             items.push({
               label: tr("library_download", undefined, "Download"),
               icon: <Download size={12} />,
@@ -2512,10 +2788,7 @@ function LibraryRowImpl({
       {busy && (
         <div className="flex flex-col gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-2 text-xs">
           <div className="flex items-center gap-2">
-            <Spinner
-              size={12}
-              tone="accent"
-            />
+            <Spinner size={12} tone="accent" />
             <span className="font-medium">
               {busy === "delete"
                 ? tr("library_busy_delete", undefined, "Deleting")
@@ -2714,6 +2987,7 @@ function LibraryRowImpl({
         />
       )}
 
+      {confirmDialogNode}
       {mountOpen && entry.kind === "image" && (
         <MountModal
           entry={entry}
@@ -2721,8 +2995,10 @@ function LibraryRowImpl({
           volumes={volumes}
           payloadVersion={payloadVersion}
           onCancel={() => setMountOpen(false)}
+          intent={mountIntent}
           onConfirm={(opts) => {
-            void runMount(opts);
+            if (mountIntent === "edit") void runEditCheckout(opts);
+            else void runMount(opts);
           }}
         />
       )}
@@ -3084,13 +3360,19 @@ function MoveModal({
             really wants to inject a deeper subpath, they can put it
             in the subpath field above. */}
         <Input
-          label={tr("library_move_modal_name", undefined, "Name (optional rename)")}
+          label={tr(
+            "library_move_modal_name",
+            undefined,
+            "Name (optional rename)",
+          )}
           block={false}
           value={customName}
           onChange={(e) => setCustomName(e.target.value)}
           placeholder={sourceBasename(entry.path)}
           className={
-            nameInvalid ? "border-[var(--color-bad)]" : "border-[var(--color-border)]"
+            nameInvalid
+              ? "border-[var(--color-bad)]"
+              : "border-[var(--color-border)]"
           }
           hint={tr(
             "library_move_modal_name_hint",
@@ -3185,11 +3467,16 @@ function MountModal({
   host,
   volumes,
   payloadVersion,
+  intent = "mount",
   onCancel,
   onConfirm,
 }: {
   entry: LibraryEntry;
   host: string;
+  /** "mount" is the ordinary mount. "edit" reuses this destination picker to
+   *  choose where a ShadowMount+ checkout gets mounted read-write, so the
+   *  labels have to say what the confirm button will actually do. */
+  intent?: "mount" | "edit";
   /** Live writable-volumes list from `fetchVolumes`. Drives the volume
    *  dropdown options — we trust the live probe over a hardcoded
    *  fallback so a ghost USB slot doesn't appear in the picker. */
@@ -3270,6 +3557,18 @@ function MountModal({
   // saved subpath (preserves the user's chosen folder convention).
   const initialDest = useMemo(() => {
     const saved = loadMountDest(host);
+    // An edit checkout mounted under `homebrew/` would sit inside a
+    // ShadowMount+ scan root, which the engine refuses outright — SMP would
+    // try to adopt the edit session as a second copy of the game. The saved
+    // dest is almost always `homebrew` (it's the recommended preset for
+    // ordinary mounts), so for the edit intent we ignore it and default
+    // somewhere SMP does not look.
+    if (intent === "edit") {
+      return {
+        volume: imageVolume ?? dropdownPaths[0] ?? "/data",
+        subpath: EDIT_MOUNT_SUBPATH,
+      };
+    }
     if (saved && (!imageVolume || saved.volume === imageVolume)) {
       return saved;
     }
@@ -3281,7 +3580,7 @@ function MountModal({
     // need to recompute when it changes — the user's saved dest +
     // image-volume is the source of truth.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [host, imageVolume]);
+  }, [host, imageVolume, intent]);
   const [volume, setVolume] = useState<string>(initialDest.volume);
   const [subpath, setSubpath] = useState<string>(initialDest.subpath);
   const [name, setName] = useState<string>(derivedName);
@@ -3466,7 +3765,9 @@ function MountModal({
           onChange={(e) => setName(e.target.value)}
           placeholder={derivedName}
           className={
-            nameInvalid ? "border-[var(--color-bad)]" : "border-[var(--color-border)]"
+            nameInvalid
+              ? "border-[var(--color-bad)]"
+              : "border-[var(--color-border)]"
           }
           hint={tr(
             "library_mount_modal_name_hint",
@@ -3629,7 +3930,9 @@ function MountModal({
               }
             }}
           >
-            {tr("library_mount_modal_run", undefined, "Mount")}
+            {intent === "edit"
+              ? tr("library_edit_modal_run", undefined, "Check out for editing")
+              : tr("library_mount_modal_run", undefined, "Mount")}
           </Button>
         </div>
       </div>
@@ -3641,11 +3944,16 @@ function LibraryThumb({
   entry,
   meta,
   host,
+  registeredTitleId,
   fallbackIcon: FallbackIcon,
 }: {
   entry: LibraryEntry;
   meta: GameMeta | null;
   host: string;
+  /** Title id the console has registered from this row's source path, when
+   *  there is one. Disk-image rows have no `sce_sys/` to read, so this is
+   *  their only route to cover art — /user/appmeta/<id>/icon0.png. */
+  registeredTitleId: string | null;
   fallbackIcon: LucideIcon;
 }) {
   // Local swap-on-error: the meta.has_icon probe is best-effort; the
@@ -3653,12 +3961,21 @@ function LibraryThumb({
   // just deleted). Keeping the fallback icon rendered under the img
   // (as a sibling) means we don't have to re-render the wrapper.
   const [failed, setFailed] = useState(false);
-  const showIcon = meta?.has_icon && !failed && host?.trim();
+  // Folder rows read their own sce_sys/icon0.png; image rows go through
+  // appmeta. `meta.has_icon` gates the folder source because we probed it —
+  // there is no equivalent probe for appmeta, so we just try the fetch and let
+  // onError fall back to the glyph.
+  const src = meta?.has_icon
+    ? gameIconUrl(`${host}:${PS5_PAYLOAD_PORT}`, entry.path)
+    : registeredTitleId
+      ? appIconUrl(`${host}:${PS5_PAYLOAD_PORT}`, registeredTitleId)
+      : null;
+  const showIcon = src && !failed && host?.trim();
   return (
     <div className="relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-md bg-[var(--color-surface-3)]">
       {showIcon ? (
         <img
-          src={gameIconUrl(`${host}:${PS5_PAYLOAD_PORT}`, entry.path)}
+          src={src}
           alt=""
           // lazy: a big library's thumbnails are icon0.png fetched over HTTP
           // from the single-client PS5 — loading them only as rows scroll into
@@ -3744,10 +4061,7 @@ function FpkgKstuffTip() {
   const [dismissed, setDismissed] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
     try {
-      return (
-        safeGetItem("ps5upload.fpkg-kstuff-tip.dismissed") ===
-        "1"
-      );
+      return safeGetItem("ps5upload.fpkg-kstuff-tip.dismissed") === "1";
     } catch {
       return false;
     }

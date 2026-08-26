@@ -29,6 +29,7 @@ import { pickPath, pickPaths } from "../../lib/pickPath";
 import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { isTauriEnv } from "../../lib/tauriEnv";
 import { PageHeader, Button, ConnectionGate, Spinner, ErrorCard } from "../../components";
+import EditSessionBanner from "../../components/EditSessionBanner";
 // Direct import to avoid the barrel's circular-dep warning at build.
 import {
   useConfirm,
@@ -1794,6 +1795,14 @@ export default function FileSystemScreen() {
       />
 
       <ConnectionGate require="payload">
+        {/* An open edit session means the browsed mount is a game image
+            checked out of ShadowMount+ — and that the game is missing from
+            the PS5 home screen until it's finished. This is the screen the
+            user does the editing on, so the way back has to be here too. */}
+        <div className="mb-2 empty:hidden">
+          <EditSessionBanner />
+        </div>
+
         {/* Volume picker. Renders only when we have at least one
           writable volume — otherwise it's clutter. Selecting a
           volume jumps to its root, mirroring how Library's Move

@@ -2678,6 +2678,23 @@ upload_split_unsupported_title: "Ceci est une archive fractionnée ({count} volu
 upload_split_unsupported_body: "L'envoyer transmet le volume brut à votre PS5, qui ne peut rien en faire. Réunissez d'abord les volumes en une seule archive : ouvrez le premier volume avec 7-Zip ou WinRAR et extrayez, puis envoyez le dossier extrait ou une archive unique.",
 upload_split_unsupported_target: "Se réunit en : {name}",
 
+
+// Editing a game image in place (ShadowMount+ checkout)
+library_edit_files: "Modifier les fichiers…",
+library_edit_files_tooltip: "Retirer cette image de ShadowMount+ et la monter en écriture pour ajouter ou remplacer des fichiers à l'intérieur",
+library_edit_modal_run: "Retirer pour modification",
+library_edit_confirm_title: "Modifier cette image de jeu ?",
+library_edit_confirm_body: "{name} sera déplacé hors du dossier de ShadowMount+ et monté en écriture sur {mountPoint}.\n\nPendant la modification, le jeu disparaît de l'écran d'accueil de la PS5. Il revient une fois la session terminée.\n\nModifier le mauvais fichier dans une image de jeu peut l'empêcher de démarrer, et il n'y a pas d'annulation possible. Faites une sauvegarde au préalable en cas de doute.",
+library_edit_confirm_ok: "Retirer pour modification",
+library_edit_needs_mount_point: "La modification nécessite un point de montage explicite. Mettez à jour l'assistant PS5 vers une version qui permet de le choisir.",
+notif_library_edit_failed: "Échec du retrait pour modification",
+edit_session_title: "Modification de {name}",
+edit_session_body: "Tant que cette session est ouverte, le jeu reste masqué sur l'écran d'accueil de la PS5 — ShadowMount+ ne trouve pas l'image à son emplacement actuel. Terminez la modification pour la remettre en place.",
+edit_session_open: "Ouvrir les fichiers",
+edit_session_finish: "Terminer la modification",
+edit_session_done: "Session de modification terminée",
+edit_session_done_body: "{name} est de retour dans son dossier d'origine. ShadowMount+ le montera et l'enregistrera à nouveau d'ici environ une minute.",
+
 };
 
 export default fr;

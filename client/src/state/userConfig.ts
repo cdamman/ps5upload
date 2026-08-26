@@ -9,6 +9,7 @@ import { useConnectionStore } from "./connection";
 import { useEngineStore, normalizeEngineUrl } from "./engine";
 import { useSaveSettingsStore, normalizeSavePath } from "./saveSettings";
 import { useAccessibilityStore } from "./accessibility";
+import { useNavFavoritesStore } from "./navFavorites";
 
 /**
  * Mirror all persisted user settings to `~/.ps5upload/settings.json`.
@@ -48,6 +49,15 @@ interface SettingsSnapshot {
     show_transfer_files?: boolean;
     bandwidth_cap_mbps?: number;
   };
+  /** Sidebar Favorites — which screens the user pinned, in their order.
+   *  Mirrored like every other preference so a pinned sidebar survives a
+   *  storage reset, a reinstall, or a hand-edit of this file. Before this was
+   *  mirrored, Favorites was the ONE setting that lived only in localStorage
+   *  and so was the one users lost. */
+  nav?: {
+    favorites?: string[];
+    favorites_hint_dismissed?: boolean;
+  };
   accessibility?: {
     motion?: string;
     density?: string;
@@ -72,6 +82,10 @@ function snapshotCurrent(): SettingsSnapshot {
       reconcile_mode: useUploadSettingsStore.getState().reconcileMode,
       show_transfer_files: useUploadSettingsStore.getState().showTransferFiles,
       bandwidth_cap_mbps: useUploadSettingsStore.getState().bandwidthCapMbps,
+    },
+    nav: {
+      favorites: useNavFavoritesStore.getState().favorites,
+      favorites_hint_dismissed: useNavFavoritesStore.getState().hintDismissed,
     },
     accessibility: {
       motion: useAccessibilityStore.getState().motion,
@@ -137,6 +151,7 @@ export function installUserConfigMirror() {
   });
   useSaveSettingsStore.subscribe(schedulePersist);
   useAccessibilityStore.subscribe(schedulePersist);
+  useNavFavoritesStore.subscribe(schedulePersist);
 }
 
 /** Tell the Rust shell which engine URL its proxies should hit. */
@@ -193,7 +208,9 @@ export async function hydrateFromUserConfig(): Promise<void> {
   // Drop the no-op guard and rely on the value-inequality check.
   const liveTheme = useThemeStore.getState().theme;
   if (
-    (data.theme === "dark" || data.theme === "light" || data.theme === "oled") &&
+    (data.theme === "dark" ||
+      data.theme === "light" ||
+      data.theme === "oled") &&
     data.theme !== liveTheme
   ) {
     useThemeStore.getState().setTheme(data.theme);
@@ -233,7 +250,10 @@ export async function hydrateFromUserConfig(): Promise<void> {
     useSaveSettingsStore.getState().setSavePath(data.save_path);
   }
   const liveKeepAwake = useKeepAwakeStore.getState().enabled;
-  if (typeof data.keep_awake === "boolean" && data.keep_awake !== liveKeepAwake) {
+  if (
+    typeof data.keep_awake === "boolean" &&
+    data.keep_awake !== liveKeepAwake
+  ) {
     await useKeepAwakeStore.getState().setEnabled(data.keep_awake);
   }
   if (data.upload) {
@@ -268,6 +288,19 @@ export async function hydrateFromUserConfig(): Promise<void> {
   // already scheduled a debounced persist; this ensures the file
   // converges to the authoritative (merged) snapshot without waiting
   // for the debounce window.
+  if (data.nav && Array.isArray(data.nav.favorites)) {
+    const fav = data.nav.favorites.filter((p) => typeof p === "string");
+    const ns = useNavFavoritesStore.getState();
+    // Compare by content, not identity — a no-op hydrate would re-fire the
+    // mirror write on every launch.
+    const same =
+      fav.length === ns.favorites.length &&
+      fav.every((p, i) => p === ns.favorites[i]);
+    const hint = data.nav.favorites_hint_dismissed;
+    if (!same || (typeof hint === "boolean" && hint !== ns.hintDismissed)) {
+      ns.setFavorites(fav, typeof hint === "boolean" ? hint : undefined);
+    }
+  }
   if (data.accessibility) {
     const a = data.accessibility;
     const as = useAccessibilityStore.getState();

@@ -2643,6 +2643,23 @@ upload_split_unsupported_title: "Đây là kho lưu trữ chia nhỏ ({count} t�
 upload_split_unsupported_body: "Tải lên sẽ gửi tập thô sang PS5 và máy không dùng được. Hãy ghép các tập lại thành một tệp trước: mở tập đầu tiên bằng 7-Zip hoặc WinRAR rồi giải nén, sau đó tải lên thư mục đã giải nén hoặc một tệp nén duy nhất.",
 upload_split_unsupported_target: "Ghép lại thành: {name}",
 
+
+// Editing a game image in place (ShadowMount+ checkout)
+library_edit_files: "Sửa tệp…",
+library_edit_files_tooltip: "Lấy ảnh đĩa này ra khỏi ShadowMount+ và gắn kết ở chế độ ghi để thêm hoặc thay thế tệp bên trong",
+library_edit_modal_run: "Lấy ra để chỉnh sửa",
+library_edit_confirm_title: "Chỉnh sửa ảnh đĩa game này?",
+library_edit_confirm_body: "{name} sẽ được chuyển ra khỏi thư mục của ShadowMount+ và gắn kết ở chế độ ghi tại {mountPoint}.\n\nTrong lúc bạn chỉnh sửa, game sẽ biến mất khỏi màn hình chính của PS5. Nó quay lại khi bạn kết thúc phiên chỉnh sửa.\n\nSửa nhầm tệp bên trong ảnh đĩa game có thể khiến game không khởi động được, và không thể hoàn tác. Hãy sao lưu trước nếu bạn không chắc chắn.",
+library_edit_confirm_ok: "Lấy ra để chỉnh sửa",
+library_edit_needs_mount_point: "Việc chỉnh sửa cần một điểm gắn kết rõ ràng. Hãy cập nhật trình trợ giúp PS5 lên phiên bản cho phép chọn điểm gắn kết.",
+notif_library_edit_failed: "Lấy ra để chỉnh sửa thất bại",
+edit_session_title: "Đang sửa {name}",
+edit_session_body: "Khi phiên này còn mở, game vẫn bị ẩn khỏi màn hình chính của PS5 — ShadowMount+ không thấy ảnh đĩa ở vị trí hiện tại. Kết thúc chỉnh sửa để đưa nó về chỗ cũ.",
+edit_session_open: "Mở tệp",
+edit_session_finish: "Kết thúc chỉnh sửa",
+edit_session_done: "Đã kết thúc phiên chỉnh sửa",
+edit_session_done_body: "{name} đã trở lại thư mục ban đầu. ShadowMount+ sẽ gắn kết và đăng ký lại trong khoảng một phút.",
+
 };
 
 export default vi;

@@ -2588,6 +2588,23 @@ upload_split_unsupported_title: "Este es un archivo dividido ({count} volúmenes
 upload_split_unsupported_body: "Subirlo envía el volumen en bruto a tu PS5, que no puede usarlo. Primero une los volúmenes en un solo archivo: abre el primero con 7-Zip o WinRAR y extrae, luego sube la carpeta extraída o un único archivo con ella.",
 upload_split_unsupported_target: "Se une en: {name}",
 
+
+// Editing a game image in place (ShadowMount+ checkout)
+library_edit_files: "Editar archivos…",
+library_edit_files_tooltip: "Saca esta imagen de ShadowMount+ y móntala con permisos de escritura para añadir o reemplazar archivos dentro de ella",
+library_edit_modal_run: "Retirar para editar",
+library_edit_confirm_title: "¿Editar esta imagen de juego?",
+library_edit_confirm_body: "{name} se moverá fuera de la carpeta de ShadowMount+ y se montará con permisos de escritura en {mountPoint}.\n\nMientras editas, el juego desaparece de la pantalla de inicio de la PS5. Vuelve cuando termines la sesión de edición.\n\nCambiar el archivo equivocado dentro de una imagen de juego puede impedir que arranque, y no hay forma de deshacerlo. Haz una copia de seguridad antes si no estás seguro.",
+library_edit_confirm_ok: "Retirar para editar",
+library_edit_needs_mount_point: "La edición necesita un punto de montaje explícito. Actualiza el asistente de la PS5 a una versión que permita elegirlo.",
+notif_library_edit_failed: "No se pudo retirar para editar",
+edit_session_title: "Editando {name}",
+edit_session_body: "Mientras esto esté abierto, el juego permanece oculto en la pantalla de inicio de la PS5: ShadowMount+ no encuentra la imagen donde está ahora. Termina la edición para devolverla a su sitio.",
+edit_session_open: "Abrir archivos",
+edit_session_finish: "Terminar edición",
+edit_session_done: "Sesión de edición terminada",
+edit_session_done_body: "{name} ha vuelto a su carpeta original. ShadowMount+ la montará y registrará de nuevo en aproximadamente un minuto.",
+
 };
 
 export default es;

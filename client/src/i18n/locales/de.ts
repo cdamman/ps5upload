@@ -2649,6 +2649,23 @@ upload_split_unsupported_title: "Das ist ein geteiltes Archiv ({count} Bände), 
 upload_split_unsupported_body: "Beim Hochladen landet der rohe Band auf der PS5, die nichts damit anfangen kann. Füge die Bände zuerst wieder zu einem Archiv zusammen: Öffne den ersten Band mit 7-Zip oder WinRAR und entpacke ihn, lade dann den entpackten Ordner oder ein einzelnes Archiv davon hoch.",
 upload_split_unsupported_target: "Ergibt zusammengefügt: {name}",
 
+
+// Editing a game image in place (ShadowMount+ checkout)
+library_edit_files: "Dateien bearbeiten …",
+library_edit_files_tooltip: "Dieses Abbild aus ShadowMount+ herausnehmen und mit Schreibrechten einhängen, um Dateien darin hinzuzufügen oder zu ersetzen",
+library_edit_modal_run: "Zum Bearbeiten auschecken",
+library_edit_confirm_title: "Dieses Spielabbild bearbeiten?",
+library_edit_confirm_body: "{name} wird aus dem ShadowMount+-Ordner verschoben und mit Schreibrechten unter {mountPoint} eingehängt.\n\nWährend der Bearbeitung verschwindet das Spiel vom PS5-Startbildschirm. Es kommt zurück, sobald du die Bearbeitung abschließt.\n\nWird die falsche Datei in einem Spielabbild geändert, startet das Spiel möglicherweise nicht mehr — und es gibt kein Rückgängig. Erstelle im Zweifel vorher eine Sicherung.",
+library_edit_confirm_ok: "Zum Bearbeiten auschecken",
+library_edit_needs_mount_point: "Zum Bearbeiten wird ein ausdrücklicher Einhängepunkt benötigt. Aktualisiere den PS5-Helfer auf eine Version, die die Auswahl unterstützt.",
+notif_library_edit_failed: "Auschecken zum Bearbeiten fehlgeschlagen",
+edit_session_title: "{name} wird bearbeitet",
+edit_session_body: "Solange dies offen ist, bleibt das Spiel auf dem PS5-Startbildschirm ausgeblendet — ShadowMount+ findet das Abbild an seinem jetzigen Ort nicht. Schließe die Bearbeitung ab, um es zurückzulegen.",
+edit_session_open: "Dateien öffnen",
+edit_session_finish: "Bearbeitung abschließen",
+edit_session_done: "Bearbeitung abgeschlossen",
+edit_session_done_body: "{name} liegt wieder im ursprünglichen Ordner. ShadowMount+ hängt es innerhalb von etwa einer Minute wieder ein und registriert es erneut.",
+
 };
 
 export default de;

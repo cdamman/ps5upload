@@ -2678,6 +2678,23 @@ upload_split_unsupported_title: "यह एक विभाजित आर्�
 upload_split_unsupported_body: "इसे अपलोड करने पर कच्चा वॉल्यूम ही आपके PS5 पर चला जाता है, जिसे वह इस्तेमाल नहीं कर सकता। पहले वॉल्यूम को एक आर्काइव में जोड़ें: 7-Zip या WinRAR से पहला वॉल्यूम खोलकर निकालें, फिर निकाला हुआ फ़ोल्डर या उसका एक ही आर्काइव अपलोड करें।",
 upload_split_unsupported_target: "जुड़कर बनता है: {name}",
 
+
+// Editing a game image in place (ShadowMount+ checkout)
+library_edit_files: "फ़ाइलें संपादित करें…",
+library_edit_files_tooltip: "इस इमेज को ShadowMount+ से बाहर निकालें और लिखने की अनुमति के साथ माउंट करें, ताकि उसके अंदर फ़ाइलें जोड़ या बदल सकें",
+library_edit_modal_run: "संपादन के लिए बाहर निकालें",
+library_edit_confirm_title: "क्या इस गेम इमेज को संपादित करना है?",
+library_edit_confirm_body: "{name} को ShadowMount+ के फ़ोल्डर से बाहर ले जाया जाएगा और {mountPoint} पर लिखने की अनुमति के साथ माउंट किया जाएगा।\n\nसंपादन के दौरान गेम PS5 के होम स्क्रीन से गायब हो जाता है। संपादन सत्र समाप्त करने पर वह वापस आ जाता है।\n\nगेम इमेज के अंदर ग़लत फ़ाइल बदलने से गेम चलना बंद हो सकता है, और इसे पूर्ववत नहीं किया जा सकता। संदेह हो तो पहले बैकअप लें।",
+library_edit_confirm_ok: "संपादन के लिए बाहर निकालें",
+library_edit_needs_mount_point: "संपादन के लिए स्पष्ट माउंट पॉइंट चाहिए। PS5 हेल्पर को ऐसे संस्करण में अपडेट करें जो माउंट पॉइंट चुनने देता हो।",
+notif_library_edit_failed: "संपादन के लिए बाहर निकालना विफल",
+edit_session_title: "{name} संपादित हो रहा है",
+edit_session_body: "जब तक यह सत्र खुला है, गेम PS5 के होम स्क्रीन पर छिपा रहता है — ShadowMount+ को इमेज उसकी मौजूदा जगह पर नहीं दिखती। वापस रखने के लिए संपादन समाप्त करें।",
+edit_session_open: "फ़ाइलें खोलें",
+edit_session_finish: "संपादन समाप्त करें",
+edit_session_done: "संपादन सत्र समाप्त",
+edit_session_done_body: "{name} अपने मूल फ़ोल्डर में वापस आ गया है। ShadowMount+ लगभग एक मिनट में इसे फिर से माउंट और रजिस्टर कर देगा।",
+
 };
 
 export default hi;

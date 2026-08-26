@@ -3033,6 +3033,26 @@ nav_favorites_hint: "Star screens in More to pin them here.",
 nav_favorites_hint_dismiss: "Dismiss",
 nav_favorite_add: "Pin {name} to the sidebar",
 nav_favorite_remove: "Unpin {name} from the sidebar",
+
+// Editing a game image in place (ShadowMount+ checkout). ShadowMount+ mounts
+// everything read-only and re-adopts any image whose mount disappears, so
+// editing one means moving it out of SMP's scan folders for the duration —
+// which also hides the game from the PS5 home screen until you finish.
+library_edit_files: "Edit files…",
+library_edit_files_tooltip: "Take this image out of ShadowMount+ and mount it read-write so you can add or replace files inside it",
+library_edit_modal_run: "Check out for editing",
+library_edit_confirm_title: "Edit this game image?",
+library_edit_confirm_body: "{name} will be moved out of ShadowMount+'s folder and mounted read-write at {mountPoint}.\n\nWhile you're editing, the game disappears from the PS5 home screen. It comes back when you finish the edit session.\n\nChanging the wrong file inside a game image can stop it launching, and there is no undo. Back it up first if you're not sure.",
+library_edit_confirm_ok: "Check out for editing",
+library_edit_needs_mount_point: "Editing needs an explicit mount point. Update the PS5 helper to a version that supports choosing one.",
+notif_library_edit_failed: "Checkout for editing failed",
+edit_session_title: "Editing {name}",
+edit_session_body: "While this is open the game is hidden from the PS5 home screen — ShadowMount+ can't see the image where it is now. Finish editing to put it back.",
+edit_session_open: "Open files",
+edit_session_finish: "Finish editing",
+edit_session_done: "Edit session finished",
+edit_session_done_body: "{name} is back in its original folder. ShadowMount+ will mount and register it again within about a minute.",
+
 };
 
 export default en;

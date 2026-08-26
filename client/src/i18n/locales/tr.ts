@@ -2648,6 +2648,23 @@ upload_split_unsupported_title: "Bu, ps5upload'ın açamadığı bölünmüş bi
 upload_split_unsupported_body: "Yüklemek ham birimi PS5'inize gönderir ve PS5 bunu kullanamaz. Önce birimleri tek bir arşivde birleştirin: ilk birimi 7-Zip veya WinRAR ile açıp çıkarın, sonra çıkarılan klasörü ya da tek bir arşivini yükleyin.",
 upload_split_unsupported_target: "Birleşince: {name}",
 
+
+// Editing a game image in place (ShadowMount+ checkout)
+library_edit_files: "Dosyaları düzenle…",
+library_edit_files_tooltip: "Bu imajı ShadowMount+ içinden çıkarıp yazılabilir olarak bağla; böylece içindeki dosyaları ekleyebilir veya değiştirebilirsin",
+library_edit_modal_run: "Düzenlemek için çıkar",
+library_edit_confirm_title: "Bu oyun imajı düzenlensin mi?",
+library_edit_confirm_body: "{name}, ShadowMount+ klasöründen çıkarılacak ve {mountPoint} konumuna yazılabilir olarak bağlanacak.\n\nDüzenleme sürerken oyun PS5 ana ekranından kaybolur. Düzenleme oturumunu bitirdiğinde geri gelir.\n\nBir oyun imajı içinde yanlış dosyayı değiştirmek oyunun açılmamasına yol açabilir ve geri alınamaz. Emin değilsen önce yedek al.",
+library_edit_confirm_ok: "Düzenlemek için çıkar",
+library_edit_needs_mount_point: "Düzenleme için açık bir bağlama noktası gerekir. PS5 yardımcısını bunu seçmeye izin veren bir sürüme güncelle.",
+notif_library_edit_failed: "Düzenleme için çıkarma başarısız",
+edit_session_title: "{name} düzenleniyor",
+edit_session_body: "Bu oturum açıkken oyun PS5 ana ekranında gizli kalır — ShadowMount+ imajı bulunduğu yerde göremez. Geri koymak için düzenlemeyi bitir.",
+edit_session_open: "Dosyaları aç",
+edit_session_finish: "Düzenlemeyi bitir",
+edit_session_done: "Düzenleme oturumu bitti",
+edit_session_done_body: "{name} özgün klasörüne geri döndü. ShadowMount+ yaklaşık bir dakika içinde onu yeniden bağlayıp kaydedecek.",
+
 };
 
 export default tr;

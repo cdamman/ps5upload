@@ -1801,6 +1801,69 @@ export async function smpStatus(addr: string): Promise<SmpStatus> {
   return invoke<SmpStatus>("smp_status", { addr });
 }
 
+// ─── ShadowMount+ edit sessions ───────────────────────────────────────
+//
+// ShadowMount+ mounts every image it manages READ-ONLY and re-attaches any
+// image whose mount disappears within one scan sweep (~15 s), so an image it
+// owns cannot simply be unmounted and re-mounted read-write. Editing one means
+// moving it out of SMP's scan folders for the duration, which is what a
+// "checkout" is. The move is journalled on the console so a session
+// interrupted by a crash or a reboot can still be finished — otherwise the
+// user's game is left sitting somewhere ShadowMount+ can't see it.
+
+/** An image currently checked out for editing. At most one per console. */
+export interface SmpCheckout {
+  /** Where the image lives right now (the staging folder). */
+  staged_path: string;
+  /** Where it goes back to when the edit session finishes. */
+  original_path: string;
+  /** Where it is mounted read-write. */
+  mount_point: string;
+  /** Title id, when known. Empty otherwise. */
+  title_id: string;
+  started_at_ms: number;
+}
+
+export interface SmpCheckoutBeginResult {
+  checkout: SmpCheckout;
+  mount: MountResult;
+}
+
+/** Null when nothing is checked out on this console. */
+export async function smpCheckoutStatus(
+  transferAddr: string,
+): Promise<SmpCheckout | null> {
+  const addr = toMgmtAddr(transferAddr);
+  return invoke<SmpCheckout | null>("smp_checkout_status", { addr });
+}
+
+/** Check `imagePath` out of ShadowMount+ and mount it read-write at
+ *  `mountPoint`. Slow — it waits for ShadowMount+'s scan sweep to release its
+ *  own mount, which is up to `scan_interval_seconds` (15 s by default). */
+export async function smpCheckoutBegin(
+  transferAddr: string,
+  imagePath: string,
+  mountPoint: string,
+  titleId = "",
+): Promise<SmpCheckoutBeginResult> {
+  const addr = toMgmtAddr(transferAddr);
+  return invoke<SmpCheckoutBeginResult>("smp_checkout_begin", {
+    addr,
+    imagePath,
+    mountPoint,
+    titleId,
+  });
+}
+
+/** Unmount the edited image and put it back where ShadowMount+ will find it.
+ *  ShadowMount+ re-mounts and re-registers it on its next sweep. */
+export async function smpCheckoutFinish(
+  transferAddr: string,
+): Promise<SmpCheckout> {
+  const addr = toMgmtAddr(transferAddr);
+  return invoke<SmpCheckout>("smp_checkout_finish", { addr });
+}
+
 // ─── USB autoloader wizard ────────────────────────────────────────────
 
 export interface UsbDrive {

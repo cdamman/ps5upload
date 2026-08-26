@@ -18,3 +18,43 @@ export function isRemovableMount(path: string): boolean {
 export function removableMountRoot(path: string): string | null {
   return path.match(/^(\/mnt\/(?:usb|ext)[^/]*)/i)?.[1] ?? null;
 }
+
+/** Root ShadowMount+ mounts every image under. Burned into SMP's source
+ *  (sm_config_mount.c) — not user-configurable. */
+export const SMP_MOUNT_ROOT = "/mnt/shadowmnt";
+
+/**
+ * Recover the source image's basename from a ShadowMount+ mount point.
+ *
+ * SMP names each mount `<image basename without extension>_<crc32 hex>` —
+ * `/mnt/shadowmnt/PPSA09016_ca51a0d7` came from a file called
+ * `PPSA09016.exfat`. It never records the original path anywhere we can read,
+ * so this naming rule is the only link between a mounted title and the disk
+ * image row it belongs to.
+ *
+ * Returns null for anything that isn't an SMP mount point in that exact shape,
+ * so a future SMP naming scheme degrades to "no match" rather than a wrong one.
+ *
+ * Note the hash is over the full source path, so two images with the SAME
+ * basename in different folders produce different mount points that both map
+ * back to that one basename. They're the same title in practice; the caller
+ * treats a basename collision as a match for either row.
+ */
+export function smpMountImageBasename(mountPoint: string): string | null {
+  const prefix = `${SMP_MOUNT_ROOT}/`;
+  if (!mountPoint.startsWith(prefix)) return null;
+  // SMP nests some backends one level deeper (e.g. `/mnt/shadowmnt/pfsc/<x>`);
+  // the leaf is always the `<name>_<crc32>` component.
+  const leaf = mountPoint.slice(prefix.length).split("/").filter(Boolean).pop();
+  if (!leaf) return null;
+  const m = leaf.match(/^(.+)_([0-9a-f]{8})$/);
+  return m ? m[1] : null;
+}
+
+/** A path's filename with any single trailing extension removed
+ *  (`/mnt/usb0/homebrew/PPSA09016.exfat` → `PPSA09016`). Used to match a
+ *  disk-image row against {@link smpMountImageBasename}. */
+export function imageBasename(path: string): string {
+  const leaf = path.split("/").pop() ?? "";
+  return leaf.replace(/\.[^.]+$/, "");
+}

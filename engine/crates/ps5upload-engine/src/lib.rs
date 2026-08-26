@@ -2695,6 +2695,81 @@ async fn ps5_smp_status(
     }
 }
 
+/// GET /api/ps5/smp/checkout — what, if anything, is checked out for editing.
+///
+/// Returns `{"checkout": null}` when nothing is. The renderer polls this on
+/// connect so an edit session interrupted by a crash, a reboot, or just
+/// closing the window can be finished rather than silently stranding the
+/// image outside ShadowMount+'s scan folders.
+async fn ps5_smp_checkout_status(
+    State(state): State<AppState>,
+    Query(q): Query<AddrQuery>,
+) -> impl IntoResponse {
+    let addr = mgmt_addr_or_default(q.addr, &state.default_ps5_addr);
+    let r = tokio::task::spawn_blocking(move || ps5upload_core::smp_checkout::read_state(&addr))
+        .await
+        .map_err(anyhow::Error::from)
+        .and_then(|r| r);
+    match r {
+        Ok(v) => (StatusCode::OK, Json(serde_json::json!({ "checkout": v }))).into_response(),
+        Err(e) => json_err(StatusCode::BAD_GATEWAY, format!("{e:#}")).into_response(),
+    }
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct SmpCheckoutBeginReq {
+    addr: Option<String>,
+    image_path: String,
+    mount_point: String,
+    #[serde(default)]
+    title_id: String,
+}
+
+/// POST /api/ps5/smp/checkout/begin — take an image out of ShadowMount+'s
+/// scan folders and mount it read-write so its contents can be edited.
+///
+/// Slow by design: it waits for ShadowMount+'s scan sweep (15 s by default)
+/// to notice the source has gone and release its read-only mount. See
+/// `ps5upload_core::smp_checkout` for why the image has to be moved rather
+/// than simply unmounted.
+async fn ps5_smp_checkout_begin(
+    State(state): State<AppState>,
+    Json(req): Json<SmpCheckoutBeginReq>,
+) -> impl IntoResponse {
+    let addr = mgmt_addr_or_default(req.addr, &state.default_ps5_addr);
+    let r = tokio::task::spawn_blocking(move || {
+        ps5upload_core::smp_checkout::begin(&addr, &req.image_path, &req.mount_point, &req.title_id)
+    })
+    .await
+    .map_err(anyhow::Error::from)
+    .and_then(|r| r);
+    match r {
+        Ok((checkout, mount)) => (
+            StatusCode::OK,
+            Json(serde_json::json!({ "checkout": checkout, "mount": mount })),
+        )
+            .into_response(),
+        Err(e) => json_err(StatusCode::BAD_GATEWAY, format!("{e:#}")).into_response(),
+    }
+}
+
+/// POST /api/ps5/smp/checkout/finish — unmount the edited image, put it back
+/// where ShadowMount+ will find it, and clear the journal.
+async fn ps5_smp_checkout_finish(
+    State(state): State<AppState>,
+    Json(q): Json<AddrQuery>,
+) -> impl IntoResponse {
+    let addr = mgmt_addr_or_default(q.addr, &state.default_ps5_addr);
+    let r = tokio::task::spawn_blocking(move || ps5upload_core::smp_checkout::finish(&addr))
+        .await
+        .map_err(anyhow::Error::from)
+        .and_then(|r| r);
+    match r {
+        Ok(v) => (StatusCode::OK, Json(serde_json::json!({ "checkout": v }))).into_response(),
+        Err(e) => json_err(StatusCode::BAD_GATEWAY, format!("{e:#}")).into_response(),
+    }
+}
+
 #[derive(Debug, serde::Deserialize)]
 struct FanThresholdReq {
     addr: Option<String>,
@@ -8133,6 +8208,12 @@ async fn run(cfg: EngineConfig) -> anyhow::Result<()> {
         .route("/api/ps5/screenshots/list", get(ps5_screenshots_list))
         .route("/api/ps5/videos/list", get(ps5_videos_list))
         .route("/api/ps5/smp/status", get(ps5_smp_status))
+        .route("/api/ps5/smp/checkout", get(ps5_smp_checkout_status))
+        .route("/api/ps5/smp/checkout/begin", post(ps5_smp_checkout_begin))
+        .route(
+            "/api/ps5/smp/checkout/finish",
+            post(ps5_smp_checkout_finish),
+        )
         .route("/api/ps5/hw/fan-threshold", post(ps5_hw_set_fan_threshold))
         .route("/api/ps5/fs/chmod", post(ps5_fs_chmod))
         .route("/api/ps5/fs/mkdir", post(ps5_fs_mkdir))

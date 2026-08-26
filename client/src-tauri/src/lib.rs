@@ -335,6 +335,13 @@ pub fn run() {
             // into the console. We never write SMP's files. See
             // commands/smp.rs.
             commands::smp_status,
+            // Edit sessions: check an image out of ShadowMount+ so its
+            // contents can be changed, then put it back. See
+            // `ps5upload_core::smp_checkout` for why an image has to be moved
+            // out of SMP's scan folders rather than simply unmounted.
+            commands::smp_checkout_status,
+            commands::smp_checkout_begin,
+            commands::smp_checkout_finish,
             // ── USB autoloader wizard ───────────────────────────────
             // Enumerate removable drives + write a curated
             // ps5_autoloader/ folder to one. Cross-platform; pulls
