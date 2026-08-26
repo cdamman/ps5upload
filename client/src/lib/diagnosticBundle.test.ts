@@ -44,13 +44,13 @@ describe("redactHost", () => {
 });
 
 describe("buildDiagnosticBundle (crash-report enrichment)", () => {
-  it("includes the new schema-2 fields for crash reports", () => {
+  it("includes the crash-report enrichment fields", () => {
     const b = buildDiagnosticBundle({
       appVersion: "9.9.9",
       redact: true,
       trigger: "uncaught-error: boom",
     });
-    expect(b.schema).toBe(2);
+    expect(b.schema).toBe(3);
     expect(b.app_version).toBe("9.9.9");
     expect(b.redacted).toBe(true);
     expect(b.trigger).toBe("uncaught-error: boom");
@@ -90,5 +90,50 @@ describe("buildDiagnosticBundle (crash-report enrichment)", () => {
     expect(big.recent_logs.length).toBeGreaterThanOrEqual(
       small.recent_logs.length,
     );
+  });
+});
+
+describe("buildDiagnosticBundle (schema 3 triage fields)", () => {
+  it("reports helper_mismatch as null when no helper is connected", () => {
+    const b = buildDiagnosticBundle({ appVersion: "9.9.9", redact: true });
+    // null, NOT false: with no console attached there is nothing to compare,
+    // and "no helper" must never read as "versions agree".
+    expect(b.versions.helper_mismatch).toBeNull();
+    expect(b.versions.app).toBe("9.9.9");
+  });
+
+  it("captures the settings that make behaviour reports answerable", () => {
+    const b = buildDiagnosticBundle({ appVersion: "1.0.0", redact: true });
+    // The whole point of expanding this block: a report saying "it
+    // auto-installed even though I turned that off" is unanswerable unless
+    // the ACTUAL stored values ride along.
+    for (const k of [
+      "auto_install_after_upload",
+      "auto_remove_after_install",
+      "always_overwrite",
+      "upload_streams",
+      "log_level",
+      "theme",
+    ]) {
+      expect(k in b.settings).toBe(true);
+    }
+  });
+
+  it("carries a host clock so PS5 timestamps can be correlated", () => {
+    const b = buildDiagnosticBundle({ appVersion: "1.0.0", redact: true });
+    expect(typeof b.clock.host_iso).toBe("string");
+    expect(typeof b.clock.utc_offset_min).toBe("number");
+  });
+
+  it("counts errors and warnings for at-a-glance triage", () => {
+    const b = buildDiagnosticBundle({ appVersion: "1.0.0", redact: true });
+    expect(typeof b.counters.error_logs).toBe("number");
+    expect(typeof b.counters.warn_logs).toBe("number");
+    expect(typeof b.counters.total_logs_retained).toBe("number");
+  });
+
+  it("reports no edit session when nothing is checked out", () => {
+    const b = buildDiagnosticBundle({ appVersion: "1.0.0", redact: true });
+    expect(b.edit_session).toBeNull();
   });
 });

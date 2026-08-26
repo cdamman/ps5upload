@@ -14,6 +14,10 @@ import {
   klogChunk,
   fsReadPreview,
   fsListDir,
+  smpStatus,
+  smpCheckoutStatus,
+  type SmpStatus,
+  type SmpCheckout,
   type HwInfo,
   type HwTemps,
   type HwPower,
@@ -60,6 +64,18 @@ export interface Ps5Snapshot {
   processes: ProcEntry[] | null;
   processes_total: number | null;
   net_interfaces: NetInterface[] | null;
+  /** ShadowMount+ state. It owns mounting and registration for disk images,
+   *  so whether it is running (and what it has mounted) explains a whole
+   *  class of "my game didn't appear" reports our own logs cannot. */
+  smp_status: SmpStatus | null;
+  /** Open edit checkout, if any. While one is open the image is moved OUT of
+   *  SMP's scan roots on purpose, so mount behaviour legitimately differs. */
+  smp_checkout: SmpCheckout | null;
+  /** Which app currently owns the screen, plus which focus symbols this
+   *  firmware actually exports. Availability is reported separately from the
+   *  value so "not foreground" is never confused with "cannot tell" — on
+   *  FW 9.60 no direct foreground-app-id getter exists at all. */
+  focus: unknown | null;
   /** Names of the payload's on-PS5 black-box files we pulled (the file bodies
    *  ride alongside in `Ps5SnapshotResult.payload_logs`, not in this JSON). */
   payload_log_files: string[];
@@ -133,6 +149,19 @@ async function fetchPayloadLogs(host: string): Promise<{
     ["/data/ps5upload/stderr.log.old", "stderr_old.log"],
     // Only present after a crash (the async-signal-safe marker); harmless miss.
     ["/data/ps5upload/crash.log", "crash.log"],
+    // ShadowMount+ is third-party but owns mounting and registration for
+    // disk images, so its log and config explain a whole class of "my game
+    // didn't mount / didn't appear" reports that our own logs cannot. Its
+    // config also records the kstuff auto-toggle settings that affect a
+    // running game. Both were read by hand repeatedly during a mount and a
+    // focus-drop investigation before being collected here.
+    ["/data/shadowmount/debug.log", "smp_debug.log"],
+    ["/data/shadowmount/config.ini", "smp_config.ini"],
+    // Open edit-checkout journal. While a checkout is open the image is
+    // deliberately moved out of SMP's scan roots, so mount/registration
+    // behaviour legitimately differs — without this a report filed mid-edit
+    // looks like a bug.
+    ["/data/ps5upload/editing/checkout.json", "edit_checkout.json"],
   ];
 
   // Discover any per-transaction journal/shard logs in the tx dir (present
@@ -187,6 +216,9 @@ export async function buildPs5Snapshot(opts: {
     processes: null,
     processes_total: null,
     net_interfaces: null,
+    smp_status: null,
+    smp_checkout: null,
+    focus: null,
     payload_log_files: [],
     errors: {},
   };
@@ -220,6 +252,9 @@ export async function buildPs5Snapshot(opts: {
     apps,
     procs,
     nets,
+    smp,
+    checkout,
+    focus,
     klog,
     syslogRes,
     payloadLogsRes,
@@ -233,6 +268,13 @@ export async function buildPs5Snapshot(opts: {
       probe("running_apps", () => appListRunning(maddr)),
       probe("processes", () => procListGet(maddr)),
       probe("net_interfaces", () => netInterfacesGet(maddr)),
+      probe("smp_status", () => smpStatus(taddr)),
+      probe("smp_checkout", () => smpCheckoutStatus(taddr)),
+      // Newer helpers only; an older payload rejects the frame and this
+      // records as a normal per-probe error rather than sinking the report.
+      probe("focus", () =>
+        invoke<unknown>("ps5_focus", { addr: maddr }),
+      ),
       probe("klog", () => klogChunk(maddr, 64 * 1024)),
       probe("syslog", () =>
         invoke<{ text?: string }>("ps5_syslog_tail", { addr: taddr }),
@@ -254,6 +296,9 @@ export async function buildPs5Snapshot(opts: {
   }
 
   base.net_interfaces = nets?.interfaces ?? null;
+  base.smp_status = smp;
+  base.smp_checkout = checkout;
+  base.focus = focus;
   base.payload_log_files = payloadLogsRes.files.map((f) => f.name);
   Object.assign(errors, payloadLogsRes.errors);
 

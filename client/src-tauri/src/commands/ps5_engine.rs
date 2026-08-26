@@ -2177,6 +2177,15 @@ pub async fn ps5_syslog_tail(addr: Option<String>) -> Result<JsonValue, String> 
     get_json(&addr_url("/api/ps5/syslog/tail", addr.as_deref())).await
 }
 
+/// Which application currently owns the screen, plus which focus symbols
+/// this firmware exports. Read-only; the payload answers via dlsym and never
+/// ptraces ShellUI. Newer helpers only — an older payload rejects the frame,
+/// which callers record as a per-probe error.
+#[tauri::command]
+pub async fn ps5_focus(addr: Option<String>) -> Result<JsonValue, String> {
+    get_json(&addr_url("/api/ps5/focus", addr.as_deref())).await
+}
+
 /// Read the PS5's current system clock. Cheap; safe to call once on
 /// the Hardware screen render and again right after a sync.
 #[tauri::command]

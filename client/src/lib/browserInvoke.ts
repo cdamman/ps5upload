@@ -306,6 +306,9 @@ export async function browserInvoke<T>(
 
     // ── Syslog + time ───────────────────────────────────────────────────────
 
+    case "ps5_focus":
+      return getJson<T>(addrUrl("/api/ps5/focus", args["addr"]));
+
     case "ps5_syslog_tail":
       return getJson<T>(addrUrl("/api/ps5/syslog/tail", args["addr"]));
 

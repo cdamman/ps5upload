@@ -6,6 +6,10 @@ import { useScheduleStore } from "../state/schedules";
 import { useConnectionStore } from "../state/connection";
 import { useInstallSettingsStore } from "../state/installSettings";
 import { usePlayTimeStore } from "../state/playTime";
+import { useUploadSettingsStore } from "../state/uploadSettings";
+import { useDiagSettingsStore } from "../state/diagSettings";
+import { useThemeStore } from "../state/theme";
+import { useEditSessionStore } from "../state/editSession";
 
 /**
  * Build a single-file diagnostic bundle for sharing on bug reports.
@@ -51,6 +55,49 @@ export interface DiagnosticBundle {
     ps5_kernel: string | null;
     ucred_elevated: boolean | null;
   };
+  /** App vs. on-console helper versions, and whether they disagree.
+   *
+   *  Called out as its own field because a stale helper is the single most
+   *  common cause of "this fix didn't work for me" reports: the app looks
+   *  healthy while the console still runs an older payload, so a shipped fix
+   *  genuinely never executes. This cost a full misdiagnosis round — a cover
+   *  fix released in 5.6.0 was reported as a regression by someone running a
+   *  5.7.1 helper against a 5.5.0 app, i.e. a build that never contained it.
+   *  `helper_mismatch` makes that readable at a glance instead of requiring
+   *  the triager to eyeball two version strings. */
+  versions: {
+    app: string;
+    payload: string | null;
+    helper_mismatch: boolean | null;
+  };
+  /** Host clock, so PS5-side log timestamps can be lined up against
+   *  app-side ones. Correlating the two by hand ate real time during a
+   *  focus-drop investigation; the offset makes it mechanical. */
+  clock: {
+    host_iso: string;
+    timezone: string | null;
+    utc_offset_min: number;
+  };
+  /** Open ShadowMount+ edit checkout, if any. While one is open the image is
+   *  deliberately moved OUT of SMP's scan roots, which changes mount and
+   *  registration behaviour — so a report filed mid-checkout looks broken in
+   *  ways that are actually expected. */
+  edit_session: {
+    active: boolean;
+    original_path: string;
+    staged_path: string;
+    mount_point: string;
+    title_id: string;
+    started_at_ms: number;
+  } | null;
+  /** Cheap triage counters over the retained log/activity buffers, so a
+   *  maintainer sees "17 errors" without reading every line. */
+  counters: {
+    error_logs: number;
+    warn_logs: number;
+    failed_activity: number;
+    total_logs_retained: number;
+  };
   roster: Array<{
     id: string;
     name: string;
@@ -67,6 +114,16 @@ export interface DiagnosticBundle {
   settings: {
     auto_install_after_upload: boolean;
     auto_remove_after_install: boolean;
+    auto_scan_external: boolean;
+    always_overwrite: boolean;
+    show_transfer_files: boolean;
+    bandwidth_cap_mbps: number;
+    upload_streams: number;
+    auto_resume: boolean;
+    auto_redeploy_on_wake: boolean;
+    system_file_read: boolean;
+    log_level: string;
+    theme: string;
   };
   schedules_count: number;
   play_time_titles: number;
@@ -124,6 +181,10 @@ export function buildDiagnosticBundle(opts: {
   const activity = useActivityHistoryStore.getState().entries;
   const notifications = useNotificationsStore.getState().entries;
   const logs = useLogsStore.getState().entries;
+  const uploadSettings = useUploadSettingsStore.getState();
+  const diagSettings = useDiagSettingsStore.getState();
+  const theme = useThemeStore.getState();
+  const editSession = useEditSessionStore.getState();
 
   const nav: any = typeof navigator !== "undefined" ? navigator : {};
   const mem: any =
@@ -132,7 +193,7 @@ export function buildDiagnosticBundle(opts: {
     typeof b === "number" ? Math.round(b / 1048576) : null;
 
   return {
-    schema: 2,
+    schema: 3,
     generated_at: new Date().toISOString(),
     app_version: opts.appVersion,
     user_agent: typeof navigator !== "undefined" ? navigator.userAgent : "n/a",
@@ -154,6 +215,43 @@ export function buildDiagnosticBundle(opts: {
       ps5_kernel: conn.ps5Kernel,
       ucred_elevated: conn.ucredElevated,
     },
+    versions: {
+      app: opts.appVersion,
+      payload: conn.payloadVersion,
+      // null (not false) when there is no helper to compare against, so
+      // "no console connected" never reads as "versions agree".
+      helper_mismatch: conn.payloadVersion
+        ? conn.payloadVersion !== opts.appVersion
+        : null,
+    },
+    clock: {
+      host_iso: new Date().toISOString(),
+      timezone:
+        typeof Intl !== "undefined"
+          ? (Intl.DateTimeFormat().resolvedOptions().timeZone ?? null)
+          : null,
+      // Negated so the sign reads the conventional way: UTC+2 -> +120.
+      utc_offset_min: -new Date().getTimezoneOffset(),
+    },
+    edit_session: (() => {
+      const slot = conn.host ? editSession.byHost?.[conn.host] : null;
+      const co = slot?.checkout ?? null;
+      if (!co) return null;
+      return {
+        active: true,
+        original_path: co.original_path,
+        staged_path: co.staged_path,
+        mount_point: co.mount_point,
+        title_id: co.title_id,
+        started_at_ms: co.started_at_ms,
+      };
+    })(),
+    counters: {
+      error_logs: logs.filter((l) => l.level === "error").length,
+      warn_logs: logs.filter((l) => l.level === "warn").length,
+      failed_activity: activity.filter((e) => e.outcome === "failed").length,
+      total_logs_retained: logs.length,
+    },
     roster: roster.map((p) => ({
       id: p.id,
       name: p.name,
@@ -166,6 +264,16 @@ export function buildDiagnosticBundle(opts: {
     settings: {
       auto_install_after_upload: installSettings.autoInstallAfterUpload,
       auto_remove_after_install: installSettings.autoRemoveAfterInstall,
+      auto_scan_external: installSettings.autoScanExternal,
+      always_overwrite: uploadSettings.alwaysOverwrite,
+      show_transfer_files: uploadSettings.showTransferFiles,
+      bandwidth_cap_mbps: uploadSettings.bandwidthCapMbps,
+      upload_streams: uploadSettings.uploadStreams,
+      auto_resume: uploadSettings.autoResume,
+      auto_redeploy_on_wake: uploadSettings.autoRedeployOnWake,
+      system_file_read: uploadSettings.systemFileRead,
+      log_level: diagSettings.logLevel,
+      theme: theme.theme,
     },
     schedules_count: schedules.length,
     // Count distinct (host, title) pairs tracked across all consoles.
