@@ -1,0 +1,176 @@
+name: debian12-linux-arm
+
+# This repo's sole CI/release workflow. Builds the Linux ARM64 desktop
+# bundle inside a Debian 12 (bookworm) container on a native arm64
+# runner. Debian 12 ships an older glibc (2.36) than Ubuntu 24.04
+# (2.39) — see FAQ.md's "Too old" glibc-floor note — so a bundle built
+# here targets older ARM64 distros than the upstream project's own
+# release artifacts would.
+#
+# A container-specific quirk is patched out of scripts/install-ubuntu.sh
+# before running it: the script's Node install step runs `$SUDO -E bash -`.
+# Outside a container SUDO is always "sudo" or "" with a real `sudo`
+# present, but running as root (the container default, no sudo binary)
+# collapses `$SUDO -E` to `-E`, which the shell tries to execute as a
+# command. Stripping the literal `$SUDO -E` avoids that.
+#
+# Uses the same clang-22 upstream pin the (removed) engine-ci.yml/
+# publish.yml used, with the same LLVM_CONFIG override they needed —
+# prospero-llvm-config's candidate search doesn't pick clang-22 up on
+# its own. An earlier version of this workflow downgraded to clang-19
+# for bookworm package availability, but that tripped a clang-19-only
+# false positive (`-Wunused-command-line-argument` on `-nostartfiles`
+# in every payload Makefile that compiles multiple .c files straight to
+# an ELF in one `$(CC)` invocation — installer, the main payload,
+# vinput, smb, mbus-probe), turned fatal by their `-Werror`. clang-22
+# doesn't have it.
+#
+# On a `vX.Y.Z` tag push, also attaches the build to that tag's GitHub
+# Release as clearly-suffixed assets ("-debian12"), creating the Release
+# if it doesn't exist yet.
+
+on:
+  workflow_dispatch:
+  push:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: debian12-linux-arm-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build (debian 12, arm64)
+    runs-on: ubuntu-24.04-arm
+    container: debian:12
+    timeout-minutes: 60
+    steps:
+      # git must be installed before checkout, or actions/checkout falls
+      # back to the REST-API tarball download — which can't fetch
+      # submodules — since the debian:12 image has no git preinstalled.
+      #
+      # install-ubuntu.sh (run later via `make install`) isn't actually
+      # what the (removed) engine-ci.yml/publish.yml used to build the
+      # Tauri bundle on Linux — it's a separate, dev-machine-oriented
+      # bootstrap script. Their "Install Linux Tauri prerequisites" step
+      # was the proven list for producing a real `tauri build` bundle;
+      # install-ubuntu.sh covers the compile-only subset
+      # (_check-tauri-system-deps). Added here, on top of
+      # install-ubuntu.sh's own packages: libsoup-3.0-dev +
+      # libjavascriptcoregtk-4.1-dev (webkit2gtk-rs's build.rs looks for
+      # these as separate pkg-config modules), libfuse2 + patchelf (the
+      # AppImage bundler — tauri.conf.json's bundle targets include
+      # appimage and rpm alongside deb, so `tauri build` always runs all
+      # three), and libclang-dev (bindgen, used by several crates).
+      - name: Install base tools
+        run: |
+          apt update
+          apt install -y make curl xdg-utils xxd git \
+            libsoup-3.0-dev libjavascriptcoregtk-4.1-dev \
+            libfuse2 patchelf libclang-dev
+
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+
+      - name: Patch install-ubuntu.sh for Debian 12 (root-safe)
+        run: |
+          sed -i 's/$SUDO -E//' scripts/install-ubuntu.sh
+
+      # HOME inside the container is /github/home (see the note on the
+      # build step below), so that's where npm's cache and rustup/cargo's
+      # dirs actually land — matches the `~` this action expands to here.
+      - name: Cache npm dependencies
+        uses: actions/cache@v6
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-debian12-npm-${{ hashFiles('client/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-debian12-npm-
+
+      - name: make install
+        run: make install
+
+      - name: Cache cargo registry and build artifacts
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            engine/target
+            client/src-tauri/target
+          key: ${{ runner.os }}-debian12-cargo-${{ hashFiles('engine/Cargo.lock', 'client/src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-debian12-cargo-
+
+      - name: Build Linux ARM64 distribution
+        # Actions runs container-job steps under dash (sh), which has no
+        # `source` builtin (only bash does) — hence exit 127 on the `sh -e`
+        # invocation. Also, HOME inside the container is /github/home, not
+        # /root (despite running as root), so install-ubuntu.sh's
+        # $HOME/ps5-payload-sdk default landed there too; point
+        # PS5_PAYLOAD_SDK at $HOME dynamically instead of hardcoding /root.
+        shell: bash
+        env:
+          # Same override the (removed) engine-ci.yml/publish.yml needed:
+          # prospero-llvm-config's candidate search doesn't find clang-22
+          # on its own.
+          LLVM_CONFIG: /usr/bin/llvm-config-22
+          # Same as the (removed) engine-ci.yml/publish.yml: the AppImage
+          # bundler's linuxdeploy tool is itself an AppImage; this makes
+          # it self-extract and run instead of mounting via FUSE.
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+        run: |
+          source "$HOME/.cargo/env"
+          export PS5_PAYLOAD_SDK="$HOME/ps5-payload-sdk"
+
+          # Only the payload build (prospero-clang, via LLVM_CONFIG above)
+          # needs clang-22. Everything else — cargo's bindgen-based crates,
+          # namely jpegxr — must NOT use it: libclang-22 generates a broken,
+          # opaque binding for jxrlib's tagPKImageDecode (every method
+          # collapses to a single `_address` field, so the crate fails to
+          # compile). The (removed) engine-ci.yml/publish.yml never hit
+          # this because they built the payload (clang-22) and the Tauri
+          # bundle (plain distro clang) in two separate jobs/environments
+          # that never mixed; LIBCLANG_PATH here pins bindgen to the
+          # plain libclang-dev installed above instead.
+          libclang_so="$(find /usr/lib -maxdepth 3 -iname 'libclang.so*' -not -path '*/llvm-22/*' | head -n1)"
+          if [ -z "$libclang_so" ]; then
+            echo "::error::no non-llvm-22 libclang.so found under /usr/lib — is libclang-dev installed?"
+            exit 1
+          fi
+          export LIBCLANG_PATH="$(dirname "$libclang_so")"
+          echo "LIBCLANG_PATH=$LIBCLANG_PATH ($libclang_so)"
+
+          make dist-linux-arm
+
+      - name: Upload deb bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: ps5upload-debian12-linux-arm64
+          path: client/src-tauri/target/aarch64-unknown-linux-gnu/release/bundle/deb/*.deb
+          if-no-files-found: error
+
+      - name: Stage release assets
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle="client/src-tauri/target/aarch64-unknown-linux-gnu/release/bundle"
+          mkdir -p release-assets
+          deb="$(find "$bundle" -type f -name '*.deb' | head -n1)"
+          if [ -z "$deb" ]; then
+            echo "::error::no .deb produced by tauri"
+            exit 1
+          fi
+          cp -v "$deb" "release-assets/PS5Upload-linux-arm64-debian12.deb"
+          ls -la release-assets
+
+      - name: Attach assets to the tag's GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: release-assets/*
