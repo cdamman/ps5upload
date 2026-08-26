@@ -1,0 +1,123 @@
+name: debian12-linux-arm
+
+# Builds the Linux ARM64 desktop bundle inside a Debian 12 (bookworm)
+# container on a native arm64 runner. Debian 12 ships an older glibc
+# (2.36) than Ubuntu 24.04 (2.39) — see FAQ.md's "Too old" glibc-floor
+# note — so a bundle built here targets older ARM64 distros than the
+# upstream project's own release artifacts (engine-ci.yml, publish.yml,
+# docker-engine.yml — currently disabled, kept in the repo alongside
+# this workflow).
+#
+# Two container-specific quirks are patched out of scripts/install-ubuntu.sh
+# before running it:
+#   - LLVM 22 has no apt.llvm.org packages for bookworm yet; 19 does, and
+#     it's within the PS5 SDK's supported prospero-llvm-config search range
+#     (16-21), so no LLVM_CONFIG override is needed either (unlike the
+#     LLVM 22 case in engine-ci.yml/publish.yml).
+#   - The script's Node install step runs `$SUDO -E bash -`. Outside a
+#     container SUDO is always "sudo" or "" with a real `sudo` present, but
+#     running as root (the container default, no sudo binary) collapses
+#     `$SUDO -E` to `-E`, which the shell tries to execute as a command.
+#     Stripping the literal `$SUDO -E` avoids that.
+#
+# On a `vX.Y.Z` tag push, also attaches the build to that tag's GitHub
+# Release as clearly-suffixed assets ("-debian12"), creating the Release
+# if it doesn't exist yet.
+
+on:
+  workflow_dispatch:
+  push:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: debian12-linux-arm-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build (debian 12, arm64)
+    runs-on: ubuntu-24.04-arm
+    container: debian:12
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install base tools
+        run: |
+          apt update
+          apt install -y make curl xdg-utils
+
+      - name: Patch install-ubuntu.sh for Debian 12 (LLVM 19, root-safe)
+        run: |
+          sed -i 's/-22/-19/' scripts/install-ubuntu.sh
+          sed -i 's/$SUDO -E//' scripts/install-ubuntu.sh
+
+      # HOME inside the container is /github/home (see the note on the
+      # build step below), so that's where npm's cache and rustup/cargo's
+      # dirs actually land — matches the `~` this action expands to here.
+      - name: Cache npm dependencies
+        uses: actions/cache@v6
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-debian12-npm-${{ hashFiles('client/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-debian12-npm-
+
+      - name: make install
+        run: make install
+
+      - name: Cache cargo registry and build artifacts
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            engine/target
+            client/src-tauri/target
+          key: ${{ runner.os }}-debian12-cargo-${{ hashFiles('engine/Cargo.lock', 'client/src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-debian12-cargo-
+
+      - name: Build Linux ARM64 distribution
+        # Actions runs container-job steps under dash (sh), which has no
+        # `source` builtin (only bash does) — hence exit 127 on the `sh -e`
+        # invocation. Also, HOME inside the container is /github/home, not
+        # /root (despite running as root), so install-ubuntu.sh's
+        # $HOME/ps5-payload-sdk default landed there too; point
+        # PS5_PAYLOAD_SDK at $HOME dynamically instead of hardcoding /root.
+        shell: bash
+        run: |
+          source "$HOME/.cargo/env"
+          export PS5_PAYLOAD_SDK="$HOME/ps5-payload-sdk"
+          make dist-linux-arm
+
+      - name: Upload deb bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: ps5upload-debian12-linux-arm64
+          path: client/src-tauri/target/aarch64-unknown-linux-gnu/release/bundle/deb/*.deb
+          if-no-files-found: error
+
+      - name: Stage release assets
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle="client/src-tauri/target/aarch64-unknown-linux-gnu/release/bundle"
+          mkdir -p release-assets
+          deb="$(find "$bundle" -type f -name '*.deb' | head -n1)"
+          if [ -z "$deb" ]; then
+            echo "::error::no .deb produced by tauri"
+            exit 1
+          fi
+          cp -v "$deb" "release-assets/PS5Upload-linux-arm64-debian12.deb"
+          ls -la release-assets
+
+      - name: Attach assets to the tag's GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: release-assets/*
