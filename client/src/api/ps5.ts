@@ -1212,15 +1212,23 @@ export async function fsPathExists(
  *  which is rename()-backed and fails with EXDEV across volumes). The
  *  payload refuses to overwrite an existing `to` — callers should
  *  pre-check via list_dir or be ready to surface a "dest_exists" error. */
+/** Copy `from` → `to` on the PS5.
+ *
+ *  `overwrite` merges into an existing destination: a colliding file is
+ *  replaced, a colliding folder is descended into, and anything already in the
+ *  destination that the source doesn't mention is left alone. Without it the
+ *  payload refuses an existing destination (`fs_copy_dest_exists`) — the right
+ *  default until the user has actually been asked. */
 export async function fsCopy(
   transferAddr: string,
   from: string,
   to: string,
   opId?: number,
+  overwrite = false,
 ): Promise<void> {
   const addr = toMgmtAddr(transferAddr);
   await invoke("ps5_fs_copy", {
-    req: { addr, from, to, op_id: opId ?? 0 },
+    req: { addr, from, to, op_id: opId ?? 0, overwrite },
   });
 }
 

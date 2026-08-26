@@ -1118,7 +1118,7 @@ queue_strategy_overwrite: "Ghi đè",
 queue_strategy_resume: "Tiếp tục",
 logged_error_one: "1 lỗi đã ghi",
 logged_error_many: "{count} lỗi đã ghi",
-library_fpkg_kstuff_tip: "Mẹo: để mount .ffpkg / .exfat nhanh hơn (3-4 lần), hãy thử drakmor/kstuff-lite (firmware 3.00-10.01) thay vì kstuff mặc định. Cài đặt từ thư viện Payloads.",
+library_fpkg_kstuff_tip: "Mẹo: để mount .ffpkg / .exfat nhanh hơn (3-4 lần), hãy thử drakmor/kstuff-lite thay vì kstuff mặc định. Cài đặt từ thư viện Payloads.",
 library_fpkg_kstuff_tip_repo: "Xem trên GitHub",
 library_fpkg_kstuff_tip_dismiss: "Đừng hiển thị lại",
 payloads_refresh_error_banner: "Không thể làm mới từ GitHub — đang hiển thị ảnh chụp nhanh trong bộ nhớ đệm. Thẻ mới nhất trên GitHub có thể mới hơn so với những gì hiển thị ở đây.",
@@ -2659,6 +2659,17 @@ edit_session_open: "Mở tệp",
 edit_session_finish: "Kết thúc chỉnh sửa",
 edit_session_done: "Đã kết thúc phiên chỉnh sửa",
 edit_session_done_body: "{name} đã trở lại thư mục ban đầu. ShadowMount+ sẽ gắn kết và đăng ký lại trong khoảng một phút.",
+
+
+// Name conflicts when pasting or adding files
+fs_paste_conflict_title: "{count} mục đã có ở đây",
+fs_paste_conflict_body: "Thay thế {names}?\n\nThư mục được hợp nhất chứ không bị xóa sạch: các tệp bên trong mà bạn không dán vẫn giữ nguyên. Tệp trùng tên sẽ bị ghi đè và không thể hoàn tác.",
+fs_paste_conflict_ok: "Thay thế",
+fs_add_files_conflict_title: "{count} tệp đã có ở đây",
+fs_add_files_conflict_body: "{names} sẽ bị ghi đè. Mọi thứ khác trong thư mục này được giữ nguyên.\n\nNếu đây là bên trong một ảnh đĩa game đã gắn kết, một tệp sai có thể khiến game không khởi động được và không thể hoàn tác.",
+fs_add_files_conflict_ok: "Ghi đè",
+
+library_edit_files_short: "Sửa tệp",
 
 };
 

@@ -1116,7 +1116,7 @@ queue_strategy_overwrite: "استبدال",
 queue_strategy_resume: "استئناف",
 logged_error_one: "خطأ مسجل واحد",
 logged_error_many: "{count} أخطاء مسجلة",
-library_fpkg_kstuff_tip: "نصيحة: لتركيب .ffpkg / .exfat أسرع (3-4×)، جرّب drakmor/kstuff-lite (البرنامج الثابت 3.00-10.01) بدلًا من kstuff الافتراضي. التثبيت من مكتبة الحمولات.",
+library_fpkg_kstuff_tip: "نصيحة: لتركيب .ffpkg / .exfat أسرع (3-4×)، جرّب drakmor/kstuff-lite بدلًا من kstuff الافتراضي. التثبيت من مكتبة الحمولات.",
 library_fpkg_kstuff_tip_repo: "عرض على GitHub",
 library_fpkg_kstuff_tip_dismiss: "عدم العرض مرة أخرى",
 payloads_refresh_error_banner: "تعذر التحديث من GitHub — يتم عرض لقطة مخزنة. قد يكون الإصدار الأحدث على GitHub أحدث مما هو معروض هنا.",
@@ -2657,6 +2657,17 @@ edit_session_open: "فتح الملفات",
 edit_session_finish: "إنهاء التحرير",
 edit_session_done: "انتهت جلسة التحرير",
 edit_session_done_body: "عاد {name} إلى مجلده الأصلي. سيقوم ShadowMount+ بتثبيته وتسجيله مجددًا خلال دقيقة تقريبًا.",
+
+
+// Name conflicts when pasting or adding files
+fs_paste_conflict_title: "يوجد {count} عنصر هنا بالفعل",
+fs_paste_conflict_body: "هل تريد استبدال {names}؟\n\nيتم دمج المجلدات لا إفراغها: الملفات التي بداخلها ولا تلصقها تبقى كما هي. تُستبدل الملفات ذات الاسم نفسه، ولا يمكن التراجع عن ذلك.",
+fs_paste_conflict_ok: "استبدال",
+fs_add_files_conflict_title: "يوجد {count} ملف هنا بالفعل",
+fs_add_files_conflict_body: "سيُستبدل {names}. يبقى كل ما عدا ذلك في هذا المجلد كما هو.\n\nإن كان هذا داخل صورة لعبة مثبَّتة، فقد يمنع ملف خاطئ اللعبة من العمل، ولا يمكن التراجع.",
+fs_add_files_conflict_ok: "استبدال",
+
+library_edit_files_short: "تحرير الملفات",
 
 };
 

@@ -71,10 +71,18 @@ pub fn app_lifecycle(addr: &str, action: AppAction, app_id: u32) -> Result<AppLi
     }
     let parsed: AppLifecycleAck = serde_json::from_slice(&resp)?;
     if !parsed.ok {
-        bail!(
-            "APP_LIFECYCLE failed: {}",
-            parsed.err.as_deref().unwrap_or("payload returned ok=false")
-        );
+        // Include the Sony return code. Without it every failure reads
+        // "payload returned ok=false", which is untraceable — the code is the
+        // only thing that says WHY the console refused (title not running,
+        // wrong app id, API unavailable on this firmware).
+        match (parsed.err.as_deref(), parsed.code) {
+            (Some(e), Some(code)) => bail!("APP_LIFECYCLE failed: {e} (code {code:#010x})"),
+            (Some(e), None) => bail!("APP_LIFECYCLE failed: {e}"),
+            (None, Some(code)) => {
+                bail!("APP_LIFECYCLE failed: console returned {code:#010x}")
+            }
+            (None, None) => bail!("APP_LIFECYCLE failed: payload returned ok=false"),
+        }
     }
     Ok(parsed)
 }

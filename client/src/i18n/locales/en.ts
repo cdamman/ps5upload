@@ -281,7 +281,7 @@ library_empty_title: "Nothing in the scan folders yet",
 library_empty_message: "Upload a game folder or disk image, or register titles with a PS5-side installer — they'll show up here.",
 library_games: "Games",
 library_disk_images: "Disk images (.exfat / .ffpkg)",
-library_fpkg_kstuff_tip: "Tip: for faster .ffpkg / .exfat mounting (3-4×), try drakmor/kstuff-lite (FW 3.00-10.01) instead of the default kstuff. Install from the Payloads library.",
+library_fpkg_kstuff_tip: "Tip: for faster .ffpkg / .exfat mounting (3-4×), try drakmor/kstuff-lite instead of the default kstuff. Install from the Payloads library.",
 payloads_refresh_error_banner: "Couldn't refresh from GitHub — showing cached snapshot. The latest tag on GitHub may be newer than what's shown here.",
 library_fpkg_kstuff_tip_repo: "View on GitHub",
 library_fpkg_kstuff_tip_dismiss: "Don't show again",
@@ -3052,6 +3052,18 @@ edit_session_open: "Open files",
 edit_session_finish: "Finish editing",
 edit_session_done: "Edit session finished",
 edit_session_done_body: "{name} is back in its original folder. ShadowMount+ will mount and register it again within about a minute.",
+
+
+// Name conflicts when pasting or adding files. Merge is the default; the
+// user is only asked about the files that actually collide.
+fs_paste_conflict_title: "{count} item(s) already exist here",
+fs_paste_conflict_body: "Replace {names}?\n\nFolders are merged, not emptied: files inside them that you aren't pasting are left exactly as they are. Files with the same name are overwritten, and that can't be undone.",
+fs_paste_conflict_ok: "Replace",
+fs_add_files_conflict_title: "{count} file(s) already exist here",
+fs_add_files_conflict_body: "{names} will be overwritten. Everything else in this folder is left alone.\n\nIf this is inside a mounted game image, a bad file can stop the game booting, and there is no undo.",
+fs_add_files_conflict_ok: "Overwrite",
+
+library_edit_files_short: "Edit files",
 
 };
 

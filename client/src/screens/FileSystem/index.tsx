@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router";
 import { useShallow } from "zustand/react/shallow";
 import {
   FolderTree,
@@ -260,6 +261,7 @@ export default function FileSystemScreen() {
   // initializer reads from localStorage once on mount; later host
   // changes (the user typing a new IP into the Connection screen)
   // are handled by the effect below.
+  const [searchParams, setSearchParams] = useSearchParams();
   const [path, setPath] = useState<string>(() => loadFsLastPath(host));
   // Refetched whenever host or payloadStatus changes. Drives the
   // volume picker dropdown — same shape Library's Move modal uses.
@@ -525,6 +527,24 @@ export default function FileSystemScreen() {
   useEffect(() => {
     setPath(loadFsLastPath(host));
   }, [host]);
+
+  // Deep link: `/files?path=/some/dir` jumps the browser there.
+  //
+  // Needed because `path` is seeded from localStorage ONCE on mount — so
+  // writing the saved path and calling navigate("/files") does nothing when
+  // the user is already on this screen. That is exactly the case the edit
+  // session's "Open files" button hits, since its banner also renders here.
+  // The param is consumed and stripped so a later reload or Back doesn't
+  // re-pin the user to a folder they have since navigated away from.
+  useEffect(() => {
+    const want = searchParams.get("path");
+    if (!want) return;
+    setPath(want);
+    saveFsLastPath(host, want);
+    const next = new URLSearchParams(searchParams);
+    next.delete("path");
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams, host]);
 
   // Honor a cross-screen "open this directory" request (Saves, Install
   // Package, etc. call openInFileSystem then navigate here). Declared AFTER
@@ -1033,6 +1053,36 @@ export default function FileSystemScreen() {
         "Pick files to copy onto the PS5",
       ),
     });
+    if (!picked || picked.length === 0) return;
+    // Merge by default, ask on collision. Adding files that don't exist here
+    // yet needs no ceremony; overwriting one the user may not have realised
+    // was already there does. The upload itself replaces the remote file, so
+    // this prompt is the only thing standing in front of it.
+    const existingNames = new Set((entries ?? []).map((e) => e.name));
+    const clashes = picked
+      .map((p) => p.split(/[/\\]/).pop() ?? p)
+      .filter((n) => existingNames.has(n));
+    if (clashes.length > 0) {
+      const shown = clashes.slice(0, 6).join(", ");
+      const more = clashes.length > 6 ? ` and ${clashes.length - 6} more` : "";
+      const ok = await confirmDialog({
+        title: tr(
+          "fs_add_files_conflict_title",
+          { count: clashes.length },
+          clashes.length === 1
+            ? `"${clashes[0]}" already exists here`
+            : `${clashes.length} files already exist here`,
+        ),
+        message: tr(
+          "fs_add_files_conflict_body",
+          { names: shown + more },
+          `${shown}${more} will be overwritten. Everything else in this folder is left alone.\n\nIf this is inside a mounted game image, a bad file can stop the game booting, and there is no undo.`,
+        ),
+        confirmLabel: tr("fs_add_files_conflict_ok", undefined, "Overwrite"),
+        destructive: true,
+      });
+      if (!ok) return;
+    }
     await runUpload(picked);
   };
 
@@ -1253,6 +1303,40 @@ export default function FileSystemScreen() {
     if (clipboard.items.length === 0 || !clipboard.op) return;
     const op = clipboard.op;
     const items = clipboard.items;
+
+    // Name conflicts: the payload refuses to touch an existing destination
+    // unless we explicitly ask it to merge, so find the collisions up front
+    // and let the user decide once for the whole paste. Before this, pasting
+    // a file over one that already existed just failed with
+    // `fs_copy_dest_exists` and no way forward.
+    const existingNames = new Set((entries ?? []).map((e) => e.name));
+    const conflicts = items.filter((i) => existingNames.has(i.name));
+    let overwrite = false;
+    if (conflicts.length > 0) {
+      const names = conflicts
+        .slice(0, 6)
+        .map((c) => c.name)
+        .join(", ");
+      const more =
+        conflicts.length > 6 ? ` and ${conflicts.length - 6} more` : "";
+      overwrite = await confirmDialog({
+        title: tr(
+          "fs_paste_conflict_title",
+          { count: conflicts.length },
+          conflicts.length === 1
+            ? `"${conflicts[0].name}" already exists here`
+            : `${conflicts.length} items already exist here`,
+        ),
+        message: tr(
+          "fs_paste_conflict_body",
+          { names: names + more },
+          `Replace ${names}${more}?\n\nFolders are merged, not emptied: files inside them that you aren't pasting are left exactly as they are. Files with the same name are overwritten, and that can't be undone.`,
+        ),
+        confirmLabel: tr("fs_paste_conflict_ok", undefined, "Replace"),
+        destructive: true,
+      });
+      if (!overwrite) return;
+    }
     setError(null);
     fsBulk.begin({
       op: op === "cut" ? "paste-move" : "paste-copy",
@@ -1353,7 +1437,7 @@ export default function FileSystemScreen() {
               // on substring keeps us resilient to minor wording drift.
               const msg = e instanceof Error ? e.message : String(e);
               if (msg.includes("cross_mount") || msg.includes("EXDEV")) {
-                await fsCopy(addr, item.path, target, opId);
+                await fsCopy(addr, item.path, target, opId, overwrite);
                 try {
                   await fsDelete(addr, item.path);
                 } catch (delErr) {
@@ -1371,7 +1455,7 @@ export default function FileSystemScreen() {
               }
             }
           } else {
-            await fsCopy(addr, item.path, target, opId);
+            await fsCopy(addr, item.path, target, opId, overwrite);
           }
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
@@ -1800,7 +1884,9 @@ export default function FileSystemScreen() {
             the PS5 home screen until it's finished. This is the screen the
             user does the editing on, so the way back has to be here too. */}
         <div className="mb-2 empty:hidden">
-          <EditSessionBanner />
+          {/* Re-list on check-in: the mount the user was browsing has just
+              been unmounted, so the current listing is gone. */}
+          <EditSessionBanner onFinished={() => void refresh()} />
         </div>
 
         {/* Volume picker. Renders only when we have at least one

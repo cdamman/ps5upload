@@ -30,6 +30,7 @@
 #include "authid.h"
 #include "register.h"
 #include "sony_api_lock.h"
+#include "proc_list.h"
 #include "kernel_rw_lock.h"
 
 /* Serialization mutex `sony_api_lock` and the 200µs post-call grace
@@ -1566,6 +1567,37 @@ int unregister_title(const char *title_id, const char **err_reason_out,
  * launch concurrent with a register/launch/uninstall on another
  * thread can deadlock the same way. Pre-2.2.61 this entry point
  * skipped the mutex entirely. */
+/* Did the launch we just asked for actually start the title?
+ *
+ * Sony's launch entry points do not reliably report success: a call can
+ * return non-zero while the app is already being brought up. The fallback
+ * ladder below took that at face value and fired the NEXT strategy at a title
+ * that was already starting — and the shell reacts to a second launch request
+ * for a starting app by pushing it to the background. That is the reported
+ * "game opens then immediately minimises, and I have to open it again on the
+ * PS5" behaviour.
+ *
+ * So between strategies we ask the system instead of trusting the return
+ * code. The app takes a moment to appear in the process table, hence the
+ * bounded poll rather than a single check.
+ *
+ * Deliberately conservative: on any doubt this returns 0 and the ladder
+ * proceeds, which is the pre-existing behaviour. It only ever SUPPRESSES a
+ * redundant second launch, never suppresses a real one. */
+#define LAUNCH_CONFIRM_TOTAL_US   3000000u
+#define LAUNCH_CONFIRM_INTERVAL_US 250000u
+
+static int launch_took_effect(const char *title_id) {
+    if (!title_id || !title_id[0]) return 0;
+    unsigned waited = 0;
+    while (waited < LAUNCH_CONFIRM_TOTAL_US) {
+        if (proc_find_pid_by_title_id(title_id) > 0) return 1;
+        usleep(LAUNCH_CONFIRM_INTERVAL_US);
+        waited += LAUNCH_CONFIRM_INTERVAL_US;
+    }
+    return 0;
+}
+
 int register_browser_launch(void) {
     register_module_init();
     if (!g_reg.launch_app_sys) return -1;
@@ -1669,6 +1701,35 @@ int launch_title(const char *title_id, const char **err_reason_out,
      * not a specific one, because Sony's launcher reuses error
      * code values across firmware revisions and a tighter filter
      * would silently break on next FW. */
+    /* Already running? Then this is "bring it to the front", not "start it".
+     * Exactly ONE launch request is the right action; the retry ladder below
+     * would send a second, and a second request against a live title is what
+     * makes the shell background it. Users hit this by pressing Play on a
+     * game that was already up (or that a previous Play had started without
+     * the UI noticing) and then having to re-open it on the console. */
+    if (proc_find_pid_by_title_id(title_id) > 0) {
+        fprintf(stderr,
+                "[payload2] launch %s: already running — foregrounding "
+                "instead of re-launching\n",
+                title_id);
+        int rc_fg = -1;
+        (void)shellui_rpc_init();
+        if (shellui_rpc_ready()) {
+            rc_fg = shellui_rpc_launch_app(title_id, fg_user);
+            if (rc_fg == -2) rc_fg = 0; /* dispatched; result uncertain */
+        }
+        if (rc_fg != 0 && g_reg.launch_app) {
+            pthread_mutex_lock(&sony_api_lock);
+            rc_fg = g_reg.launch_app(title_id, NULL, NULL);
+            usleep(SONY_API_POST_SLEEP_US);
+            pthread_mutex_unlock(&sony_api_lock);
+        }
+        /* Either way the title IS running, which is what the caller asked
+         * for. Focus is best-effort — reporting failure here would be wrong
+         * and would tempt the UI into another launch. */
+        return 0;
+    }
+
     (void)shellui_rpc_init();
     if (shellui_rpc_ready()) {
         int rc = shellui_rpc_launch_app(title_id, fg_user);
@@ -1685,7 +1746,25 @@ int launch_title(const char *title_id, const char **err_reason_out,
              * settled" races that produce the first-launch-fails
              * pattern. The user-visible delay is ~250ms; if the
              * second attempt also returns rc>0 it's a real error
-             * and we surface it. */
+             * and we surface it.
+             *
+             * But only if the first call did NOT actually start the game.
+             * Sony's launcher can return a non-zero code for a launch that
+             * is already proceeding, and a second launch request aimed at a
+             * starting title makes the shell drop it to the background —
+             * the "it opens then instantly minimises" report. Confirm
+             * against the process table before re-firing. */
+            if (launch_took_effect(title_id)) {
+                /* Diagnostic: this is the branch that used to double-launch.
+                 * A user reporting "it started then minimised" wants to know
+                 * whether the suppression fired, and the symptom is hard to
+                 * reproduce on demand. */
+                fprintf(stderr,
+                        "[payload2] launch %s: shellui rc=%d but the title is "
+                        "running — suppressing the retry\n",
+                        title_id, rc);
+                return 0;
+            }
             usleep(250000);
             int rc2 = shellui_rpc_launch_app(title_id, fg_user);
             if (rc2 == 0 || rc2 == -2) return 0;
@@ -1760,24 +1839,30 @@ int launch_title(const char *title_id, const char **err_reason_out,
         param.user_id = fg_user;
         rc = g_reg.launch_app(title_id, NULL, (void *)&param);
         usleep(SONY_API_POST_SLEEP_US);
-        if (rc == 0) launched = 1;
+        if (rc == 0 || launch_took_effect(title_id)) launched = 1;
     }
     if (!launched && g_reg.launch_app) {
         tried_null = 1;
         rc = g_reg.launch_app(title_id, NULL, NULL);
         usleep(SONY_API_POST_SLEEP_US);
-        if (rc == 0) launched = 1;
+        if (rc == 0 || launch_took_effect(title_id)) launched = 1;
     }
     if (!launched && g_reg.launch_app_sys) {
         tried_sys = 1;
         rc = g_reg.launch_app_sys(title_id, NULL, NULL);
         usleep(SONY_API_POST_SLEEP_US);
-        if (rc == 0) launched = 1;
+        if (rc == 0 || launch_took_effect(title_id)) launched = 1;
     }
 
     pthread_mutex_unlock(&sony_api_lock);
 
-    if (launched) return 0;
+    if (launched) {
+        fprintf(stderr,
+                "[payload2] launch %s: in-process ladder succeeded "
+                "(param=%d null=%d sys=%d, last rc=%d)\n",
+                title_id, tried_param, tried_null, tried_sys, rc);
+        return 0;
+    }
 
     /* All strategies failed. Surface a diagnostic so the engine error
      * includes which paths we tried.

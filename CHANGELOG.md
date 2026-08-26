@@ -4,6 +4,55 @@ What's new in ps5upload, written for humans.
 
 ---
 
+## 5.7.0
+
+**Pasting and adding files now merges instead of failing, Play and Close
+game both behave, and editing an image is easier to find.**
+
+- **Replacing a file that already exists works.** Pasting or adding a
+  file over one of the same name failed outright with
+  `fs_copy_dest_exists` and left you no way forward. Now you're asked
+  once, and only about the files that actually collide.
+- **Folders merge rather than replace.** Pasting a folder over an
+  existing one drops in the files you brought and leaves everything
+  else alone — copying a folder containing just `eboot.bin` into a game
+  no longer threatens the other 900 files beside it. A file still can't
+  silently replace a folder (or the reverse); that's refused.
+- **Closing a game now closes it properly.** "Close game" was falling
+  back to killing the process outright, because the API it tried first
+  can't see running apps on this firmware at all — it reported an empty
+  list with a game plainly running, and rejected the app id. It now goes
+  through the launcher's own close call, the same one the console uses,
+  and falls back only if that fails. Verified on both consoles across a
+  PS5 title, a native PS4 title, and a PS2 Classic (which runs as two
+  processes — both close from the one call).
+- **Play no longer starts a game and then minimises it.** Sony's launch
+  calls can report failure for a launch that is actually going ahead.
+  The fallback ladder believed them and fired a *second* launch at a
+  title already starting — and the shell answers a second request by
+  pushing the game to the background, which is why the game was running
+  but had to be reopened on the console. Each attempt is now confirmed
+  against the running-process list before the next one is tried. Pressing
+  Play on a game that's already running brings it to the front instead of
+  re-launching it.
+- **"Open files" in the edit banner actually opens the folder.** It did
+  nothing when you were already on the Files screen.
+- **Finishing an edit refreshes the list**, so the image reappears and
+  the edit mount disappears without a manual refresh.
+- **Editing is visible without hunting for it.** "Edit files" now sits
+  next to Mount on every disk-image row instead of hiding in the ⋯ menu,
+  which also makes the difference between the two obvious: Mount hands
+  the image to ShadowMount+ so you can play it, Edit checks it out so you
+  can change what's inside.
+- **Editing an image on a USB or external drive picks a mount point that
+  works.** It defaulted to the image's own drive, which the PS5 kernel
+  refuses to mount into. It now defaults to internal storage — the same
+  thing ShadowMount+ does with images on USB.
+- The ShadowMount+ speed tip no longer quotes a firmware range that had
+  gone stale; the Payloads library entry is the maintained source.
+
+---
+
 ## 5.6.1
 
 **Fixes "Edit files…" for any game image that isn't on internal storage.**

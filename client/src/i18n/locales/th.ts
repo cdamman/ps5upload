@@ -1116,7 +1116,7 @@ queue_strategy_overwrite: "เขียนทับ",
 queue_strategy_resume: "ทำต่อ",
 logged_error_one: "1 ข้อผิดพลาดในบันทึก",
 logged_error_many: "{count} ข้อผิดพลาดในบันทึก",
-library_fpkg_kstuff_tip: "เคล็ดลับ: เพื่อการเมานต์ .ffpkg / .exfat ที่เร็วขึ้น (3-4 เท่า) ลองใช้ drakmor/kstuff-lite (เฟิร์มแวร์ 3.00-10.01) แทน kstuff เริ่มต้น ติดตั้งจากไลบรารี Payloads",
+library_fpkg_kstuff_tip: "เคล็ดลับ: เพื่อการเมานต์ .ffpkg / .exfat ที่เร็วขึ้น (3-4 เท่า) ลองใช้ drakmor/kstuff-lite แทน kstuff เริ่มต้น ติดตั้งจากไลบรารี Payloads",
 library_fpkg_kstuff_tip_repo: "ดูบน GitHub",
 library_fpkg_kstuff_tip_dismiss: "ไม่ต้องแสดงอีก",
 payloads_refresh_error_banner: "ไม่สามารถรีเฟรชจาก GitHub ได้ — กำลังแสดงสแน็ปช็อตจากแคช แท็กล่าสุดบน GitHub อาจใหม่กว่าที่แสดงที่นี่",
@@ -2684,6 +2684,17 @@ edit_session_open: "เปิดไฟล์",
 edit_session_finish: "จบการแก้ไข",
 edit_session_done: "จบเซสชันการแก้ไขแล้ว",
 edit_session_done_body: "{name} กลับไปอยู่ในโฟลเดอร์เดิมแล้ว ShadowMount+ จะเมานต์และลงทะเบียนอีกครั้งภายในประมาณหนึ่งนาที",
+
+
+// Name conflicts when pasting or adding files
+fs_paste_conflict_title: "มี {count} รายการอยู่ที่นี่แล้ว",
+fs_paste_conflict_body: "แทนที่ {names} หรือไม่\n\nโฟลเดอร์จะถูกรวมเข้าด้วยกัน ไม่ใช่ล้างทิ้ง ไฟล์ข้างในที่คุณไม่ได้วางจะคงอยู่เหมือนเดิม ไฟล์ชื่อซ้ำจะถูกเขียนทับและย้อนกลับไม่ได้",
+fs_paste_conflict_ok: "แทนที่",
+fs_add_files_conflict_title: "มี {count} ไฟล์อยู่ที่นี่แล้ว",
+fs_add_files_conflict_body: "{names} จะถูกเขียนทับ ส่วนอื่นในโฟลเดอร์นี้จะไม่ถูกแตะต้อง\n\nหากอยู่ในอิมเมจเกมที่เมานต์อยู่ ไฟล์ที่ผิดอาจทำให้เกมเปิดไม่ได้ และย้อนกลับไม่ได้",
+fs_add_files_conflict_ok: "เขียนทับ",
+
+library_edit_files_short: "แก้ไขไฟล์",
 
 };
 

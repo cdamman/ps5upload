@@ -266,7 +266,7 @@ library_empty_title: "Pusto w przeskanowanych folderach",
 library_empty_message: "Prześlij folder gry lub obraz dysku, lub zarejestruj tytułu z instalatorem po stronie PS5 — pojawią się tutaj.",
 library_games: "Gry",
 library_disk_images: "Obrazy dysków (.exfat / .ffpkg)",
-library_fpkg_kstuff_tip: "Porada: dla szybszego montowania .ffpkg / .exfat (3-4× szybciej), sprobój drakmor/kstuff-lite (FW 3.00-10.01) zamiast kstuff. Zainstaluj z biblioteki payloadów.",
+library_fpkg_kstuff_tip: "Porada: dla szybszego montowania .ffpkg / .exfat (3-4× szybciej), sprobój drakmor/kstuff-lite zamiast kstuff. Zainstaluj z biblioteki payloadów.",
 payloads_refresh_error_banner: "Nie można odswieżyć z GitHub'a — pokazuje podręczny zapis. Ostatni tag na GitHub'ie może być nowsze niż to co pokazane tutaj.",
 library_fpkg_kstuff_tip_repo: "Zobacz na GitHub'ie",
 library_fpkg_kstuff_tip_dismiss: "Nie pokazuj ponownie",
@@ -2954,6 +2954,17 @@ edit_session_open: "Otwórz pliki",
 edit_session_finish: "Zakończ edycję",
 edit_session_done: "Sesja edycji zakończona",
 edit_session_done_body: "{name} wrócił do pierwotnego folderu. ShadowMount+ zamontuje go i zarejestruje ponownie w ciągu około minuty.",
+
+
+// Name conflicts when pasting or adding files
+fs_paste_conflict_title: "{count} element(ów) już tu istnieje",
+fs_paste_conflict_body: "Zastąpić {names}?\n\nFoldery są scalane, a nie opróżniane: pliki w nich, których nie wklejasz, pozostają bez zmian. Pliki o tej samej nazwie zostaną nadpisane, czego nie da się cofnąć.",
+fs_paste_conflict_ok: "Zastąp",
+fs_add_files_conflict_title: "{count} plik(ów) już tu istnieje",
+fs_add_files_conflict_body: "{names} zostanie nadpisany. Cała reszta w tym folderze pozostaje nietknięta.\n\nJeśli to wnętrze zamontowanego obrazu gry, zły plik może uniemożliwić jej uruchomienie, a cofnąć się tego nie da.",
+fs_add_files_conflict_ok: "Nadpisz",
+
+library_edit_files_short: "Edytuj pliki",
 
 };
 

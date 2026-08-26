@@ -1117,7 +1117,7 @@ queue_strategy_overwrite: "덮어쓰기",
 queue_strategy_resume: "재개",
 logged_error_one: "1개의 오류 기록됨",
 logged_error_many: "{count}개의 오류 기록됨",
-library_fpkg_kstuff_tip: "팁: .ffpkg / .exfat 마운트를 더 빠르게(3-4배) 하려면 기본 kstuff 대신 drakmor/kstuff-lite(펌웨어 3.00-10.01)를 사용해 보세요. Payloads 라이브러리에서 설치할 수 있습니다.",
+library_fpkg_kstuff_tip: "팁: .ffpkg / .exfat 마운트를 더 빠르게(3-4배) 하려면 기본 kstuff 대신 drakmor/kstuff-lite를 사용해 보세요. Payloads 라이브러리에서 설치할 수 있습니다.",
 library_fpkg_kstuff_tip_repo: "GitHub에서 보기",
 library_fpkg_kstuff_tip_dismiss: "다시 표시하지 않음",
 payloads_refresh_error_banner: "GitHub에서 새로 고침하지 못했습니다 — 캐시된 스냅샷을 표시 중입니다. GitHub의 최신 태그가 여기에 표시된 것보다 최신일 수 있습니다.",
@@ -2695,6 +2695,17 @@ edit_session_open: "파일 열기",
 edit_session_finish: "편집 마치기",
 edit_session_done: "편집 세션이 끝났습니다",
 edit_session_done_body: "{name}이(가) 원래 폴더로 돌아왔습니다. ShadowMount+가 약 1분 안에 다시 마운트하고 등록합니다.",
+
+
+// Name conflicts when pasting or adding files
+fs_paste_conflict_title: "{count}개 항목이 여기에 이미 있습니다",
+fs_paste_conflict_body: "{names}을(를) 바꿀까요?\n\n폴더는 비워지지 않고 병합됩니다. 붙여넣지 않는 내부 파일은 그대로 남습니다. 이름이 같은 파일은 덮어쓰며 되돌릴 수 없습니다.",
+fs_paste_conflict_ok: "바꾸기",
+fs_add_files_conflict_title: "{count}개 파일이 여기에 이미 있습니다",
+fs_add_files_conflict_body: "{names}이(가) 덮어써집니다. 이 폴더의 나머지는 그대로 둡니다.\n\n마운트된 게임 이미지 안이라면 잘못된 파일로 게임이 실행되지 않을 수 있으며 되돌릴 수 없습니다.",
+fs_add_files_conflict_ok: "덮어쓰기",
+
+library_edit_files_short: "파일 편집",
 
 };
 

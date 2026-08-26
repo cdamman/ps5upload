@@ -1116,7 +1116,7 @@ queue_strategy_overwrite: "Timpa",
 queue_strategy_resume: "Lanjutkan",
 logged_error_one: "1 kesalahan tercatat",
 logged_error_many: "{count} kesalahan tercatat",
-library_fpkg_kstuff_tip: "Tip: untuk pemasangan .ffpkg / .exfat yang lebih cepat (3-4×), coba drakmor/kstuff-lite (firmware 3.00-10.01) daripada kstuff default. Pasang dari pustaka Payloads.",
+library_fpkg_kstuff_tip: "Tip: untuk pemasangan .ffpkg / .exfat yang lebih cepat (3-4×), coba drakmor/kstuff-lite daripada kstuff default. Pasang dari pustaka Payloads.",
 library_fpkg_kstuff_tip_repo: "Lihat di GitHub",
 library_fpkg_kstuff_tip_dismiss: "Jangan tampilkan lagi",
 payloads_refresh_error_banner: "Tidak dapat me-refresh dari GitHub — menampilkan snapshot dari cache. Tag terbaru di GitHub mungkin lebih baru dari yang ditampilkan di sini.",
@@ -2666,6 +2666,17 @@ edit_session_open: "Buka berkas",
 edit_session_finish: "Selesai mengedit",
 edit_session_done: "Sesi edit selesai",
 edit_session_done_body: "{name} sudah kembali ke folder aslinya. ShadowMount+ akan memasang dan mendaftarkannya lagi dalam waktu sekitar satu menit.",
+
+
+// Name conflicts when pasting or adding files
+fs_paste_conflict_title: "{count} item sudah ada di sini",
+fs_paste_conflict_body: "Ganti {names}?\n\nFolder digabungkan, bukan dikosongkan: berkas di dalamnya yang tidak kamu tempel dibiarkan apa adanya. Berkas dengan nama sama akan ditimpa, dan itu tidak bisa dibatalkan.",
+fs_paste_conflict_ok: "Ganti",
+fs_add_files_conflict_title: "{count} berkas sudah ada di sini",
+fs_add_files_conflict_body: "{names} akan ditimpa. Semua isi folder ini yang lain dibiarkan.\n\nKalau ini di dalam image game yang terpasang, berkas yang salah bisa membuat game gagal dijalankan, dan tidak bisa dibatalkan.",
+fs_add_files_conflict_ok: "Timpa",
+
+library_edit_files_short: "Edit berkas",
 
 };
 

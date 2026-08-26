@@ -1116,7 +1116,7 @@ queue_strategy_overwrite: "ওভাররাইট",
 queue_strategy_resume: "পুনরায় শুরু",
 logged_error_one: "১টি লগ করা ত্রুটি",
 logged_error_many: "{count}টি লগ করা ত্রুটি",
-library_fpkg_kstuff_tip: "টিপ: দ্রুত .ffpkg / .exfat মাউন্টিং (3-4×) এর জন্য, ডিফল্ট kstuff এর পরিবর্তে drakmor/kstuff-lite (ফার্মওয়্যার 3.00-10.01) ব্যবহার করুন। Payloads লাইব্রেরি থেকে ইনস্টল করুন।",
+library_fpkg_kstuff_tip: "টিপ: দ্রুত .ffpkg / .exfat মাউন্টিং (3-4×) এর জন্য, ডিফল্ট kstuff এর পরিবর্তে drakmor/kstuff-lite ব্যবহার করুন। Payloads লাইব্রেরি থেকে ইনস্টল করুন।",
 library_fpkg_kstuff_tip_repo: "GitHub-এ দেখুন",
 library_fpkg_kstuff_tip_dismiss: "আর দেখাবেন না",
 payloads_refresh_error_banner: "GitHub থেকে রিফ্রেশ করা যায়নি — ক্যাশ করা স্ন্যাপশট দেখানো হচ্ছে। GitHub-এর সর্বশেষ ট্যাগ এখানে যা দেখানো হয়েছে তার চেয়ে নতুন হতে পারে।",
@@ -2657,6 +2657,17 @@ edit_session_open: "ফাইল খুলুন",
 edit_session_finish: "সম্পাদনা শেষ করুন",
 edit_session_done: "সম্পাদনা সেশন শেষ",
 edit_session_done_body: "{name} তার আসল ফোল্ডারে ফিরে এসেছে। ShadowMount+ প্রায় এক মিনিটের মধ্যে এটি আবার মাউন্ট ও নিবন্ধন করবে।",
+
+
+// Name conflicts when pasting or adding files
+fs_paste_conflict_title: "{count}টি আইটেম এখানে আগে থেকেই আছে",
+fs_paste_conflict_body: "{names} প্রতিস্থাপন করবেন?\n\nফোল্ডার মুছে ফেলা হয় না, একত্র করা হয়: ভেতরের যেসব ফাইল আপনি পেস্ট করছেন না সেগুলো অপরিবর্তিত থাকে। একই নামের ফাইল ওভাররাইট হয়, এবং তা ফেরানো যায় না।",
+fs_paste_conflict_ok: "প্রতিস্থাপন",
+fs_add_files_conflict_title: "{count}টি ফাইল এখানে আগে থেকেই আছে",
+fs_add_files_conflict_body: "{names} ওভাররাইট হবে। এই ফোল্ডারের বাকি সবকিছু অপরিবর্তিত থাকবে।\n\nএটি মাউন্ট করা গেম ইমেজের ভেতরে হলে, ভুল ফাইল গেম চালু হওয়া আটকাতে পারে, এবং ফেরানো যায় না।",
+fs_add_files_conflict_ok: "ওভাররাইট",
+
+library_edit_files_short: "ফাইল সম্পাদনা",
 
 };
 

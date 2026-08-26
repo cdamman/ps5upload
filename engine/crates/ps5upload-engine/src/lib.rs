@@ -1496,6 +1496,13 @@ struct FsMoveReq {
     addr: Option<String>,
     from: String,
     to: String,
+    /// Merge into an existing destination instead of refusing it. Files that
+    /// collide are replaced; anything already in the destination that the
+    /// source doesn't mention is left alone. Absent = the historical
+    /// refuse-to-clobber behaviour, so only a caller that has actually asked
+    /// the user gets the destructive path.
+    #[serde(default)]
+    overwrite: bool,
     /// Optional unique 64-bit identifier the client generates so it
     /// can poll progress (`/api/ps5/fs/op-status`) and cancel
     /// (`/api/ps5/fs/op-cancel`) the in-flight copy. The engine
@@ -1651,10 +1658,13 @@ async fn ps5_fs_copy(
     // 3 min with zero bytes written ⇒ genuinely stuck (a live USB copy advances
     // steadily; this only trips on a wedged console / pulled drive).
     let stall = std::time::Duration::from_secs(180);
-    match tokio::task::spawn_blocking(move || fs_copy_robust(&addr, &from, &to, op_id, stall))
-        .await
-        .map_err(anyhow::Error::from)
-        .and_then(|r| r)
+    let overwrite = req.overwrite;
+    match tokio::task::spawn_blocking(move || {
+        fs_copy_robust(&addr, &from, &to, op_id, stall, overwrite)
+    })
+    .await
+    .map_err(anyhow::Error::from)
+    .and_then(|r| r)
     {
         Ok(()) => {
             crate::log_info!(

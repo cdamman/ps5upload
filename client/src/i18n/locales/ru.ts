@@ -1116,7 +1116,7 @@ queue_strategy_overwrite: "Перезаписать",
 queue_strategy_resume: "Продолжить",
 logged_error_one: "1 ошибка в журнале",
 logged_error_many: "{count} ошибок в журнале",
-library_fpkg_kstuff_tip: "Совет: для более быстрого монтирования .ffpkg / .exfat (в 3-4 раза) попробуйте drakmor/kstuff-lite (прошивка 3.00-10.01) вместо стандартного kstuff. Установите из библиотеки Payloads.",
+library_fpkg_kstuff_tip: "Совет: для более быстрого монтирования .ffpkg / .exfat (в 3-4 раза) попробуйте drakmor/kstuff-lite вместо стандартного kstuff. Установите из библиотеки Payloads.",
 library_fpkg_kstuff_tip_repo: "Открыть на GitHub",
 library_fpkg_kstuff_tip_dismiss: "Больше не показывать",
 payloads_refresh_error_banner: "Не удалось обновить с GitHub — показан снимок из кэша. Последний тег на GitHub может быть новее показанного здесь.",
@@ -2604,6 +2604,17 @@ edit_session_open: "Открыть файлы",
 edit_session_finish: "Завершить редактирование",
 edit_session_done: "Сеанс редактирования завершён",
 edit_session_done_body: "{name} вернулся в исходную папку. ShadowMount+ смонтирует и зарегистрирует его снова примерно через минуту.",
+
+
+// Name conflicts when pasting or adding files
+fs_paste_conflict_title: "{count} объект(ов) уже здесь есть",
+fs_paste_conflict_body: "Заменить {names}?\n\nПапки объединяются, а не очищаются: файлы внутри них, которые вы не вставляете, остаются как есть. Файлы с тем же именем перезаписываются, и отменить это нельзя.",
+fs_paste_conflict_ok: "Заменить",
+fs_add_files_conflict_title: "{count} файл(ов) уже здесь есть",
+fs_add_files_conflict_body: "{names} будет перезаписан. Всё остальное в этой папке останется нетронутым.\n\nЕсли это внутри смонтированного образа игры, неподходящий файл может помешать её запуску, и отменить это нельзя.",
+fs_add_files_conflict_ok: "Перезаписать",
+
+library_edit_files_short: "Изменить файлы",
 
 };
 

@@ -1116,7 +1116,7 @@ queue_strategy_overwrite: "Remplacer",
 queue_strategy_resume: "Reprendre",
 logged_error_one: "1 erreur enregistrée",
 logged_error_many: "{count} erreurs enregistrées",
-library_fpkg_kstuff_tip: "Astuce : pour un montage .ffpkg / .exfat plus rapide (3-4×), essayez drakmor/kstuff-lite (firmware 3.00-10.01) à la place du kstuff par défaut. Installation depuis la bibliothèque Payloads.",
+library_fpkg_kstuff_tip: "Astuce : pour un montage .ffpkg / .exfat plus rapide (3-4×), essayez drakmor/kstuff-lite à la place du kstuff par défaut. Installation depuis la bibliothèque Payloads.",
 library_fpkg_kstuff_tip_repo: "Voir sur GitHub",
 library_fpkg_kstuff_tip_dismiss: "Ne plus afficher",
 payloads_refresh_error_banner: "Impossible de rafraîchir depuis GitHub — affichage de l'instantané en cache. La dernière version sur GitHub peut être plus récente que celle affichée ici.",
@@ -2694,6 +2694,17 @@ edit_session_open: "Ouvrir les fichiers",
 edit_session_finish: "Terminer la modification",
 edit_session_done: "Session de modification terminée",
 edit_session_done_body: "{name} est de retour dans son dossier d'origine. ShadowMount+ le montera et l'enregistrera à nouveau d'ici environ une minute.",
+
+
+// Name conflicts when pasting or adding files
+fs_paste_conflict_title: "{count} élément(s) existent déjà ici",
+fs_paste_conflict_body: "Remplacer {names} ?\n\nLes dossiers sont fusionnés, pas vidés : les fichiers qu'ils contiennent et que vous ne collez pas restent tels quels. Les fichiers de même nom sont écrasés, sans annulation possible.",
+fs_paste_conflict_ok: "Remplacer",
+fs_add_files_conflict_title: "{count} fichier(s) existent déjà ici",
+fs_add_files_conflict_body: "{names} sera écrasé. Tout le reste de ce dossier est laissé intact.\n\nSi cela se trouve dans une image de jeu montée, un mauvais fichier peut empêcher le jeu de démarrer, et il n'y a pas d'annulation.",
+fs_add_files_conflict_ok: "Écraser",
+
+library_edit_files_short: "Modifier les fichiers",
 
 };
 

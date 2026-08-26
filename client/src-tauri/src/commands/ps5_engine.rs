@@ -1858,6 +1858,10 @@ pub struct FsMoveReq {
     pub addr: Option<String>,
     pub from: String,
     pub to: String,
+    /// Merge into an existing destination rather than refusing it. Only set
+    /// by a caller that has asked the user; see the engine's FsMoveReq.
+    #[serde(default)]
+    pub overwrite: Option<bool>,
     /// Optional unique 64-bit id the client generates so it can poll
     /// progress / cancel the in-flight copy. Forwarded to the engine
     /// which forwards to the payload as the FS_COPY frame's trace_id.
@@ -1922,6 +1926,7 @@ pub async fn ps5_fs_copy(req: FsMoveReq) -> Result<JsonValue, String> {
             "from": req.from,
             "to": req.to,
             "op_id": req.op_id.unwrap_or(0),
+            "overwrite": req.overwrite.unwrap_or(false),
         }),
     )
     .await

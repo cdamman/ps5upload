@@ -1116,7 +1116,7 @@ queue_strategy_overwrite: "Üzerine yaz",
 queue_strategy_resume: "Devam et",
 logged_error_one: "1 günlüklenmiş hata",
 logged_error_many: "{count} günlüklenmiş hata",
-library_fpkg_kstuff_tip: "İpucu: .ffpkg / .exfat'i daha hızlı (3-4 kat) bağlamak için varsayılan kstuff yerine drakmor/kstuff-lite (sürüm 3.00-10.01) deneyin. Payloads kitaplığından yükleyin.",
+library_fpkg_kstuff_tip: "İpucu: .ffpkg / .exfat'i daha hızlı (3-4 kat) bağlamak için varsayılan kstuff yerine drakmor/kstuff-lite deneyin. Payloads kitaplığından yükleyin.",
 library_fpkg_kstuff_tip_repo: "GitHub'da görüntüle",
 library_fpkg_kstuff_tip_dismiss: "Tekrar gösterme",
 payloads_refresh_error_banner: "GitHub'dan yenilenemiyor — önbelleğe alınmış anlık görüntü gösteriliyor. GitHub'daki en son etiket burada gösterilenden daha yeni olabilir.",
@@ -2664,6 +2664,17 @@ edit_session_open: "Dosyaları aç",
 edit_session_finish: "Düzenlemeyi bitir",
 edit_session_done: "Düzenleme oturumu bitti",
 edit_session_done_body: "{name} özgün klasörüne geri döndü. ShadowMount+ yaklaşık bir dakika içinde onu yeniden bağlayıp kaydedecek.",
+
+
+// Name conflicts when pasting or adding files
+fs_paste_conflict_title: "{count} öge burada zaten var",
+fs_paste_conflict_body: "{names} değiştirilsin mi?\n\nKlasörler birleştirilir, boşaltılmaz: içlerindeki yapıştırmadığın dosyalar aynen kalır. Aynı adlı dosyaların üzerine yazılır ve bu geri alınamaz.",
+fs_paste_conflict_ok: "Değiştir",
+fs_add_files_conflict_title: "{count} dosya burada zaten var",
+fs_add_files_conflict_body: "{names} üzerine yazılacak. Bu klasördeki diğer her şey olduğu gibi kalır.\n\nBu bağlı bir oyun imajının içindeyse, hatalı bir dosya oyunun açılmasını engelleyebilir ve geri alınamaz.",
+fs_add_files_conflict_ok: "Üzerine yaz",
+
+library_edit_files_short: "Dosyaları düzenle",
 
 };
 

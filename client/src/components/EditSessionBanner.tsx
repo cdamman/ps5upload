@@ -20,7 +20,15 @@ import { saveFsLastPath } from "../lib/fsLastPath";
  * why their game vanished, so the banner is rendered on every screen the edit
  * flow passes through and the session is re-probed from the console on mount.
  */
-export default function EditSessionBanner() {
+export default function EditSessionBanner({
+  onFinished,
+}: {
+  /** Called after a session is successfully checked back in. The Games and
+   *  Files screens pass their own refresh: the image reappears in its
+   *  original folder and the mount disappears, so a stale listing would show
+   *  neither until the user refreshed by hand. */
+  onFinished?: () => void;
+} = {}) {
   const tr = useTr();
   const navigate = useNavigate();
   const host = useConnectionStore((s) => s.host);
@@ -50,6 +58,7 @@ export default function EditSessionBanner() {
     try {
       const done = await finish(host);
       if (done) {
+        onFinished?.();
         pushNotification(
           "info",
           withConsolePrefix(
@@ -98,11 +107,13 @@ export default function EditSessionBanner() {
             size="sm"
             leftIcon={<FolderOpen size={12} />}
             onClick={() => {
-              // The File Browser restores its last-browsed path per host, so
-              // seeding that is how you deep-link it somewhere — it reads no
-              // route params of its own.
+              // `?path=` rather than just navigate("/files"): the browser
+              // seeds its folder from storage only on mount, so a plain
+              // navigate does nothing when the user is already on Files —
+              // which is where this banner also renders. Seed storage too so
+              // the folder sticks for the next visit.
               saveFsLastPath(host, checkout.mount_point);
-              navigate("/files");
+              navigate(`/files?path=${encodeURIComponent(checkout.mount_point)}`);
             }}
             disabled={busy}
           >

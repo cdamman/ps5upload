@@ -65,4 +65,12 @@ int proc_name_by_pid(int pid, char *out, size_t cap);
  */
 int proc_find_pid_by_name(const char *name);
 
+/* Pid of a running process whose app TITLE ID matches, or -1.
+ *
+ * `launch_title` uses this to confirm an attempt worked before trying the
+ * next strategy: Sony's launch calls can report failure for a launch that is
+ * actually proceeding, and re-launching a title that is already starting
+ * makes the shell bounce it to the background. */
+int proc_find_pid_by_title_id(const char *title_id);
+
 #endif /* PS5UPLOAD2_PROC_LIST_H */

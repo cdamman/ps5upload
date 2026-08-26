@@ -1117,7 +1117,7 @@ queue_strategy_overwrite: "上書き",
 queue_strategy_resume: "再開",
 logged_error_one: "1 件のエラーをログ",
 logged_error_many: "{count} 件のエラーをログ",
-library_fpkg_kstuff_tip: "ヒント: .ffpkg / .exfat のマウントを高速化（3〜4倍）するには、デフォルトの kstuff の代わりに drakmor/kstuff-lite（ファームウェア 3.00-10.01）を試してください。Payloads ライブラリからインストールできます。",
+library_fpkg_kstuff_tip: "ヒント: .ffpkg / .exfat のマウントを高速化（3〜4倍）するには、デフォルトの kstuff の代わりに drakmor/kstuff-liteを試してください。Payloads ライブラリからインストールできます。",
 library_fpkg_kstuff_tip_repo: "GitHubで見る",
 library_fpkg_kstuff_tip_dismiss: "今後表示しない",
 payloads_refresh_error_banner: "GitHub からの更新に失敗しました — キャッシュされたスナップショットを表示しています。GitHub の最新タグは、ここに表示されているものより新しい可能性があります。",
@@ -2699,6 +2699,17 @@ edit_session_open: "ファイルを開く",
 edit_session_finish: "編集を終了",
 edit_session_done: "編集セッションを終了しました",
 edit_session_done_body: "{name} は元のフォルダーに戻りました。ShadowMount+ が約1分以内に再びマウントして登録します。",
+
+
+// Name conflicts when pasting or adding files
+fs_paste_conflict_title: "{count} 件が既にここにあります",
+fs_paste_conflict_body: "{names} を置き換えますか？\n\nフォルダーは中身が消されるのではなく統合されます。貼り付けないファイルはそのまま残ります。同じ名前のファイルは上書きされ、元に戻せません。",
+fs_paste_conflict_ok: "置き換える",
+fs_add_files_conflict_title: "{count} 個のファイルが既にここにあります",
+fs_add_files_conflict_body: "{names} は上書きされます。このフォルダー内のそれ以外はそのままです。\n\nマウント中のゲームイメージ内の場合、不正なファイルでゲームが起動しなくなることがあり、元に戻せません。",
+fs_add_files_conflict_ok: "上書き",
+
+library_edit_files_short: "ファイルを編集",
 
 };
 

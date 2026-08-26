@@ -390,8 +390,32 @@ pub fn fs_copy_with_op_id(
     op_id: u64,
     io_timeout: Option<std::time::Duration>,
 ) -> Result<()> {
-    let body = serde_json::to_vec(&serde_json::json!({ "from": from, "to": to }))
-        .context("serialize fs_copy")?;
+    fs_copy_full(addr, from, to, op_id, io_timeout, false)
+}
+
+/// Like [`fs_copy_with_op_id`] plus an explicit `overwrite` flag.
+///
+/// `overwrite` selects MERGE semantics on the payload side: a colliding file
+/// is replaced, a colliding directory is descended into, and anything in the
+/// destination the source doesn't mention is left alone. Without it the
+/// payload refuses to touch an existing destination (`fs_copy_dest_exists`),
+/// which is the right default for a copy the user hasn't been asked about.
+pub fn fs_copy_full(
+    addr: &str,
+    from: &str,
+    to: &str,
+    op_id: u64,
+    io_timeout: Option<std::time::Duration>,
+    overwrite: bool,
+) -> Result<()> {
+    let body = serde_json::to_vec(&serde_json::json!({
+        "from": from,
+        "to": to,
+        // Numeric, matching the payload's other boolean knobs (it parses
+        // these with a JSON-uint helper, not a bool one).
+        "overwrite": if overwrite { 1 } else { 0 },
+    }))
+    .context("serialize fs_copy")?;
     let mut c = Connection::connect(addr)?;
     if let Some(t) = io_timeout {
         c.set_io_timeout(t)
@@ -589,6 +613,9 @@ pub fn fs_copy_robust(
     to: &str,
     op_id: u64,
     stall: std::time::Duration,
+    // Merge into an existing destination rather than refusing it. See
+    // `fs_copy_full`.
+    overwrite: bool,
 ) -> Result<()> {
     let (a, f, t) = (addr.to_string(), from.to_string(), to.to_string());
     // Fire the copy on a worker thread. A generous 4h cap covers a huge image
@@ -597,12 +624,13 @@ pub fn fs_copy_robust(
     // pre-flight (e.g. dest_exists — that we DO surface fast).
     let mut worker: Option<std::thread::JoinHandle<Result<()>>> =
         Some(std::thread::spawn(move || {
-            fs_copy_with_op_id(
+            fs_copy_full(
                 &a,
                 &f,
                 &t,
                 op_id,
                 Some(std::time::Duration::from_secs(4 * 3600)),
+                overwrite,
             )
         }));
 

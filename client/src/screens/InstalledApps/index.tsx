@@ -274,12 +274,14 @@ function AppCard({
               app", not necessarily "never played on the console". A neutral
               muted line for played titles; a subtle warning tint for
               never-seen ones so unused games are scannable at a glance. */}
-          <div
-            className={`mt-1 flex items-center gap-1.5 text-xs ${
-              lastSeenMs === undefined
-                ? "text-[var(--color-warning)]"
-                : "text-[var(--color-muted)]"
-            }`}
+          {/* Muted for both states. "You haven't played this" is
+              information, not a warning, and amber here competed with the
+              things that genuinely need attention. The "Only
+              not-seen-playing" filter is the affordance for scanning unused
+              games. (The never-seen branch also asked for --color-warning,
+              which is not a token — the real one is --color-warn — so it
+              silently applied no colour at all.) */}
+          <div className="mt-1 flex items-center gap-1.5 text-xs text-[var(--color-muted)]"
             title={tr(
               "installed_playtime_tooltip",
               undefined,

@@ -1116,7 +1116,7 @@ queue_strategy_overwrite: "Sobrescrever",
 queue_strategy_resume: "Retomar",
 logged_error_one: "1 erro registrado",
 logged_error_many: "{count} erros registrados",
-library_fpkg_kstuff_tip: "Dica: para montagem mais rápida de .ffpkg / .exfat (3-4×), experimente drakmor/kstuff-lite (firmware 3.00-10.01) em vez do kstuff padrão. Instale pela biblioteca de Payloads.",
+library_fpkg_kstuff_tip: "Dica: para montagem mais rápida de .ffpkg / .exfat (3-4×), experimente drakmor/kstuff-lite em vez do kstuff padrão. Instale pela biblioteca de Payloads.",
 library_fpkg_kstuff_tip_repo: "Ver no GitHub",
 library_fpkg_kstuff_tip_dismiss: "Não mostrar novamente",
 payloads_refresh_error_banner: "Não foi possível atualizar do GitHub — mostrando snapshot em cache. A tag mais recente no GitHub pode ser mais nova do que a mostrada aqui.",
@@ -2692,6 +2692,17 @@ edit_session_open: "Abrir arquivos",
 edit_session_finish: "Concluir edição",
 edit_session_done: "Sessão de edição concluída",
 edit_session_done_body: "{name} está de volta à pasta original. O ShadowMount+ vai montá-lo e registrá-lo novamente em cerca de um minuto.",
+
+
+// Name conflicts when pasting or adding files
+fs_paste_conflict_title: "{count} item(ns) já existem aqui",
+fs_paste_conflict_body: "Substituir {names}?\n\nAs pastas são mescladas, não esvaziadas: os arquivos dentro delas que você não está colando ficam exatamente como estão. Arquivos com o mesmo nome são sobrescritos, e isso não pode ser desfeito.",
+fs_paste_conflict_ok: "Substituir",
+fs_add_files_conflict_title: "{count} arquivo(s) já existem aqui",
+fs_add_files_conflict_body: "{names} será sobrescrito. Todo o resto nesta pasta fica intacto.\n\nSe isto estiver dentro de uma imagem de jogo montada, um arquivo errado pode impedir o jogo de iniciar, e não há como desfazer.",
+fs_add_files_conflict_ok: "Sobrescrever",
+
+library_edit_files_short: "Editar arquivos",
 
 };
 

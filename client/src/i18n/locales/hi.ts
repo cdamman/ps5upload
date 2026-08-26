@@ -1117,7 +1117,7 @@ queue_strategy_overwrite: "अधिलेखित करें",
 queue_strategy_resume: "फिर से शुरू",
 logged_error_one: "1 लॉग की गई त्रुटि",
 logged_error_many: "{count} लॉग की गई त्रुटियाँ",
-library_fpkg_kstuff_tip: "सुझाव: तेज़ .ffpkg / .exfat माउंटिंग (3-4×) के लिए, डिफ़ॉल्ट kstuff के बजाय drakmor/kstuff-lite (फर्मवेयर 3.00-10.01) आज़माएँ। Payloads लाइब्रेरी से इंस्टॉल करें।",
+library_fpkg_kstuff_tip: "सुझाव: तेज़ .ffpkg / .exfat माउंटिंग (3-4×) के लिए, डिफ़ॉल्ट kstuff के बजाय drakmor/kstuff-lite आज़माएँ। Payloads लाइब्रेरी से इंस्टॉल करें।",
 library_fpkg_kstuff_tip_repo: "GitHub पर देखें",
 library_fpkg_kstuff_tip_dismiss: "फिर से न दिखाएँ",
 payloads_refresh_error_banner: "GitHub से रिफ्रेश नहीं किया जा सका — कैश्ड स्नैपशॉट दिखाया जा रहा है। GitHub पर नवीनतम टैग यहाँ दिखाए गए से नया हो सकता है।",
@@ -2694,6 +2694,17 @@ edit_session_open: "फ़ाइलें खोलें",
 edit_session_finish: "संपादन समाप्त करें",
 edit_session_done: "संपादन सत्र समाप्त",
 edit_session_done_body: "{name} अपने मूल फ़ोल्डर में वापस आ गया है। ShadowMount+ लगभग एक मिनट में इसे फिर से माउंट और रजिस्टर कर देगा।",
+
+
+// Name conflicts when pasting or adding files
+fs_paste_conflict_title: "{count} आइटम यहाँ पहले से हैं",
+fs_paste_conflict_body: "{names} को बदलें?\n\nफ़ोल्डर मिलाए जाते हैं, खाली नहीं किए जाते: उनके अंदर की जो फ़ाइलें आप पेस्ट नहीं कर रहे, वे वैसी ही रहती हैं। एक ही नाम वाली फ़ाइलें अधिलेखित हो जाती हैं और इसे पूर्ववत नहीं किया जा सकता।",
+fs_paste_conflict_ok: "बदलें",
+fs_add_files_conflict_title: "{count} फ़ाइलें यहाँ पहले से हैं",
+fs_add_files_conflict_body: "{names} अधिलेखित हो जाएगी। इस फ़ोल्डर में बाकी सब वैसा ही रहेगा।\n\nअगर यह किसी माउंट किए गए गेम इमेज के अंदर है, तो ग़लत फ़ाइल गेम को चलने से रोक सकती है, और इसे पूर्ववत नहीं किया जा सकता।",
+fs_add_files_conflict_ok: "अधिलेखित करें",
+
+library_edit_files_short: "फ़ाइलें संपादित करें",
 
 };
 

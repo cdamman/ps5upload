@@ -490,7 +490,10 @@ export default function LibraryScreen({
           from — the user may well arrive here from a different screen, or a
           different session entirely. */}
       <div className="mb-4 empty:hidden">
-        <EditSessionBanner />
+        {/* Re-scan on check-in: the image is back in its original folder and
+            the edit mount is gone, so the list is stale the moment the
+            session ends. */}
+        <EditSessionBanner onFinished={refresh} />
       </div>
 
       {error && (
@@ -2470,6 +2473,33 @@ function LibraryRowImpl({
                 {tr("library_unmount", undefined, "Unmount")}
               </Button>
             ) : (
+              <>
+              {/* Edit sits NEXT TO Mount rather than inside the ⋯ menu: the two
+                  are different actions (Mount hands the image to ShadowMount+
+                  so you can play it, read-only; Edit checks it out so you can
+                  change what's inside), and users only discovered editing by
+                  opening a menu they had no reason to open. Showing both is
+                  what makes the distinction visible at all. */}
+              {smpRunning && !isMounted && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  leftIcon={<FilePenLine size={12} />}
+                  onClick={() => {
+                    setMountIntent("edit");
+                    setMountOpen(true);
+                  }}
+                  disabled={busy !== null || !entry.imageFormat}
+                  loading={busy === "edit-checkout"}
+                  title={tr(
+                    "library_edit_files_tooltip",
+                    undefined,
+                    "Take this image out of ShadowMount+ and mount it read-write so you can add or replace files inside it",
+                  )}
+                >
+                  {tr("library_edit_files_short", undefined, "Edit files")}
+                </Button>
+              )}
               <Button
                 variant="primary"
                 size="sm"
@@ -2506,6 +2536,7 @@ function LibraryRowImpl({
               >
                 {tr("library_mount", undefined, "Mount")}
               </Button>
+              </>
             )
           ) : (
             /* Game rows: one primary action (Play — runs the auto-
@@ -2697,28 +2728,6 @@ function LibraryRowImpl({
                   "library_chmod_tooltip",
                   undefined,
                   "Open read/write/execute to every user on this PS5",
-                ),
-              });
-            }
-            // Edit-in-place is only meaningful for a disk image that
-            // ShadowMount+ is managing: it works by taking the image out of
-            // SMP's scan folders, which is a no-op (and a confusing offer)
-            // when SMP isn't running. An image we've mounted ourselves is
-            // already writable through the ordinary Mount flow.
-            if (entry.kind === "image" && smpRunning && !isMounted) {
-              items.push({
-                label: tr("library_edit_files", undefined, "Edit files…"),
-                icon: <FilePenLine size={12} />,
-                onSelect: () => {
-                  setMountIntent("edit");
-                  setMountOpen(true);
-                },
-                disabled: busy !== null || !entry.imageFormat,
-                loading: busy === "edit-checkout",
-                title: tr(
-                  "library_edit_files_tooltip",
-                  undefined,
-                  "Take this image out of ShadowMount+ and mount it read-write so you can add or replace files inside it",
                 ),
               });
             }
@@ -3564,10 +3573,15 @@ function MountModal({
     // ordinary mounts), so for the edit intent we ignore it and default
     // somewhere SMP does not look.
     if (intent === "edit") {
-      return {
-        volume: imageVolume ?? dropdownPaths[0] ?? "/data",
-        subpath: EDIT_MOUNT_SUBPATH,
-      };
+      // Deliberately NOT the image's own volume. `/mnt/usb*` and `/mnt/ext*`
+      // are the kernel's hotplug namespace and mounting into them is refused
+      // on most firmware — so defaulting a USB-hosted image's mount point
+      // onto its own drive would fail every time. ShadowMount+ has the same
+      // constraint and resolves it the same way: it mounts images from USB
+      // and external drives at /mnt/shadowmnt, on internal storage. Only the
+      // STAGING folder has to share the image's volume (that move is a
+      // rename); the mount point is free to live anywhere.
+      return { volume: "/data", subpath: EDIT_MOUNT_SUBPATH };
     }
     if (saved && (!imageVolume || saved.volume === imageVolume)) {
       return saved;

@@ -1117,7 +1117,7 @@ queue_strategy_overwrite: "覆寫",
 queue_strategy_resume: "繼續",
 logged_error_one: "已記錄 1 個錯誤",
 logged_error_many: "已記錄 {count} 個錯誤",
-library_fpkg_kstuff_tip: "提示：若要讓 .ffpkg / .exfat 掛載更快（3-4 倍），請改用 drakmor/kstuff-lite（韌體 3.00-10.01），取代預設的 kstuff。可從 Payloads 程式庫安裝。",
+library_fpkg_kstuff_tip: "提示：若要讓 .ffpkg / .exfat 掛載更快（3-4 倍），請改用 drakmor/kstuff-lite，取代預設的 kstuff。可從 Payloads 程式庫安裝。",
 library_fpkg_kstuff_tip_repo: "在 GitHub 上檢視",
 library_fpkg_kstuff_tip_dismiss: "不再顯示",
 payloads_refresh_error_banner: "無法從 GitHub 重新整理 — 顯示快取快照。GitHub 上的最新標籤可能比此處顯示的更新。",
@@ -2605,6 +2605,17 @@ edit_session_open: "開啟檔案",
 edit_session_finish: "結束編輯",
 edit_session_done: "編輯工作階段已結束",
 edit_session_done_body: "{name} 已回到原資料夾。ShadowMount+ 將在約一分鐘內重新掛載並註冊它。",
+
+
+// Name conflicts when pasting or adding files
+fs_paste_conflict_title: "這裡已存在 {count} 個項目",
+fs_paste_conflict_body: "要取代 {names} 嗎？\n\n資料夾是合併而不是清空：其中你沒有貼上的檔案會原樣保留。同名檔案會被覆寫，且無法復原。",
+fs_paste_conflict_ok: "取代",
+fs_add_files_conflict_title: "這裡已存在 {count} 個檔案",
+fs_add_files_conflict_body: "{names} 將被覆寫。此資料夾中的其他內容保持不變。\n\n如果這是在已掛載的遊戲映像檔內，錯誤的檔案可能導致遊戲無法啟動，且無法復原。",
+fs_add_files_conflict_ok: "覆寫",
+
+library_edit_files_short: "編輯檔案",
 
 };
 

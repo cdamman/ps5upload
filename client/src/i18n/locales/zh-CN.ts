@@ -1123,7 +1123,7 @@ queue_strategy_overwrite: "覆盖",
 queue_strategy_resume: "继续",
 logged_error_one: "已记录 1 个错误",
 logged_error_many: "已记录 {count} 个错误",
-library_fpkg_kstuff_tip: "提示：要让 .ffpkg / .exfat 挂载更快（3-4 倍），请试试 drakmor/kstuff-lite（固件 3.00-10.01），替代默认的 kstuff。可从 Payloads 库安装。",
+library_fpkg_kstuff_tip: "提示：要让 .ffpkg / .exfat 挂载更快（3-4 倍），请试试 drakmor/kstuff-lite，替代默认的 kstuff。可从 Payloads 库安装。",
 library_fpkg_kstuff_tip_repo: "在 GitHub 上查看",
 library_fpkg_kstuff_tip_dismiss: "不再显示",
 payloads_refresh_error_banner: "无法从 GitHub 刷新 — 显示缓存快照。GitHub 上的最新标签可能比此处显示的更新。",
@@ -2610,6 +2610,17 @@ edit_session_open: "打开文件",
 edit_session_finish: "结束编辑",
 edit_session_done: "编辑会话已结束",
 edit_session_done_body: "{name} 已回到原文件夹。ShadowMount+ 将在约一分钟内重新挂载并注册它。",
+
+
+// Name conflicts when pasting or adding files
+fs_paste_conflict_title: "这里已存在 {count} 个项目",
+fs_paste_conflict_body: "要替换 {names} 吗？\n\n文件夹是合并而不是清空：其中你没有粘贴的文件会原样保留。同名文件会被覆盖，且无法撤销。",
+fs_paste_conflict_ok: "替换",
+fs_add_files_conflict_title: "这里已存在 {count} 个文件",
+fs_add_files_conflict_body: "{names} 将被覆盖。此文件夹中的其他内容保持不变。\n\n如果这是在已挂载的游戏镜像内，错误的文件可能导致游戏无法启动，且无法撤销。",
+fs_add_files_conflict_ok: "覆盖",
+
+library_edit_files_short: "编辑文件",
 
 };
 

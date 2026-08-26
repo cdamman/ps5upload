@@ -366,6 +366,57 @@ int proc_name_by_pid(int pid, char *out, size_t cap) {
  * match or sysctl fails. Same kinfo_proc walk pattern used everywhere
  * else in this file — no kernel R/W needed. Used by the Remote Play
  * daemon reset path to locate "SceRemotePlay" before SIGKILL'ing it. */
+/* Is a title currently running? Walks the same sysctl(KERN_PROC_PROC)
+ * snapshot as proc_find_pid_by_name, but matches on the app's TITLE ID
+ * (via sceKernelGetAppInfo) rather than the thread name.
+ *
+ * Exists so launch_title can tell "that attempt actually started the game"
+ * from "that attempt failed". Sony's launch APIs can return non-zero for a
+ * launch that is in fact proceeding; without this check the fallback ladder
+ * fired a SECOND launch at a title that was already coming up, and the shell
+ * responded by bouncing the game straight back to the background — the
+ * "it starts then immediately minimises" report.
+ *
+ * Returns the pid (>0) when a process for `title_id` exists, -1 otherwise. */
+int proc_find_pid_by_title_id(const char *title_id) {
+    if (!title_id || !title_id[0]) return -1;
+
+    int mib[4] = {CTL_KERN, KERN_PROC, KERN_PROC_PROC, 0};
+    size_t buf_size = 0;
+    if (sysctl(mib, 4, NULL, &buf_size, NULL, 0) != 0) return -1;
+    if (buf_size == 0) return -1;
+
+    uint8_t *buf = (uint8_t *)malloc(buf_size);
+    if (!buf) return -1;
+    if (sysctl(mib, 4, buf, &buf_size, NULL, 0) != 0) {
+        free(buf);
+        return -1;
+    }
+
+    int found = -1;
+    for (uint8_t *ptr = buf; ptr < buf + buf_size;) {
+        int ki_structsize = *(int *)ptr;
+        if (ki_structsize <= 0 ||
+            (size_t)(ptr - buf) + (size_t)ki_structsize > buf_size) break;
+        if (ki_structsize <= KINFO_PID_OFFSET) break;
+        pid_t ki_pid = *(pid_t *)&ptr[KINFO_PID_OFFSET];
+        app_info_t info;
+        if (sceKernelGetAppInfo(ki_pid, &info) == 0) {
+            /* title_id is a fixed char[14] with no NUL guarantee. */
+            char tid[sizeof(info.title_id) + 1];
+            memcpy(tid, info.title_id, sizeof(info.title_id));
+            tid[sizeof(info.title_id)] = '\0';
+            if (strcmp(tid, title_id) == 0) {
+                found = (int)ki_pid;
+                break;
+            }
+        }
+        ptr += ki_structsize;
+    }
+    free(buf);
+    return found;
+}
+
 int proc_find_pid_by_name(const char *name) {
     if (!name || !name[0]) return -1;
 

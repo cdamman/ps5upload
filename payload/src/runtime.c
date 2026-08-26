@@ -7039,7 +7039,20 @@ static int async_copy_fd(int sfd, int dfd, const char *src_path,
  *  -1   = generic error (open, read, write, mkdir, etc.)
  *  -2   = cancel requested (distinguishable from -1 so the caller
  *         can return FS_OP_CANCEL_ACK instead of FS_COPY_ERROR). */
-static int cp_rf_op(const char *src, const char *dst, int depth, int op_idx) {
+/* Recursive copy. `overwrite` selects MERGE semantics:
+ *
+ *   0 — refuse to touch anything that already exists (the original
+ *       behaviour; the caller pre-checks and the payload fails loudly).
+ *   1 — merge into the destination: a colliding FILE is replaced, a
+ *       colliding DIRECTORY is descended into, and anything in the
+ *       destination that the source does not mention is left alone.
+ *
+ * The merge shape is deliberate. Users pasting or uploading a folder over an
+ * existing one expect their few changed files to land without the rest of the
+ * destination being wiped — replacing `eboot.bin` inside a game folder must
+ * not delete the other 900 files next to it. */
+static int cp_rf_op(const char *src, const char *dst, int depth, int op_idx,
+                    int overwrite) {
     struct stat st;
     DIR *d;
     struct dirent *e;
@@ -7056,6 +7069,7 @@ static int cp_rf_op(const char *src, const char *dst, int depth, int op_idx) {
         ssize_t len = readlink(src, target, sizeof(target) - 1);
         if (len < 0) return -1;
         target[len] = '\0';
+        if (overwrite) (void)unlink(dst);
         if (symlink(target, dst) != 0) return -1;
         return 0;
     }
@@ -7072,7 +7086,11 @@ static int cp_rf_op(const char *src, const char *dst, int depth, int op_idx) {
          * fresh copy — exactly the bug umask(0) + per-file fchmod(0777)
          * was added to fix for the upload path. fchmod after open keeps
          * the bits even if the dst FS's umask handling differs. */
-        int dfd = open(dst, O_WRONLY | O_CREAT | O_EXCL, 0777);
+        /* O_EXCL is what turns a collision into an error. When merging we
+         * want the opposite: land on top of the existing file, truncating
+         * whatever was there. */
+        int dfd = open(dst, O_WRONLY | O_CREAT |
+                            (overwrite ? O_TRUNC : O_EXCL), 0777);
         if (dfd < 0) { close(sfd); return -1; }
         (void)fchmod(dfd, 0777);
         /* Tell the kernel: we'll read this file front-to-back, prefetch
@@ -7162,7 +7180,15 @@ static int cp_rf_op(const char *src, const char *dst, int depth, int op_idx) {
      * regular-file open above: Sony's loader needs world-executable
      * directories for game-folder navigation. chmod after mkdir
      * enforces the mode even if the dst FS's umask handling differs. */
-    if (mkdir(dst, 0777) != 0) return -1;
+    if (mkdir(dst, 0777) != 0) {
+        /* Merging into a directory that already exists is the whole point of
+         * overwrite mode; any other mkdir failure is still fatal. */
+        struct stat dst_st;
+        if (!(overwrite && errno == EEXIST &&
+              lstat(dst, &dst_st) == 0 && S_ISDIR(dst_st.st_mode))) {
+            return -1;
+        }
+    }
     (void)chmod(dst, 0777);
     d = opendir(src);
     if (!d) return -1;
@@ -7173,7 +7199,7 @@ static int cp_rf_op(const char *src, const char *dst, int depth, int op_idx) {
         int n2 = snprintf(sub_dst, sizeof(sub_dst), "%s/%s", dst, e->d_name);
         if (n1 < 0 || (size_t)n1 >= sizeof(sub_src) ||
             n2 < 0 || (size_t)n2 >= sizeof(sub_dst)) { rc = -1; break; }
-        int sub_rc = cp_rf_op(sub_src, sub_dst, depth + 1, op_idx);
+        int sub_rc = cp_rf_op(sub_src, sub_dst, depth + 1, op_idx, overwrite);
         if (sub_rc == -2) { rc = -2; break; }   /* propagate cancel */
         if (sub_rc != 0) { rc = -1; /* per-file failure: keep going */ }
     }
@@ -7710,9 +7736,14 @@ static int handle_fs_copy(runtime_state_t *state, int client_fd,
     (void)body_len;
     if (!state) return -1;
     from[0] = '\0'; to[0] = '\0';
+    int overwrite = 0;
     if (request_body) {
         extract_json_string_field(request_body, "from", from, sizeof(from));
         extract_json_string_field(request_body, "to", to, sizeof(to));
+        /* Absent or 0 keeps the historical refuse-to-clobber behaviour, so an
+         * older engine talking to this payload is unaffected. */
+        overwrite =
+            (extract_json_uint64_field(request_body, "overwrite") != 0) ? 1 : 0;
     }
     if (!is_path_allowed(from) || !is_path_allowed(to)) {
         return send_frame(client_fd, FTX2_FRAME_ERROR, 0, trace_id,
@@ -7722,13 +7753,25 @@ static int handle_fs_copy(runtime_state_t *state, int client_fd,
         return send_frame(client_fd, FTX2_FRAME_ERROR, 0, trace_id,
                           "fs_copy_source_missing", 22);
     }
-    /* Refuse to clobber. The engine should have pre-checked via
-     * FS_LIST_DIR; if we got here with dst present, it's a race or a
-     * client bug — fail loudly. */
+    /* Refuse to clobber unless the caller explicitly asked to merge. The
+     * engine pre-checks via FS_LIST_DIR; without `overwrite` a present dst
+     * means a race or a client bug, so fail loudly. With it, cp_rf_op lands
+     * on top of what is already there and leaves untouched anything the
+     * source doesn't mention.
+     *
+     * A file may not overwrite a directory (or vice versa) even when merging
+     * — that is a mistake, not an intent, and silently replacing a whole
+     * folder with a file would be unrecoverable. */
     struct stat dst_st;
     if (lstat(to, &dst_st) == 0) {
-        return send_frame(client_fd, FTX2_FRAME_ERROR, 0, trace_id,
-                          "fs_copy_dest_exists", 19);
+        if (!overwrite) {
+            return send_frame(client_fd, FTX2_FRAME_ERROR, 0, trace_id,
+                              "fs_copy_dest_exists", 19);
+        }
+        if (S_ISDIR(st.st_mode) != S_ISDIR(dst_st.st_mode)) {
+            return send_frame(client_fd, FTX2_FRAME_ERROR, 0, trace_id,
+                              "fs_copy_dest_kind_mismatch", 26);
+        }
     }
     /* Register the in-flight op slot *before* walking so the engine's
      * 500 ms-cadence FS_OP_STATUS poller has somewhere to land its
@@ -7774,7 +7817,7 @@ static int handle_fs_copy(runtime_state_t *state, int client_fd,
                           "fs_copy_walk_failed", 19);
     }
     fs_op_set_total(op_idx, total_bytes);
-    int copy_rc = cp_rf_op(from, to, 0, op_idx);
+    int copy_rc = cp_rf_op(from, to, 0, op_idx, overwrite);
     fs_op_release(op_idx);
     if (copy_rc == -2) {
         /* Cancelled mid-flight. Recursively wipe whatever was
@@ -9868,6 +9911,46 @@ extern int sceUserServiceGetInitialUser(int *user_id);
  * linkage of optional SPRX deps blocks the entire payload from
  * loading on FW where any one is missing). */
 typedef int (*sce_app_simple_fn)(unsigned int app_id);
+
+/* Graceful "close the game" entry points from libSceSystemService — the
+ * library the payload already links, so these resolve in-process with no
+ * ptrace and no extra dlopen.
+ *
+ * Needed because libSceSysCore's application APIs are BLIND on at least
+ * FW 9.60: with a game demonstrably running, sceApplicationGetProcs returns
+ * an EMPTY list and sceApplicationKill rejects the kernel app id with
+ * 0x80AA0004. That left the UI falling back to SIGKILL on the pid — which
+ * stops the game but isn't what the console does when a user picks
+ * "Close game".
+ *
+ * LncUtil is the launcher util that owns the other half of this pair: we
+ * already start titles with sceLncUtilLaunchApp, so its kill counterpart is
+ * the symmetric, intended way to stop one. */
+typedef int (*sce_lnc_kill_fn)(unsigned int app_id);
+static sce_lnc_kill_fn p_sceLncUtilKillApp        = NULL;
+static sce_lnc_kill_fn p_sceLncUtilForceKillApp   = NULL;
+static sce_lnc_kill_fn p_sceSystemServiceKillApp  = NULL;
+static int lnc_kill_resolve_attempted = 0;
+
+static void resolve_lnc_kill(void) {
+    if (lnc_kill_resolve_attempted) return;
+    lnc_kill_resolve_attempted = 1;
+    dlerror();
+    p_sceLncUtilKillApp = (sce_lnc_kill_fn)dlsym(RTLD_DEFAULT, "sceLncUtilKillApp");
+    if (!p_sceLncUtilKillApp) (void)dlerror();
+    p_sceLncUtilForceKillApp =
+        (sce_lnc_kill_fn)dlsym(RTLD_DEFAULT, "sceLncUtilForceKillApp");
+    if (!p_sceLncUtilForceKillApp) (void)dlerror();
+    p_sceSystemServiceKillApp =
+        (sce_lnc_kill_fn)dlsym(RTLD_DEFAULT, "sceSystemServiceKillApp");
+    if (!p_sceSystemServiceKillApp) (void)dlerror();
+    fprintf(stderr,
+            "[payload2] kill APIs: LncUtilKillApp=%s ForceKillApp=%s "
+            "SystemServiceKillApp=%s\n",
+            p_sceLncUtilKillApp ? "yes" : "no",
+            p_sceLncUtilForceKillApp ? "yes" : "no",
+            p_sceSystemServiceKillApp ? "yes" : "no");
+}
 typedef int (*sce_app_get_procs_fn)(void *info_buf, int max_count,
                                      int *out_count);
 static sce_app_simple_fn   p_sceApplicationSuspend    = NULL;
@@ -11888,7 +11971,38 @@ static int handle_app_lifecycle(runtime_state_t *state, int client_fd,
     } else if (strcmp(action, "resume") == 0) {
         rc = p_sceApplicationResume ? p_sceApplicationResume(app_id) : -1;
     } else if (strcmp(action, "kill") == 0) {
+        /* Kill ladder, gentlest first. libSceSysCore's sceApplicationKill is
+         * tried first for firmwares where it works, but it is blind on 9.60
+         * (empty GetProcs, 0x80AA0004), so LncUtil — the launcher util that
+         * started the title — is the real graceful path. ForceKill is the last
+         * resort before the client falls back to SIGKILL on the pid.
+         *
+         * Each rung is reported so a failure says WHICH api refused and with
+         * what code, instead of a bare ok=false. */
+        resolve_lnc_kill();
         rc = p_sceApplicationKill ? p_sceApplicationKill(app_id) : -1;
+        if (rc != 0 && p_sceLncUtilKillApp) {
+            int rc2 = p_sceLncUtilKillApp(app_id);
+            fprintf(stderr,
+                    "[payload2] kill app_id=%u: sceApplicationKill=0x%08x "
+                    "sceLncUtilKillApp=0x%08x\n",
+                    app_id, (unsigned)rc, (unsigned)rc2);
+            rc = rc2;
+        }
+        if (rc != 0 && p_sceSystemServiceKillApp) {
+            int rc3 = p_sceSystemServiceKillApp(app_id);
+            fprintf(stderr,
+                    "[payload2] kill app_id=%u: sceSystemServiceKillApp=0x%08x\n",
+                    app_id, (unsigned)rc3);
+            rc = rc3;
+        }
+        if (rc != 0 && p_sceLncUtilForceKillApp) {
+            int rc4 = p_sceLncUtilForceKillApp(app_id);
+            fprintf(stderr,
+                    "[payload2] kill app_id=%u: sceLncUtilForceKillApp=0x%08x\n",
+                    app_id, (unsigned)rc4);
+            rc = rc4;
+        }
     } else {
         const char *err = "{\"ok\":false,\"err\":\"unknown_action\"}";
         return send_frame(client_fd, FTX2_FRAME_APP_LIFECYCLE_ACK, 0,
