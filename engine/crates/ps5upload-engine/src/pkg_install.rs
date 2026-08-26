@@ -362,6 +362,15 @@ fn verify_installed_artifact(
     expected_size: u64,
     expected_fingerprint: &str,
 ) -> InstalledArtifactCheck {
+    // Sony's in-flight placeholder title id means the install never got
+    // rewritten with the real one. That is a BROKEN install, not an
+    // unverifiable one: the tile exists but launches Sony's CloudClientApp
+    // instead of the user's eboot. It must map to Different (a real failure)
+    // and not Unsupported, which the poll treats as "can't tell, assume fine"
+    // and would hand the user a broken tile with a green tick.
+    if ps5upload_core::pkg_install::is_placeholder_content_id(content_id) {
+        return InstalledArtifactCheck::Different;
+    }
     let Some(title_id) = ps5upload_core::pkg_install::title_id_from_content_id(content_id) else {
         return InstalledArtifactCheck::Unsupported;
     };

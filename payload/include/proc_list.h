@@ -77,4 +77,31 @@ int proc_find_pid_by_title_id(const char *title_id);
  * this, which is NOT the pid. */
 unsigned int proc_app_id_by_title_id(const char *title_id);
 
+/* Emit the scheduler-visible state of every APP process, as JSON:
+ *
+ *   [{"pid":154,"title_id":"PPSA23226","app_id":24600,
+ *     "stat":2,"runtime_us":123456789,"pctcpu":812,
+ *     "nthreads":48,"slptime":0,"swtime":900}, ...]
+ *
+ * Why this exists: FW 9.60 exports no direct "which app has focus" getter
+ * (see focus_probe.h), and the two ShellUI event flags ShadowMount+ polls
+ * stay silent through a real foreground->background transition. But a PS5
+ * game that loses the screen does not keep running at full speed — the shell
+ * suspends it or collapses its CPU budget, which is exactly what the
+ * SHELLUI_FG_GAME_BG_CPU_MODE flag names.
+ *
+ * So `runtime_us` (accumulated CPU microseconds) sampled over time answers
+ * the question behaviourally: while a title owns the screen the counter
+ * climbs steadily; when it is backgrounded the rate collapses. `stat` catches
+ * the stronger case where the process is outright stopped (SSTOP).
+ *
+ * This reads only sysctl KERN_PROC fields we already walk, so unlike calling
+ * an undeclared Sony symbol it carries no crash risk and no firmware
+ * dependency.
+ *
+ * Returns 0 on success, non-zero with a short code in *err_out.
+ */
+int proc_list_app_states_json(char *buf, size_t cap, size_t *written_out,
+                              const char **err_out);
+
 #endif /* PS5UPLOAD2_PROC_LIST_H */

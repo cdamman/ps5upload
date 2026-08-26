@@ -348,6 +348,18 @@ pub enum LaunchCheck {
     /// enumeration nor app.db could be read (RPC failure). The caller keeps
     /// the legacy optimistic behavior — no regression.
     Unsupported,
+    /// Sony's installer left the placeholder title id (`FAKE…`) in the
+    /// content_id instead of rewriting it with the real one.
+    ///
+    /// This is a KNOWN-BAD outcome, not an unverifiable one, and the
+    /// distinction matters: the install "succeeds" and produces a tile, but
+    /// that tile launches Sony's CloudClientApp rather than the user's
+    /// eboot. Reporting it as unverifiable (and therefore fine) hands the
+    /// user a broken tile with a green tick — the same "claimed success for
+    /// something that did not work" failure this codebase just spent a day
+    /// removing from the launch path. elf-arsenal fails the install here for
+    /// exactly this reason (src/homebrew.c, install_pkg_thread).
+    PlaceholderTitleId,
 }
 
 /// Check whether `content_id`'s title is registered (and therefore
@@ -373,9 +385,33 @@ pub enum LaunchCheck {
 /// Any unverifiable case (no title_id, both sources unreadable) returns
 /// `Unsupported`, so a check we can't perform never fails a real install.
 pub fn verify_launchable(addr: &str, content_id: &str) -> LaunchCheck {
+    // Checked BEFORE the generic derivation, because title_id_from_content_id
+    // folds "FAKE placeholder" into the same None as "malformed", and those
+    // two deserve opposite verdicts: one is a known-broken install, the other
+    // is simply not checkable.
+    if is_placeholder_content_id(content_id) {
+        return LaunchCheck::PlaceholderTitleId;
+    }
     match title_id_from_content_id(content_id) {
         Some(title_id) => verify_title_registered(addr, &title_id),
         None => LaunchCheck::Unsupported,
+    }
+}
+
+/// True when the content_id still carries Sony's in-flight `FAKE…`
+/// placeholder title id.
+///
+/// Sony writes this while an unsigned pkg is being installed and rewrites it
+/// with the real title id on success. If it is still there when we look, the
+/// rewrite never happened and the resulting tile is broken.
+pub fn is_placeholder_content_id(content_id: &str) -> bool {
+    let cid = content_id.trim();
+    match cid.split_once('-') {
+        Some((_, after)) => after
+            .split('_')
+            .next()
+            .is_some_and(|t| t.starts_with("FAKE")),
+        None => false,
     }
 }
 
@@ -669,6 +705,35 @@ mod tests {
     fn title_id_rejects_placeholders_and_garbage() {
         // FAKE placeholder — elf-arsenal treats this as "no real title".
         assert_eq!(title_id_from_content_id("IV9999-FAKE00000_00-X"), None);
+    }
+
+    /// The placeholder must be distinguishable from "unparseable", because
+    /// the two get opposite verdicts: a broken install vs. one we simply
+    /// can't check. Folding them together is what let a broken tile pass.
+    #[test]
+    fn placeholder_content_id_is_detected() {
+        assert!(is_placeholder_content_id("IV9999-FAKE00000_00-X"));
+        assert!(is_placeholder_content_id("  UP0000-FAKE12345_00-LABEL  "));
+    }
+
+    #[test]
+    fn real_content_ids_are_not_placeholders() {
+        assert!(!is_placeholder_content_id(
+            "IV9999-CUSA12345_00-ZGAMEFOO00000000"
+        ));
+        assert!(!is_placeholder_content_id(
+            "EP4361-PPSA01234_00-REDEMPTION000002"
+        ));
+        // Malformed input is "can't tell", never a placeholder claim.
+        assert!(!is_placeholder_content_id("CUSA12345"));
+        assert!(!is_placeholder_content_id(""));
+    }
+
+    #[test]
+    fn placeholder_is_not_confused_with_a_title_starting_similarly() {
+        // Only the title-id token is inspected; a label containing FAKE
+        // elsewhere must not trip the check.
+        assert!(!is_placeholder_content_id("IV9999-CUSA12345_00-FAKELABEL"));
         // No '-' separator.
         assert_eq!(title_id_from_content_id("CUSA12345"), None);
         // Wrong shape (too short / lowercase / non-digit tail).

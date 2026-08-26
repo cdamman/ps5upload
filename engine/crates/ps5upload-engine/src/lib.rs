@@ -54,20 +54,22 @@ use axum::{
 };
 use ftx2_proto::FrameType;
 use ps5upload_core::{
+    app_lifecycle::{app_lifecycle, AppAction},
     cleanup::{cleanup_path, CleanupResult},
     connection::Connection,
     diagnostics::appdb_query,
+    diagnostics::{klog_read, net_interfaces},
     download::{
         download_to_local_multistream_ex, enumerate_download_set, DownloadKind,
         MAX_DOWNLOAD_STREAMS,
     },
-    focus::{focus_probe, FocusProbe},
+    focus::{bring_to_front, focus_probe, FocusProbe},
     fs_ops::{
         app_launch, app_list_registered, app_register, app_unregister, backup_content_databases,
         fs_copy_robust, fs_delete_with_op_id, fs_mkdir, fs_mount, fs_move_with_timeout,
-        fs_op_cancel, fs_op_status, fs_read, fs_unmount, list_dir, reconcile, walk_local_inventory,
-        DirListing, ListDirOptions, MountResult, ReconcileFile, ReconcileMode, ReconcilePlan,
-        RegisterResult,
+        fs_op_cancel, fs_op_status, fs_read, fs_read_with_timeout, fs_unmount, list_dir, reconcile,
+        walk_local_inventory, DirListing, ListDirOptions, MountResult, ReconcileFile,
+        ReconcileMode, ReconcilePlan, RegisterResult,
     },
     game_meta::{parse_param_json_bytes, parse_param_sfo_bytes},
     hw::{
@@ -2520,6 +2522,162 @@ async fn ps5_process_list(
             .and_then(|r| r);
     match r {
         Ok(v) => (StatusCode::OK, Json(v)).into_response(),
+        Err(e) => json_err(StatusCode::BAD_GATEWAY, format!("{e:#}")).into_response(),
+    }
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct KlogQuery {
+    addr: Option<String>,
+    max_bytes: Option<u32>,
+}
+
+/// GET /api/ps5/klog — read buffered kernel log.
+///
+/// Needed by the browser build's bug report: without it a web-generated
+/// report carries no kernel log at all, and the collector treats the missing
+/// command as "nothing to collect" rather than an error.
+async fn ps5_klog(State(state): State<AppState>, Query(q): Query<KlogQuery>) -> impl IntoResponse {
+    let addr = mgmt_addr_or_default(q.addr, &state.default_ps5_addr);
+    // Same 256 KiB ceiling the desktop command uses.
+    let cap = q.max_bytes.unwrap_or(64 * 1024).min(256 * 1024);
+    let r = tokio::task::spawn_blocking(move || klog_read(&addr, cap))
+        .await
+        .map_err(anyhow::Error::from)
+        .and_then(|r| r);
+    match r {
+        Ok(text) => (StatusCode::OK, Json(serde_json::json!({ "text": text }))).into_response(),
+        Err(e) => json_err(StatusCode::BAD_GATEWAY, format!("{e:#}")).into_response(),
+    }
+}
+
+/// GET /api/ps5/net/interfaces — enumerate console network interfaces.
+///
+/// Same reason as `ps5_klog`: the browser bug report was silently missing it.
+async fn ps5_net_interfaces(
+    State(state): State<AppState>,
+    Query(q): Query<AddrQuery>,
+) -> impl IntoResponse {
+    let addr = mgmt_addr_or_default(q.addr, &state.default_ps5_addr);
+    let r = tokio::task::spawn_blocking(move || net_interfaces(&addr))
+        .await
+        .map_err(anyhow::Error::from)
+        .and_then(|r| r);
+    match r {
+        Ok(v) => (StatusCode::OK, Json(v)).into_response(),
+        Err(e) => json_err(StatusCode::BAD_GATEWAY, format!("{e:#}")).into_response(),
+    }
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct AppLifecycleReq {
+    addr: Option<String>,
+    action: String,
+    app_id: u32,
+}
+
+/// POST /api/ps5/app/lifecycle — suspend / resume / kill a running app.
+///
+/// Added because the BROWSER build had no way to close a game at all: the
+/// desktop app reaches this through a Tauri command that calls core
+/// directly, with no HTTP route behind it, so "Close game" simply did not
+/// exist on the web UI. Same missing-half class as fs_read_preview.
+async fn ps5_app_lifecycle(
+    State(state): State<AppState>,
+    Json(req): Json<AppLifecycleReq>,
+) -> impl IntoResponse {
+    let action = match req.action.as_str() {
+        "suspend" => AppAction::Suspend,
+        "resume" => AppAction::Resume,
+        "kill" => AppAction::Kill,
+        "list" => AppAction::List,
+        other => {
+            return json_err(
+                StatusCode::BAD_REQUEST,
+                format!("unknown app lifecycle action: {other}"),
+            )
+            .into_response()
+        }
+    };
+    let addr = mgmt_addr_or_default(req.addr, &state.default_ps5_addr);
+    let app_id = req.app_id;
+    let r = tokio::task::spawn_blocking(move || app_lifecycle(&addr, action, app_id))
+        .await
+        .map_err(anyhow::Error::from)
+        .and_then(|r| r);
+    match r {
+        Ok(v) => (StatusCode::OK, Json(v)).into_response(),
+        Err(e) => json_err(StatusCode::BAD_GATEWAY, format!("{e:#}")).into_response(),
+    }
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct BringToFrontReq {
+    addr: Option<String>,
+    title_id: String,
+}
+
+/// POST /api/ps5/focus/bring-to-front — raise a running title, and VERIFY it.
+///
+/// Unlike app/launch, this reports what actually happened. A launch that the
+/// shell ignores is common on FW 9.60 and used to surface as plain success.
+async fn ps5_bring_to_front(
+    State(state): State<AppState>,
+    Json(req): Json<BringToFrontReq>,
+) -> impl IntoResponse {
+    let addr = mgmt_addr_or_default(req.addr, &state.default_ps5_addr);
+    let title = req.title_id.clone();
+    let r = tokio::task::spawn_blocking(move || bring_to_front(&addr, &title))
+        .await
+        .map_err(anyhow::Error::from)
+        .and_then(|r| r);
+    match r {
+        Ok(v) => (StatusCode::OK, Json(v)).into_response(),
+        Err(e) => json_err(StatusCode::BAD_GATEWAY, format!("{e:#}")).into_response(),
+    }
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct FsReadPreviewReq {
+    addr: Option<String>,
+    path: String,
+    max_bytes: Option<u64>,
+}
+
+/// POST /api/ps5/fs/read-preview — read up to `max_bytes` of a console file,
+/// returned base64.
+///
+/// Exists so the BROWSER build can collect the helper's on-console logs for a
+/// bug report. The desktop app reads these through a Tauri command that calls
+/// core directly, with no HTTP route — which meant web users' reports silently
+/// contained no console logs at all, because the per-file fetch failures are
+/// (correctly) swallowed as "file absent" by the collector. Same missing-half
+/// bug as fs_write_bytes.
+async fn ps5_fs_read_preview(
+    State(state): State<AppState>,
+    Json(req): Json<FsReadPreviewReq>,
+) -> impl IntoResponse {
+    // Same 256 KiB ceiling the desktop command enforces, so a caller cannot
+    // pull an unbounded file through the engine.
+    let cap = req.max_bytes.unwrap_or(256 * 1024).min(256 * 1024);
+    let addr = mgmt_addr_or_default(req.addr, &state.default_ps5_addr);
+    let path = req.path.clone();
+    let r = tokio::task::spawn_blocking(move || {
+        fs_read_with_timeout(&addr, &path, 0, cap, Some(Duration::from_secs(10)), false)
+    })
+    .await
+    .map_err(anyhow::Error::from)
+    .and_then(|r| r);
+    match r {
+        Ok(bytes) => {
+            use base64::Engine as _;
+            let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({ "size": bytes.len(), "base64": b64 })),
+            )
+                .into_response()
+        }
         Err(e) => json_err(StatusCode::BAD_GATEWAY, format!("{e:#}")).into_response(),
     }
 }
@@ -8211,7 +8369,12 @@ async fn run(cfg: EngineConfig) -> anyhow::Result<()> {
         .route("/api/ps5/hw/storage", get(ps5_hw_storage))
         .route("/api/ps5/hw/drive-sensors", get(ps5_hw_drive_sensors))
         .route("/api/ps5/proc/list", get(ps5_proc_list))
+        .route("/api/ps5/app/lifecycle", post(ps5_app_lifecycle))
+        .route("/api/ps5/klog", get(ps5_klog))
+        .route("/api/ps5/net/interfaces", get(ps5_net_interfaces))
         .route("/api/ps5/focus", get(ps5_focus))
+        .route("/api/ps5/focus/bring-to-front", post(ps5_bring_to_front))
+        .route("/api/ps5/fs/read-preview", post(ps5_fs_read_preview))
         .route("/api/ps5/process/list", get(ps5_process_list))
         .route("/api/ps5/process/kill", post(ps5_process_kill))
         .route("/api/ps5/power/control", post(ps5_power_control))

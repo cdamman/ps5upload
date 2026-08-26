@@ -2710,6 +2710,12 @@ installed_bring_to_front_failed: "นำขึ้นมาบนหน้าจ�
 installed_bring_to_front_confirm_title: "{name} กำลังทำงานแต่ไม่ได้อยู่บนหน้าจอ",
 installed_bring_to_front_confirm_body: "วิธีที่แน่นอนที่สุดคือสลับไปที่เกมบนเครื่อง — กดปุ่ม PS แล้วเลือกเกม\n\nปุ่มนี้จะขอให้ PS5 นำเกมขึ้นมาแทน ใช้ได้เฉพาะเมื่อเกมโหลดเสร็จแล้ว ระหว่างที่เกมกำลังเริ่ม เครื่องจะไม่สนใจคำขอและจะไม่มีอะไรเปลี่ยน",
 installed_bring_to_front_confirm_ok: "ขอให้ PS5 อยู่ดี",
+installed_bring_to_front_raised: "{name} แสดงบนหน้าจอแล้ว",
+installed_bring_to_front_already: "{name} เป็นแอปที่แสดงบนหน้าจออยู่แล้ว",
+installed_bring_to_front_not_running: "{name} ไม่ได้ทำงานอยู่ จึงไม่มีอะไรให้นำมาแสดง",
+installed_bring_to_front_unverifiable: "ขอให้ PS5 แสดง {name} แล้ว เครื่องนี้ไม่สามารถรายงานได้ว่าแอปใดอยู่บนหน้าจอ จึงไม่สามารถยืนยันได้ว่าสำเร็จ",
+installed_bring_to_front_not_raised_title: "PS5 ไม่ได้สลับไปที่เกมนั้น",
+installed_bring_to_front_not_raised: "{name} ยังทำงานอยู่ แต่เครื่องคงหน้าจอไว้ที่เดิม กดปุ่ม PS บนคอนโทรลเลอร์แล้วเลือกจากตรงนั้น",
 
 helper_mismatch_title: "ตัวช่วย PS5 เป็น v{payload} แต่แอปนี้เป็น v{app}",
 helper_mismatch_body: "การแก้ไขและฟีเจอร์ของเวอร์ชันใหม่จะยังไม่ทำงานจนกว่าตัวช่วยบนเครื่องจะตรงกัน โหลดใหม่ได้จากหน้าการเชื่อมต่อ",

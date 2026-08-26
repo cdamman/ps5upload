@@ -578,20 +578,41 @@ export const useUploadQueueStore = create<QueueState>((set, get) => {
           // /user/app + app.db (the exact conflict SMP's own "duplicate
           // uninstall / blocked PPSA" fixes had to handle). Hand the image
           // off via SMP's watched manual.lst and skip the native mount.
-          // Best-effort: if the SMP status probe or the list write fails,
-          // fall back to mounting it ourselves.
+          // Two failures are possible here and they are NOT the same:
+          //
+          //   1. the status probe fails / SMP isn't running — mounting it
+          //      ourselves is the correct outcome, no warning needed;
+          //   2. SMP IS running but the manual.lst hand-off fails — falling
+          //      back to our own mount then races SMP for /user/app + app.db,
+          //      which is the exact conflict the hand-off exists to avoid.
+          //
+          // The old code caught both in one silent `catch` and self-mounted
+          // either way, so case 2 produced a conflicting mount with no hint
+          // that anything went wrong.
           let handedToSmp = false;
+          let smpRunning: boolean;
           try {
-            const smp = await smpStatus(mgmt);
-            if (smp.running) {
+            smpRunning = (await smpStatus(mgmt)).running;
+          } catch {
+            smpRunning = false; // SMP unreachable → mount it ourselves
+          }
+          if (smpRunning) {
+            try {
               const r = await smpManualInstall(mgmt, finalDest);
               handedToSmp = true;
               mountedAt = r.added
                 ? "handed to ShadowMount+"
                 : "already in ShadowMount+ list";
+            } catch (e) {
+              // Still fall back — an unmounted image helps nobody — but say
+              // so, because this mount may later fight ShadowMount+.
+              mountWarnings.push(
+                `ShadowMount+ is running but the hand-off failed (${
+                  e instanceof Error ? e.message : String(e)
+                }). Mounted it directly instead — if ShadowMount+ also picks ` +
+                  `it up you may see a duplicate or a blocked title.`,
+              );
             }
-          } catch {
-            handedToSmp = false; // SMP unreachable → mount it ourselves
           }
           if (!handedToSmp) {
             try {

@@ -541,7 +541,37 @@ int shellui_rpc_launch_app(const char *title_id, int user_id_hint) {
     int dispatched = pt_call_was_dispatched();
     int timed_out = pt_call_timed_out();
     int tracee_lost = pt_tracee_was_lost(g_shellui_pid);
-    (void)pt_munmap(g_shellui_pid, scratch, 0x1000);
+    /* DELIBERATELY NOT unmapped, but note what this does and does NOT fix.
+     *
+     * sceLncUtilLaunchApp is ASYNCHRONOUS: it returns once the launch is
+     * queued, while Sony's launcher goes on reading the title_id string and
+     * the LncAppParam struct — BOTH of which live in this scratch page.
+     * Unmapping immediately after pt_call therefore hands the launcher a
+     * pointer to memory we just took away. That is a genuine use-after-unmap
+     * regardless of what it happens to break, which is why the page is now
+     * left mapped.
+     *
+     * IT DOES NOT FIX THE FOCUS DROP. Measured on FW 9.60 with this change
+     * live, a launch through this path still put the game on screen for ~19s
+     * and then dropped to the dashboard, with SceShellUI's app id changing
+     * (8199 -> 16391) — i.e. ShellUI still restarted and the fresh instance
+     * still took the screen. So something else in the attach/call/detach
+     * sequence is destabilising ShellUI; the scratch page was not it.
+     *
+     * What IS established, same title, minutes apart:
+     *   launched through this ptrace path -> on screen ~20s, then dropped
+     *   launched from the console UI      -> 100s+ steady, never dropped
+     * The launch path is the only variable, so the cause is in here
+     * somewhere. Registers are restored correctly on the success path
+     * (pt_call -> restore_stopped_or_terminate), so the remaining suspects
+     * are the attach/detach itself rather than the injected frame.
+     *
+     * Cost of leaving it mapped: one 4 KiB page per launch in ShellUI's
+     * address space, reclaimed wholesale whenever ShellUI restarts. Cheap
+     * enough that correctness wins. Do not reclaim it here without first
+     * proving the launcher is done with it.
+     */
+    (void)scratch;
     (void)pt_detach_tracked(g_shellui_pid, 0);
     pthread_mutex_unlock(&g_rpc_mtx);
     /* Three return shapes:

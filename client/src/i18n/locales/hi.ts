@@ -2720,6 +2720,12 @@ installed_bring_to_front_failed: "स्क्रीन पर नहीं ल�
 installed_bring_to_front_confirm_title: "{name} चल रहा है पर स्क्रीन पर नहीं है",
 installed_bring_to_front_confirm_body: "इस पर जाने का सबसे भरोसेमंद तरीका कंसोल पर ही है — PS बटन दबाएँ और गेम चुनें।\n\nयह इसके बजाय PS5 से इसे सामने लाने को कहता है। यह तभी काम करता है जब गेम लोड हो चुका हो; टाइटल शुरू होते समय कंसोल अनुरोध अनदेखा कर देता है और दिखने में कुछ नहीं होता।",
 installed_bring_to_front_confirm_ok: "फिर भी PS5 से कहें",
+installed_bring_to_front_raised: "{name} अब स्क्रीन पर है।",
+installed_bring_to_front_already: "{name} पहले से ही स्क्रीन पर मौजूद ऐप है।",
+installed_bring_to_front_not_running: "{name} नहीं चल रहा है, इसलिए सामने लाने के लिए कुछ नहीं है।",
+installed_bring_to_front_unverifiable: "PS5 से {name} दिखाने को कहा गया। यह कंसोल यह नहीं बता सकता कि कौन-सा ऐप स्क्रीन पर है, इसलिए हम पुष्टि नहीं कर सकते कि यह काम कर गया।",
+installed_bring_to_front_not_raised_title: "PS5 ने उस पर स्विच नहीं किया",
+installed_bring_to_front_not_raised: "{name} अब भी चल रहा है, लेकिन कंसोल ने स्क्रीन वैसी ही रखी। कंट्रोलर पर PS बटन दबाएँ और वहाँ से उसे चुनें।",
 
 helper_mismatch_title: "PS5 हेल्पर v{payload} है पर यह ऐप v{app} है",
 helper_mismatch_body: "नए संस्करण के सुधार और सुविधाएँ तब तक काम नहीं करेंगी जब तक कंसोल का हेल्पर मेल न खाए। कनेक्शन स्क्रीन से इसे फिर से लोड करें।",

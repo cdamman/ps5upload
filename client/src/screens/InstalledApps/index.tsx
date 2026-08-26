@@ -24,6 +24,7 @@ import {
   appsInstalled,
   appUnregister,
   appLaunch,
+  bringToFront,
   appIconUrl,
   appKill,
   processKill,
@@ -712,22 +713,95 @@ export default function InstalledAppsScreen({
       if (!ok || probe.isStale()) return;
       setLaunchingId(t.titleId);
       try {
-        await appLaunch(transferAddr(probe.host), t.titleId);
+        // Verified path: asks, then reads the console's focus flag to see
+        // whether anything actually came up. The old code sent a launch and
+        // always reported success — but a launch the shell ignores returns
+        // success too, so the UI routinely claimed to have raised a game that
+        // never appeared.
+        const res = await bringToFront(transferAddr(probe.host), t.titleId);
         if (probe.isStale()) return;
-        pushNotification(
-          "info",
-          withConsolePrefix(
-            probe.host,
-            tr("installed_bring_to_front", undefined, "Bring to front"),
-          ),
-          {
-            body: tr(
-              "installed_bring_to_front_sent",
-              { name: t.titleName },
-              `Asked the PS5 to show ${t.titleName}. If nothing happens it's still loading — try again in a moment.`,
+        if (res.outcome === "raised") {
+          pushNotification(
+            "info",
+            withConsolePrefix(
+              probe.host,
+              tr("installed_bring_to_front", undefined, "Bring to front"),
             ),
-          },
-        );
+            {
+              body: tr(
+                "installed_bring_to_front_raised",
+                { name: t.titleName },
+                `${t.titleName} is on screen now.`,
+              ),
+            },
+          );
+        } else if (res.outcome === "already_foreground") {
+          pushNotification(
+            "info",
+            withConsolePrefix(
+              probe.host,
+              tr("installed_bring_to_front", undefined, "Bring to front"),
+            ),
+            {
+              body: tr(
+                "installed_bring_to_front_already",
+                { name: t.titleName },
+                `${t.titleName} is already the app on screen.`,
+              ),
+            },
+          );
+        } else if (res.outcome === "not_running") {
+          pushNotification(
+            "warning",
+            withConsolePrefix(
+              probe.host,
+              tr("installed_bring_to_front", undefined, "Bring to front"),
+            ),
+            {
+              body: tr(
+                "installed_bring_to_front_not_running",
+                { name: t.titleName },
+                `${t.titleName} isn't running, so there's nothing to bring forward.`,
+              ),
+            },
+          );
+        } else if (res.outcome === "unverifiable") {
+          pushNotification(
+            "info",
+            withConsolePrefix(
+              probe.host,
+              tr("installed_bring_to_front", undefined, "Bring to front"),
+            ),
+            {
+              body: tr(
+                "installed_bring_to_front_unverifiable",
+                { name: t.titleName },
+                `Asked the PS5 to show ${t.titleName}. This console can't report which app is on screen, so we can't confirm it worked.`,
+              ),
+            },
+          );
+        } else {
+          // not_raised: the console accepted the request and did nothing.
+          // A warning, not an error — nothing broke, it just didn't take.
+          pushNotification(
+            "warning",
+            withConsolePrefix(
+              probe.host,
+              tr(
+                "installed_bring_to_front_not_raised_title",
+                undefined,
+                "The PS5 didn't switch to it",
+              ),
+            ),
+            {
+              body: tr(
+                "installed_bring_to_front_not_raised",
+                { name: t.titleName },
+                `${t.titleName} is still running, but the console kept the screen where it was. Press the PS button on your controller and pick it from there.`,
+              ),
+            },
+          );
+        }
       } catch (e) {
         if (probe.isStale()) return;
         pushNotification(

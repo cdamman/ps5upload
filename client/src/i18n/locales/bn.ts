@@ -2683,6 +2683,12 @@ installed_bring_to_front_failed: "পর্দায় আনা যায়�
 installed_bring_to_front_confirm_title: "{name} চলছে কিন্তু পর্দায় নেই",
 installed_bring_to_front_confirm_body: "এতে যাওয়ার সবচেয়ে নির্ভরযোগ্য উপায় কনসোলেই — PS বোতাম চেপে গেমটি বেছে নিন।\n\nএটি বরং PS5-কে সামনে আনতে বলে। গেম লোড শেষ হওয়ার পরেই কাজ করে; টাইটেল চালু হওয়ার সময় কনসোল অনুরোধ উপেক্ষা করে এবং দৃশ্যত কিছুই ঘটে না।",
 installed_bring_to_front_confirm_ok: "তবুও PS5-কে বলুন",
+installed_bring_to_front_raised: "{name} এখন স্ক্রিনে রয়েছে।",
+installed_bring_to_front_already: "{name} ইতিমধ্যেই স্ক্রিনে থাকা অ্যাপ।",
+installed_bring_to_front_not_running: "{name} চলছে না, তাই সামনে আনার কিছু নেই।",
+installed_bring_to_front_unverifiable: "PS5-কে {name} দেখাতে বলা হয়েছে। এই কনসোল কোন অ্যাপ স্ক্রিনে আছে তা জানাতে পারে না, তাই এটি কাজ করেছে কিনা নিশ্চিত করা যাচ্ছে না।",
+installed_bring_to_front_not_raised_title: "PS5 এতে স্যুইচ করেনি",
+installed_bring_to_front_not_raised: "{name} এখনও চলছে, কিন্তু কনসোল স্ক্রিন যেখানে ছিল সেখানেই রেখেছে। কন্ট্রোলারে PS বোতাম চেপে সেখান থেকে বেছে নিন।",
 
 helper_mismatch_title: "PS5 হেল্পার v{payload}, কিন্তু এই অ্যাপ v{app}",
 helper_mismatch_body: "নতুন সংস্করণের সংশোধন ও ফিচার কনসোলের হেল্পার না মেলা পর্যন্ত কাজ করবে না। সংযোগ স্ক্রিন থেকে এটি আবার লোড করুন।",

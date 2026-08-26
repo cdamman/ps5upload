@@ -13712,9 +13712,10 @@ static int handle_process_list(runtime_state_t *state, int client_fd,
  * once. See focus_probe.h. */
 static int handle_focus_probe(runtime_state_t *state, int client_fd,
                               uint64_t trace_id) {
-    /* The response is a fixed-shape object well under 512 bytes; 1 KiB is
-     * ample and keeps this off the heap so a 1 Hz poller stays cheap. */
-    char buf[1024];
+    /* Symbol map plus one row per running app. 8 KiB covers the candidate
+     * table and a busy console's app list with wide headroom, and keeping it
+     * on the stack keeps a 1 Hz poller cheap. */
+    char buf[8192];
     size_t written = 0;
     const char *err = NULL;
     if (!state) return -1;

@@ -21,10 +21,47 @@ use ftx2_proto::FrameType;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
+fn minus_one() -> i64 {
+    -1
+}
+
 use crate::connection::Connection;
+use crate::fs_ops::app_launch;
 
 /// Which candidate symbol this probe uses as the authoritative answer.
 pub const BIG_APP_SYMBOL: &str = "sceSystemServiceGetAppIdOfBigApp";
+
+/// Scheduler-visible state of one running app.
+///
+/// This is the part that actually answers "is the game on screen?" on a
+/// firmware with no focus getter. A PS5 game that loses the screen is
+/// suspended or has its CPU budget collapsed, so `runtime_us` sampled over
+/// time separates foreground from background behaviourally — no Sony focus
+/// API, no crash risk, no firmware dependency.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AppState {
+    #[serde(default)]
+    pub pid: i32,
+    #[serde(default)]
+    pub title_id: String,
+    #[serde(default)]
+    pub app_id: u32,
+    /// FreeBSD process state. 4 == SSTOP: outright stopped, the strong
+    /// "definitely not running" signal.
+    #[serde(default)]
+    pub stat: i32,
+    /// Accumulated CPU microseconds. The rate of change is the signal.
+    #[serde(default)]
+    pub runtime_us: u64,
+    #[serde(default)]
+    pub pctcpu: u32,
+    #[serde(default)]
+    pub nthreads: i32,
+    #[serde(default)]
+    pub slptime: u32,
+    #[serde(default)]
+    pub swtime: u32,
+}
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct FocusProbe {
@@ -37,6 +74,23 @@ pub struct FocusProbe {
     /// on FW 9.60, `sceSystemServiceGetAppIdOfBigApp` does NOT resolve.
     #[serde(default)]
     pub apis: BTreeMap<String, bool>,
+    /// App id of the application that currently OWNS THE SCREEN, read from
+    /// the `SceShellCoreUtilAppFocus` named event flag; -1 when unavailable.
+    ///
+    /// This is the authoritative answer on a firmware that exports no focus
+    /// getter. Confirmed on FW 9.60: 0x6018 with the game on screen, 0x0007
+    /// (SceShellUI) with the dashboard up.
+    #[serde(default = "minus_one")]
+    pub focus_app_id: i64,
+    /// Raw return code from the flag poll, for diagnosing a failed read.
+    #[serde(default)]
+    pub focus_rc: i32,
+    /// Whether the focus flag could be opened and polled at all.
+    #[serde(default)]
+    pub focus_available: bool,
+    /// Every running app with a non-zero app id, with its scheduler state.
+    #[serde(default)]
+    pub apps: Vec<AppState>,
     /// App id of the full-screen foreground app, or 0/negative when none.
     #[serde(default)]
     pub big_app_id: i32,
@@ -56,6 +110,12 @@ impl FocusProbe {
     /// Returns `None` — not `Some(false)` — when the console could not
     /// answer, so callers never report "backgrounded" on missing data.
     pub fn is_foreground(&self, app_id: u32) -> Option<bool> {
+        // The event flag is the real answer; the BigApp getter does not even
+        // exist on FW 9.60. Fall back to it only if some other firmware has
+        // it but lacks the flag.
+        if self.focus_available && self.focus_app_id >= 0 {
+            return Some(self.focus_app_id as u64 == app_id as u64);
+        }
         if self.apis.get(BIG_APP_SYMBOL).copied() != Some(true) {
             return None;
         }
@@ -94,6 +154,109 @@ pub fn focus_probe(addr: &str) -> Result<FocusProbe> {
         bail!("expected FOCUS_PROBE_ACK, got {ft:?}");
     }
     Ok(serde_json::from_slice(&resp)?)
+}
+
+/// What actually happened when we asked the console to raise a title.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BringToFrontOutcome {
+    /// It was already the app on screen; nothing was sent.
+    AlreadyForeground,
+    /// We asked, and the focus flag confirms the title now owns the screen.
+    Raised,
+    /// We asked, the console accepted the request, and the title still does
+    /// NOT own the screen after the timeout.
+    ///
+    /// This is a real and COMMON result, not a rare edge case: the payload's
+    /// launch call reports success for a request the shell then ignores. The
+    /// old code returned plain `ok` here, so the UI cheerfully claimed to
+    /// have raised a game that never appeared.
+    NotRaised,
+    /// The title is not running, so there is nothing to raise.
+    NotRunning,
+    /// The console cannot report focus (no event flag), so we asked and
+    /// cannot say whether it worked. Never reported as success.
+    Unverifiable,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BringToFrontResult {
+    pub outcome: BringToFrontOutcome,
+    /// App id of whatever owns the screen at the end, or -1 if unknown.
+    pub focus_app_id: i64,
+    pub app_id: u32,
+    pub waited_ms: u64,
+}
+
+/// Ask the console to raise `title_id`, then VERIFY it actually happened.
+///
+/// Verification matters because `app_launch` succeeding means only that the
+/// payload's launch call returned — not that the shell put anything on
+/// screen. Measured on FW 9.60, a launch against an already-running,
+/// backgrounded title routinely returns success while the dashboard stays
+/// exactly where it was.
+pub fn bring_to_front(addr: &str, title_id: &str) -> Result<BringToFrontResult> {
+    use std::time::{Duration, Instant};
+
+    let probe = focus_probe(addr)?;
+    let app_id = match probe.apps.iter().find(|a| a.title_id == title_id) {
+        Some(a) => a.app_id,
+        None => {
+            return Ok(BringToFrontResult {
+                outcome: BringToFrontOutcome::NotRunning,
+                focus_app_id: probe.focus_app_id,
+                app_id: 0,
+                waited_ms: 0,
+            })
+        }
+    };
+
+    if probe.focus_available && probe.focus_app_id == app_id as i64 {
+        return Ok(BringToFrontResult {
+            outcome: BringToFrontOutcome::AlreadyForeground,
+            focus_app_id: probe.focus_app_id,
+            app_id,
+            waited_ms: 0,
+        });
+    }
+
+    app_launch(addr, title_id)?;
+
+    if !probe.focus_available {
+        return Ok(BringToFrontResult {
+            outcome: BringToFrontOutcome::Unverifiable,
+            focus_app_id: -1,
+            app_id,
+            waited_ms: 0,
+        });
+    }
+
+    // Poll until the flag confirms, or give up. A real raise lands in about a
+    // second; 10s is generous without leaving the UI hanging.
+    let started = Instant::now();
+    let deadline = Duration::from_secs(10);
+    let mut last_focus = probe.focus_app_id;
+    while started.elapsed() < deadline {
+        std::thread::sleep(Duration::from_millis(500));
+        if let Ok(p) = focus_probe(addr) {
+            last_focus = p.focus_app_id;
+            if p.focus_app_id == app_id as i64 {
+                return Ok(BringToFrontResult {
+                    outcome: BringToFrontOutcome::Raised,
+                    focus_app_id: p.focus_app_id,
+                    app_id,
+                    waited_ms: started.elapsed().as_millis() as u64,
+                });
+            }
+        }
+    }
+
+    Ok(BringToFrontResult {
+        outcome: BringToFrontOutcome::NotRaised,
+        focus_app_id: last_focus,
+        app_id,
+        waited_ms: started.elapsed().as_millis() as u64,
+    })
 }
 
 #[cfg(test)]
@@ -139,6 +302,31 @@ mod tests {
     }
 
     #[test]
+    fn focus_flag_beats_the_missing_big_app_getter() {
+        // FW 9.60 has no BigApp getter at all, so the event flag must be the
+        // deciding input — otherwise is_foreground() is permanently None.
+        let p = FocusProbe {
+            ok: true,
+            focus_available: true,
+            focus_app_id: 24600,
+            ..Default::default()
+        };
+        assert_eq!(p.is_foreground(24600), Some(true));
+        assert_eq!(p.is_foreground(7), Some(false));
+    }
+
+    #[test]
+    fn unreadable_flag_with_no_getter_is_unknown_not_false() {
+        let p = FocusProbe {
+            ok: true,
+            focus_available: false,
+            focus_app_id: -1,
+            ..Default::default()
+        };
+        assert_eq!(p.is_foreground(24600), None);
+    }
+
+    #[test]
     fn parses_payload_json() {
         let raw = br#"{"ok":true,"apis":{
             "sceSystemServiceGetAppIdOfBigApp":true,
@@ -151,5 +339,30 @@ mod tests {
         assert_eq!(p.big_app_id, 24600);
         assert_eq!(p.monotonic_ms, 123456);
         assert_eq!(p.is_foreground(24600), Some(true));
+    }
+
+    #[test]
+    fn parses_the_focus_flag_fields() {
+        let raw = br#"{"ok":true,"apis":{},"focus_app_id":24600,"focus_rc":0,
+            "focus_available":true,
+            "apps":[{"pid":154,"title_id":"PPSA23226","app_id":24600,
+                     "stat":3,"runtime_us":1,"pctcpu":0,"nthreads":80,
+                     "slptime":0,"swtime":1}]}"#;
+        let p: FocusProbe = serde_json::from_slice(raw).unwrap();
+        assert!(p.focus_available);
+        assert_eq!(p.focus_app_id, 24600);
+        assert_eq!(p.apps.len(), 1);
+        assert_eq!(p.apps[0].title_id, "PPSA23226");
+        assert_eq!(p.is_foreground(24600), Some(true));
+    }
+
+    /// A probe from an OLD payload carries none of the focus fields; it must
+    /// default to "unknown", never to "focused".
+    #[test]
+    fn old_payload_json_defaults_to_unknown() {
+        let p: FocusProbe = serde_json::from_slice(br#"{"ok":true}"#).unwrap();
+        assert!(!p.focus_available);
+        assert_eq!(p.focus_app_id, -1);
+        assert_eq!(p.is_foreground(24600), None);
     }
 }

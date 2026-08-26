@@ -2683,6 +2683,12 @@ installed_bring_to_front_failed: "تعذّر إحضارها إلى الشاشة"
 installed_bring_to_front_confirm_title: "{name} قيد التشغيل لكنها ليست على الشاشة",
 installed_bring_to_front_confirm_body: "أضمن طريقة للانتقال إليها هي من الجهاز نفسه — اضغط زر PS واختر اللعبة.\n\nهذا الخيار يطلب من PS5 إحضارها إلى الواجهة بدلًا من ذلك، ولا ينجح إلا بعد انتهاء تحميل اللعبة؛ فأثناء بدء التشغيل يتجاهل الجهاز الطلب ولا يحدث شيء ظاهر.",
 installed_bring_to_front_confirm_ok: "اطلب من PS5 على أي حال",
+installed_bring_to_front_raised: "{name} يظهر على الشاشة الآن.",
+installed_bring_to_front_already: "{name} هو التطبيق الظاهر على الشاشة بالفعل.",
+installed_bring_to_front_not_running: "{name} لا يعمل، لذا لا يوجد ما يمكن إحضاره.",
+installed_bring_to_front_unverifiable: "طلبنا من PS5 عرض {name}. لا يستطيع هذا الجهاز الإبلاغ عن التطبيق الظاهر على الشاشة، لذا لا يمكننا تأكيد نجاح العملية.",
+installed_bring_to_front_not_raised_title: "لم يبدّل PS5 إليه",
+installed_bring_to_front_not_raised: "{name} لا يزال يعمل، لكن الجهاز أبقى الشاشة كما هي. اضغط زر PS في وحدة التحكم واختره من هناك.",
 
 helper_mismatch_title: "مساعد PS5 بإصدار v{payload} بينما هذا التطبيق v{app}",
 helper_mismatch_body: "لن تعمل إصلاحات وميزات الإصدار الأحدث حتى يتطابق المساعد على الجهاز. أعد تحميله من شاشة الاتصال.",

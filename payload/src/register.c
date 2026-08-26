@@ -1614,7 +1614,12 @@ int register_browser_launch(void) {
     int rc = g_reg.launch_app_sys("NPXS20001", NULL, NULL);
     usleep(SONY_API_POST_SLEEP_US);
     pthread_mutex_unlock(&sony_api_lock);
-    return (rc == 0) ? 0 : -1;
+    /* >= 0 is success: sceSystemServiceLaunchApp returns the new APP ID, not
+     * zero. This site had the same `rc == 0` mistake that made game launches
+     * report failure for a launch that had in fact succeeded — here it meant
+     * a browser that opened fine was reported as "couldn't launch". Negative
+     * is the only failure. See launch_sys_ok. */
+    return (rc >= 0) ? 0 : -1;
 }
 
 /* Forward declaration of the SceShellUI RPC layer. Defined in
@@ -1623,6 +1628,90 @@ int register_browser_launch(void) {
  * Sony's launcher does a caller-pid check that only ShellUI
  * satisfies. */
 /* shellui_rpc API — declarations come from shellui_rpc.h. */
+
+/* Sony's launch context for sceSystemServiceLaunchApp.
+ *
+ * NOT packed, and check_flag is 32-bit — this is the layout the launcher
+ * actually expects (sizeof == 32 with the padding after app_opt). The
+ * ptrace path's `lnc_app_param` below is packed with a 64-bit check_flag
+ * (sizeof == 28) and therefore does NOT match; do not unify the two by
+ * copying that one, and do not "tidy" this into a packed struct. Getting a
+ * Sony struct layout subtly wrong is a mistake this codebase has already
+ * made once by trusting an SDK sample. Layout cross-checked against
+ * elf-arsenal src/ps5/sys.c, which launches titles this way in production. */
+typedef struct app_launch_ctx {
+    uint32_t structsize;
+    uint32_t user_id;
+    uint32_t app_opt;
+    uint64_t crash_report;
+    uint32_t check_flag;
+} app_launch_ctx_t;
+
+/* Launch a title IN-PROCESS via sceSystemServiceLaunchApp — no ptrace.
+ *
+ * This is the primary launch path, and the reason is measured, not
+ * theoretical. The ptrace route runs sceLncUtilLaunchApp on SceShellUI's
+ * hijacked stack; on FW 9.60 that made ShellUI restart ~20 seconds later,
+ * and the fresh instance takes the screen — so a game would come up, run
+ * for ~20s, and drop back to the dashboard on its own. Control runs
+ * isolated it precisely:
+ *
+ *   no ptrace at all (60s)                        -> ShellUI stable
+ *   ptrace attach + SENSOR call + detach (75s)    -> ShellUI stable
+ *   ptrace attach + LAUNCH call + detach          -> ShellUI restarts ~20s
+ *   launched from the console UI (100s+)          -> never dropped
+ *
+ * i.e. the ptrace machinery is fine; invoking Sony's launcher through it is
+ * what breaks ShellUI. Re-raising afterwards does not help — it just runs
+ * the same call again and restarts ShellUI again.
+ *
+ * Returns the launcher's rc (0 == accepted), or -1 if the symbol is absent
+ * so the caller can fall back to the ptrace path on a firmware that needs
+ * it. */
+static int launch_via_system_service(const char *title_id, int fg_user) {
+    app_launch_ctx_t ctx;
+    const char *argv[1];
+    int have_ctx = 0;
+    int rc;
+
+    if (!g_reg.launch_app_sys) return -1;
+
+    memset(&ctx, 0, sizeof ctx);
+    /* A ctx is only valid with a real foreground user; 0/-1 mean "nobody
+     * signed in", and passing that is worse than passing no ctx at all. */
+    if (fg_user > 0 && (uint32_t)fg_user != 0xFFFFFFFFu) {
+        ctx.structsize = (uint32_t)sizeof(ctx);
+        ctx.user_id = (uint32_t)fg_user;
+        have_ctx = 1;
+    }
+    argv[0] = NULL;
+
+    /* Serialized like every other Sony API call here: concurrent
+     * sceUserService/launcher calls take the host process down. */
+    pthread_mutex_lock(&sony_api_lock);
+    rc = g_reg.launch_app_sys(title_id, argv, have_ctx ? (void *)&ctx : NULL);
+    usleep(SONY_API_POST_SLEEP_US);
+    pthread_mutex_unlock(&sony_api_lock);
+
+    fprintf(stderr,
+            "[payload2] launch %s: sceSystemServiceLaunchApp rc=0x%x "
+            "(ctx=%s user=%d)\n",
+            title_id, (unsigned)rc, have_ctx ? "yes" : "no", fg_user);
+    return rc;
+}
+
+/* sceSystemServiceLaunchApp returns the new APP ID on success, not 0.
+ *
+ * This matters far more than a normal return-code detail, because the caller
+ * runs a fallback ladder: reading a successful launch as a failure does not
+ * just log the wrong thing, it fires a SECOND launch through the ptrace path
+ * — and that second launch is what restarts SceShellUI and drops the game to
+ * the dashboard ~20s later. Observed directly: rc came back 0xe018 and the
+ * game was live with app id 57368 (== 0xe018).
+ *
+ * Negative is the only failure. Matches elf-arsenal src/ps5/sys.c, which
+ * treats `err < 0` as the sole error case. */
+static inline int launch_sys_ok(int rc) { return rc >= 0; }
 
 int launch_title(const char *title_id, const char **err_reason_out,
                  char *reason_buf, size_t reason_cap) {
@@ -1720,12 +1809,25 @@ int launch_title(const char *title_id, const char **err_reason_out,
                 "[payload2] launch %s: already running — foregrounding "
                 "instead of re-launching\n",
                 title_id);
-        int rc_fg = -1;
-        (void)shellui_rpc_init();
-        if (shellui_rpc_ready()) {
-            rc_fg = shellui_rpc_launch_app(title_id, fg_user);
-            if (rc_fg == -2) rc_fg = 0; /* dispatched; result uncertain */
-        }
+        /* In-process first — the ptrace route restarts ShellUI, which then
+         * grabs the screen and backgrounds the very game we were asked to
+         * raise. See launch_via_system_service. */
+        int rc_fg = launch_via_system_service(title_id, fg_user);
+        if (launch_sys_ok(rc_fg)) return 0;
+
+        /* NO ptrace fallback on this branch. Read this before adding one.
+         *
+         * Raising an already-running title through the ShellUI ptrace route
+         * restarts SceShellUI ~20s later, and the fresh instance takes the
+         * screen — so the "bring it to the front" request ends up doing the
+         * exact opposite of what was asked. Measured: a verified re-raise
+         * returned not_raised after 10s AND bumped ShellUI's app id again.
+         *
+         * Both remaining attempts are in-process (dlsym, direct call), never
+         * ptrace. If they cannot raise it, that is fine: the title IS
+         * running, the caller's real goal is satisfied, and the UI reports
+         * honestly that the console kept the screen where it was. Breaking
+         * the system UI to win a focus change is never the right trade. */
         if (rc_fg != 0 && g_reg.launch_app) {
             pthread_mutex_lock(&sony_api_lock);
             rc_fg = g_reg.launch_app(title_id, NULL, NULL);
@@ -1736,6 +1838,14 @@ int launch_title(const char *title_id, const char **err_reason_out,
          * for. Focus is best-effort — reporting failure here would be wrong
          * and would tempt the UI into another launch. */
         return 0;
+    }
+
+    /* PRIMARY: in-process sceSystemServiceLaunchApp, no ptrace. Only fall
+     * through to the ShellUI ptrace route if this firmware lacks the symbol
+     * or the launcher rejects the call outright. */
+    {
+        int rc_ss = launch_via_system_service(title_id, fg_user);
+        if (launch_sys_ok(rc_ss)) return 0;
     }
 
     (void)shellui_rpc_init();
@@ -1863,7 +1973,11 @@ int launch_title(const char *title_id, const char **err_reason_out,
         tried_sys = 1;
         rc = g_reg.launch_app_sys(title_id, NULL, NULL);
         usleep(SONY_API_POST_SLEEP_US);
-        if (rc == 0 || launch_took_effect(title_id)) launched = 1;
+        /* >= 0, not == 0: this returns the new APP ID on success. The
+         * launch_took_effect() poll below masks the mistake, but only
+         * after burning up to 3s confirming something we were already
+         * told. Same contract as launch_sys_ok. */
+        if (rc >= 0 || launch_took_effect(title_id)) launched = 1;
     }
 
     pthread_mutex_unlock(&sony_api_lock);

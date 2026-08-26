@@ -477,18 +477,33 @@ export const useTransferStore = create<TransferState>((set) => {
             // double-mount race for /user/app + app.db. Best-effort: fall back
             // to the native mount below if SMP is unreachable.
             const mgmt = mgmtAddr(hostFromAddr(addr));
+            // Separate the two failures — see uploadQueue.ts for the full
+            // reasoning. "SMP isn't running" means self-mounting is correct;
+            // "SMP is running but the hand-off failed" means our mount may
+            // fight it for /user/app + app.db, and swallowing that silently
+            // is how a duplicate/blocked title appears with no explanation.
             let handedToSmp = false;
+            let smpRunning: boolean;
             try {
-              const smp = await smpStatus(mgmt);
-              if (smp.running) {
+              smpRunning = (await smpStatus(mgmt)).running;
+            } catch {
+              smpRunning = false;
+            }
+            if (smpRunning) {
+              try {
                 const r = await smpManualInstall(mgmt, finalDest);
                 handedToSmp = true;
                 mountedAt = r.added
                   ? "handed to ShadowMount+"
                   : "already in ShadowMount+ list";
+              } catch (e) {
+                mountWarnings.push(
+                  `ShadowMount+ is running but the hand-off failed (${
+                    e instanceof Error ? e.message : String(e)
+                  }). Mounted it directly instead — if ShadowMount+ also ` +
+                    `picks it up you may see a duplicate or a blocked title.`,
+                );
               }
-            } catch {
-              handedToSmp = false;
             }
             // Stop / reset / a fresh start() can land during the SMP round-trips
             // (smpStatus + smpManualInstall) above. The hand-off is already

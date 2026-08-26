@@ -2630,6 +2630,12 @@ installed_bring_to_front_failed: "Non è stato possibile portarlo sullo schermo"
 installed_bring_to_front_confirm_title: "{name} è in esecuzione ma non è a schermo",
 installed_bring_to_front_confirm_body: "Il modo più affidabile per passare al gioco è dalla console stessa: premi il tasto PS e selezionalo.\n\nQuesto invece chiede alla PS5 di portarlo in primo piano. Funziona solo quando il gioco ha finito di caricare; mentre un titolo si avvia la console ignora la richiesta e non succede nulla di visibile.",
 installed_bring_to_front_confirm_ok: "Chiedilo comunque alla PS5",
+installed_bring_to_front_raised: "{name} è ora sullo schermo.",
+installed_bring_to_front_already: "{name} è già l'app visualizzata sullo schermo.",
+installed_bring_to_front_not_running: "{name} non è in esecuzione, quindi non c'è nulla da portare in primo piano.",
+installed_bring_to_front_unverifiable: "È stato chiesto alla PS5 di mostrare {name}. Questa console non può indicare quale app è sullo schermo, quindi non possiamo confermare che abbia funzionato.",
+installed_bring_to_front_not_raised_title: "La PS5 non è passata a quel gioco",
+installed_bring_to_front_not_raised: "{name} è ancora in esecuzione, ma la console ha lasciato lo schermo com'era. Premi il tasto PS sul controller e selezionalo da lì.",
 
 helper_mismatch_title: "L'helper della PS5 è v{payload} ma questa app è v{app}",
 helper_mismatch_body: "Le correzioni e le funzioni della versione più recente non funzioneranno finché l'helper sulla console non corrisponde. Ricaricalo dalla schermata Connessione.",

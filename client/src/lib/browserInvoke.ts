@@ -306,6 +306,82 @@ export async function browserInvoke<T>(
 
     // ── Syslog + time ───────────────────────────────────────────────────────
 
+    // Reads a console file for the bug-report collector. Without this the
+    // browser build silently collected NO on-console logs: the collector
+    // (correctly) treats a per-file read failure as "file absent", so the
+    // missing route looked like an empty console rather than an error.
+    case "fs_read_preview":
+      return postJson<T>("/api/ps5/fs/read-preview", {
+        addr: args["addr"],
+        path: args["path"],
+        max_bytes: args["maxBytes"] ?? args["max_bytes"],
+      });
+
+    // App lifecycle (suspend / resume / kill / list). Without these the
+    // browser build could not close a running game at all — the desktop app
+    // reaches them through Tauri commands that call core directly, with no
+    // HTTP route behind them.
+    case "app_suspend":
+    case "app_resume":
+    case "app_kill":
+    case "app_list_running": {
+      const action =
+        cmd === "app_suspend"
+          ? "suspend"
+          : cmd === "app_resume"
+            ? "resume"
+            : cmd === "app_kill"
+              ? "kill"
+              : "list";
+      return postJson<T>("/api/ps5/app/lifecycle", {
+        addr: args["addr"],
+        action,
+        app_id: args["appId"] ?? args["app_id"] ?? 0,
+      });
+    }
+
+    // Console diagnostics used by the bug-report collector. Without these
+    // a web-generated report silently carried no kernel log, no network
+    // interfaces and no process list — the collector treats an unsupported
+    // command as "nothing to collect", so the gap looked like a quiet
+    // console rather than a broken route.
+    case "klog_chunk": {
+      let url = addrUrl("/api/ps5/klog", args["addr"]);
+      const mb = args["maxBytes"] ?? args["max_bytes"];
+      if (mb) url += `${url.includes("?") ? "&" : "?"}max_bytes=${mb}`;
+      // The desktop command resolves to the log text itself, not an object.
+      return getJson<{ text?: string }>(url).then(
+        (r) => (r?.text ?? "") as unknown as T,
+      );
+    }
+
+    case "net_interfaces_get":
+      return getJson<T>(addrUrl("/api/ps5/net/interfaces", args["addr"]));
+
+    case "proc_list_get":
+      return getJson<T>(addrUrl("/api/ps5/proc/list", args["addr"]));
+
+    case "remoteplay_status":
+      return getJson<T>(addrUrl("/api/ps5/remoteplay/status", args["addr"]));
+
+    case "remoteplay_cancel":
+      return postJson<T>("/api/ps5/remoteplay/cancel", { addr: args["addr"] });
+
+    case "remoteplay_request": {
+      // TS caller nests everything under `req`.
+      const req = (args["req"] ?? {}) as Record<string, unknown>;
+      return postJson<T>("/api/ps5/remoteplay/request", {
+        addr: req["addr"] ?? args["addr"],
+        manual_account_id: req["manual_account_id"] ?? null,
+      });
+    }
+
+    case "ps5_bring_to_front":
+      return postJson<T>("/api/ps5/focus/bring-to-front", {
+        addr: args["addr"],
+        title_id: args["titleId"] ?? args["title_id"],
+      });
+
     case "ps5_focus":
       return getJson<T>(addrUrl("/api/ps5/focus", args["addr"]));
 

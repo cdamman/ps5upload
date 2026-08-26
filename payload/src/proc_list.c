@@ -492,3 +492,96 @@ int proc_find_pid_by_name(const char *name) {
     free(buf);
     return found;
 }
+
+/* See proc_list.h. Behavioural focus detection: sample this over time and a
+ * backgrounded title shows up as a collapse in the runtime_us rate. */
+int proc_list_app_states_json(char *buf, size_t cap, size_t *written_out,
+                              const char **err_out) {
+    int mib[3] = { CTL_KERN, KERN_PROC, KERN_PROC_PROC };
+    size_t buf_size = 0;
+    uint8_t *procbuf = NULL;
+    size_t off = 0;
+    int n, emitted = 0;
+
+    if (!buf || cap == 0) {
+        if (err_out) *err_out = "app_states_bad_args";
+        return -1;
+    }
+    if (sysctl(mib, 3, NULL, &buf_size, NULL, 0) != 0 || buf_size == 0) {
+        if (err_out) *err_out = "app_states_sysctl_size_failed";
+        return -1;
+    }
+    /* Headroom: the process table can grow between the sizing call and the
+     * read, same as proc_list_build. */
+    buf_size += buf_size / 4;
+    procbuf = (uint8_t *)malloc(buf_size);
+    if (!procbuf) {
+        if (err_out) *err_out = "app_states_alloc_failed";
+        return -1;
+    }
+    if (sysctl(mib, 3, procbuf, &buf_size, NULL, 0) != 0) {
+        free(procbuf);
+        if (err_out) *err_out = "app_states_sysctl_read_failed";
+        return -1;
+    }
+
+    n = snprintf(buf, cap, "[");
+    if (n < 0 || (size_t)n >= cap) {
+        free(procbuf);
+        if (err_out) *err_out = "app_states_buf_too_small";
+        return -1;
+    }
+    off = (size_t)n;
+
+    for (uint8_t *ptr = procbuf; ptr < procbuf + buf_size;) {
+        int ki_structsize = *(int *)ptr;
+        if (ki_structsize <= 0 ||
+            (size_t)(ptr - procbuf) + (size_t)ki_structsize > buf_size) break;
+        if (ki_structsize <= KINFO_TDNAME_OFFSET) break;
+
+        const struct kinfo_proc *ki = (const struct kinfo_proc *)ptr;
+        pid_t pid = *(pid_t *)&ptr[KINFO_PID_OFFSET];
+
+        app_info_t appinfo;
+        if (sceKernelGetAppInfo(pid, &appinfo) != 0) {
+            memset(&appinfo, 0, sizeof(appinfo));
+        }
+        /* Only real apps/games — app_id 0 is every daemon on the system and
+         * would bury the two rows that matter. */
+        if (appinfo.app_id != 0) {
+            char tid_esc[32];
+            json_escape_name(appinfo.title_id, sizeof(appinfo.title_id),
+                             tid_esc, sizeof(tid_esc));
+            n = snprintf(buf + off, cap - off,
+                         "%s{\"pid\":%d,\"title_id\":\"%s\",\"app_id\":%u,"
+                         "\"stat\":%d,\"runtime_us\":%llu,\"pctcpu\":%u,"
+                         "\"nthreads\":%d,\"slptime\":%u,\"swtime\":%u}",
+                         emitted ? "," : "",
+                         (int)pid, tid_esc, (unsigned)appinfo.app_id,
+                         (int)ki->ki_stat,
+                         (unsigned long long)ki->ki_runtime,
+                         (unsigned)ki->ki_pctcpu,
+                         (int)ki->ki_numthreads,
+                         (unsigned)ki->ki_slptime,
+                         (unsigned)ki->ki_swtime);
+            if (n < 0 || (size_t)n >= cap - off) {
+                free(procbuf);
+                if (err_out) *err_out = "app_states_buf_too_small";
+                return -1;
+            }
+            off += (size_t)n;
+            emitted++;
+        }
+        ptr += ki_structsize;
+    }
+    free(procbuf);
+
+    n = snprintf(buf + off, cap - off, "]");
+    if (n < 0 || (size_t)n >= cap - off) {
+        if (err_out) *err_out = "app_states_buf_too_small";
+        return -1;
+    }
+    off += (size_t)n;
+    if (written_out) *written_out = off;
+    return 0;
+}
