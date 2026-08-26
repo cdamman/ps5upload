@@ -4,6 +4,22 @@ What's new in ps5upload, written for humans.
 
 ---
 
+## 5.6.1
+
+**Fixes "Edit files…" for any game image that isn't on internal storage.**
+
+- **Editing an image on a USB or external drive failed immediately** with
+  `journal the edit session on the console: FS_WRITE_BYTES failed:
+  open_failed`. An edit session records itself on the console so an
+  interrupted edit can still be finished, and that record always lives on
+  `/data` — but the folder holding it was only ever created on the drive
+  the *image* was on. For an image on `/mnt/usb0` or `/mnt/ext1` the two
+  are different drives, so the record had nowhere to go and the edit
+  never started. Images on internal storage were unaffected, which is
+  why this got through testing.
+
+---
+
 ## 5.6.0
 
 **Disk images show their real name and cover art, editing a game

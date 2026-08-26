@@ -53,9 +53,15 @@ use crate::diagnostics::fs_write_bytes;
 use crate::fs_ops::{fs_mkdir, fs_mount, fs_move, fs_read, fs_unmount, MountResult};
 use crate::volumes::{list_volumes, VolumeList};
 
-/// Where the checkout journal lives on the console. Fixed path: recovery has
-/// to be able to find it with no other state, including after a reinstall of
-/// the desktop app.
+/// Directory holding the checkout journal. Fixed, on internal storage:
+/// recovery has to find it with no other state, and `/data` is the one volume
+/// that is always present. Note this is deliberately NOT the staging dir —
+/// that follows the image's own volume (see [`staging_dir_for`]), so for an
+/// image on `/mnt/usb0` the two are on different drives and BOTH have to be
+/// created.
+pub const CHECKOUT_STATE_DIR: &str = "/data/ps5upload/editing";
+
+/// Where the checkout journal lives on the console.
 pub const CHECKOUT_STATE_PATH: &str = "/data/ps5upload/editing/checkout.json";
 
 /// Directory (relative to a volume root) images are staged into while checked
@@ -360,6 +366,13 @@ pub fn begin(
     }
 
     fs_mkdir(addr, &staging_dir).with_context(|| format!("create staging folder {staging_dir}"))?;
+    // The journal lives on /data regardless of which volume the image is on,
+    // so its directory is a SEPARATE mkdir. Skipping it worked only for images
+    // that happened to live on /data (where staging_dir is the same folder);
+    // for an image on /mnt/usb0 or /mnt/ext1 the journal write failed with
+    // `FS_WRITE_BYTES failed: open_failed` and no edit session could start.
+    fs_mkdir(addr, CHECKOUT_STATE_DIR)
+        .with_context(|| format!("create the edit-session journal folder {CHECKOUT_STATE_DIR}"))?;
 
     let state = CheckoutState {
         staged_path: staged_path.clone(),
@@ -552,6 +565,36 @@ mod tests {
         assert_eq!(
             staging_dir_for("/data/homebrew/PPSA09016.exfat", &vols).unwrap(),
             "/data/ps5upload/editing"
+        );
+    }
+
+    #[test]
+    fn the_journal_folder_is_not_assumed_to_be_the_staging_folder() {
+        // These coincide only for images on /data. An image on an external
+        // drive stages onto THAT drive while the journal stays on /data, so
+        // `begin` has to create both — assuming one implied the other meant
+        // every edit of a USB/ext-hosted image died on
+        // `FS_WRITE_BYTES failed: open_failed`.
+        let vols = volumes(&["/data", "/mnt/usb0", "/mnt/ext1"]);
+        assert!(CHECKOUT_STATE_PATH.starts_with(CHECKOUT_STATE_DIR));
+
+        for (image, expected_staging) in [
+            ("/mnt/usb0/homebrew/X.exfat", "/mnt/usb0/ps5upload/editing"),
+            ("/mnt/ext1/homebrew/X.exfat", "/mnt/ext1/ps5upload/editing"),
+        ] {
+            let staging = staging_dir_for(image, &vols).unwrap();
+            assert_eq!(staging, expected_staging);
+            assert_ne!(
+                staging, CHECKOUT_STATE_DIR,
+                "an off-/data image must not be assumed to share the journal folder",
+            );
+        }
+
+        // …and for a /data image they DO coincide, which is why this went
+        // unnoticed: the only image tested happened to live there.
+        assert_eq!(
+            staging_dir_for("/data/homebrew/X.exfat", &vols).unwrap(),
+            CHECKOUT_STATE_DIR,
         );
     }
 
