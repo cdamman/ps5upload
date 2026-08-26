@@ -2713,6 +2713,15 @@ library_edit_modal_title: "「{name}」 편집",
 library_edit_modal_intro: "작업하는 동안 마운트할 위치를 고르세요. 그동안 이미지는 ShadowMount+에서 빠지고 끝내면 되돌아갑니다 — 그때까지 게임은 PS5 홈 화면에서 숨겨집니다.",
 library_mount_tooltip_smp: "이 이미지를 ShadowMount+에 넘깁니다. 마운트하고 등록해 플레이할 수 있게 합니다(읽기 전용)",
 
+installed_bring_to_front: "앞으로 가져오기",
+installed_bring_to_front_tooltip: "실행 중인 이 게임을 화면에 표시합니다. 게임 로딩이 끝난 뒤에 사용하세요 — 타이틀이 시작 중이면 PS5가 무시합니다.",
+installed_bring_to_front_sent: "PS5에 {name}을(를) 표시하도록 요청했습니다. 아무 일도 없으면 아직 로딩 중입니다 — 잠시 후 다시 시도하세요.",
+installed_bring_to_front_failed: "화면에 표시하지 못했습니다",
+
+installed_bring_to_front_confirm_title: "{name}이(가) 실행 중이지만 화면에 없습니다",
+installed_bring_to_front_confirm_body: "가장 확실한 방법은 콘솔에서 직접 전환하는 것입니다 — PS 버튼을 누르고 게임을 고르세요.\n\n이 버튼은 대신 PS5에 앞으로 가져오도록 요청합니다. 게임 로딩이 끝난 뒤에만 동작하며, 타이틀이 시작 중이면 콘솔이 요청을 무시해 아무 변화도 없습니다.",
+installed_bring_to_front_confirm_ok: "그래도 PS5에 요청",
+
 };
 
 export default ko;

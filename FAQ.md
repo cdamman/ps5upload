@@ -336,24 +336,33 @@ This is WebKitGTK failing to render with accelerated compositing /
 the DMABUF renderer on your GPU/compositor — common on gaming distros
 (Bazzite, SteamOS) and NVIDIA. Fixes, easiest first:
 
-1. **Update to the latest version — the fix is now built in.** As of
-   2.14.0 the app sets `WEBKIT_DISABLE_COMPOSITING_MODE=1` and
+1. **Update to the latest version — the fix is built in.** The app sets
    `WEBKIT_DISABLE_DMABUF_RENDERER=1` itself at startup, so a plain
-   double-click of `PS5Upload.AppImage` (or the `.deb` / folder build)
-   should render correctly — no wrapper needed. On older builds, launch
-   via `./PS5Upload.sh` (shipped in the release `.zip` next to
-   `PS5Upload.AppImage`), which sets the same vars. (If you ran
-   `WEBKIT_DISABLE_DMABUF_RENDERER=1 ./PS5Upload.AppImage` and it didn't
-   help, the missing piece was the *compositing-mode* var — both are now
-   set automatically.)
+   double-click of `PS5Upload.AppImage` (or the `.deb` / `.rpm` / folder
+   build) should render correctly — no wrapper needed. This is the fix
+   for the great majority of blank windows.
 
-2. **Still white?** Force X11 instead of Wayland:
+2. **Still white? Disable accelerated compositing too:**
+
+   ```sh
+   WEBKIT_DISABLE_COMPOSITING_MODE=1 ./PS5Upload.sh
+   ```
+
+   This is deliberately *not* the default. It makes WebKitGTK render the
+   whole page in software, which is fine for a static window but makes
+   **scrolling sluggish** — and this app's main screens are long lists
+   (a library of hundreds of games, a file browser of thousands of
+   entries). Earlier versions set it for everyone, which is why scrolling
+   felt heavier on Linux than on Android or Windows. Use it only if you
+   actually need it.
+
+3. **Still white?** Force X11 instead of Wayland:
 
    ```sh
    GDK_BACKEND=x11 ./PS5Upload.sh
    ```
 
-3. **Still white?** Fall back to software rendering (slower UI, but
+4. **Still white?** Fall back to software rendering (slower UI, but
    reliable — good for confirming it's a GPU-path problem):
 
    ```sh

@@ -2675,6 +2675,15 @@ library_edit_modal_title: "تحرير «{name}»",
 library_edit_modal_intro: "اختر مكان تثبيتها أثناء عملك. تُخرَج من ShadowMount+ طوال تلك المدة وتُعاد عند الانتهاء — لذا تبقى اللعبة مخفية عن الشاشة الرئيسية لجهاز PS5 حتى ذلك الحين.",
 library_mount_tooltip_smp: "سلِّم هذه الصورة إلى ShadowMount+ الذي يثبّتها ويسجّلها كي تتمكن من لعبها (للقراءة فقط)",
 
+installed_bring_to_front: "إحضار إلى الواجهة",
+installed_bring_to_front_tooltip: "أحضر هذه اللعبة قيد التشغيل إلى الشاشة. استخدمها بعد انتهاء تحميل اللعبة — فأثناء بدء التشغيل يتجاهل جهاز PS5 ذلك.",
+installed_bring_to_front_sent: "طُلب من جهاز PS5 عرض {name}. إن لم يحدث شيء فهي ما زالت تُحمَّل — أعد المحاولة بعد قليل.",
+installed_bring_to_front_failed: "تعذّر إحضارها إلى الشاشة",
+
+installed_bring_to_front_confirm_title: "{name} قيد التشغيل لكنها ليست على الشاشة",
+installed_bring_to_front_confirm_body: "أضمن طريقة للانتقال إليها هي من الجهاز نفسه — اضغط زر PS واختر اللعبة.\n\nهذا الخيار يطلب من PS5 إحضارها إلى الواجهة بدلًا من ذلك، ولا ينجح إلا بعد انتهاء تحميل اللعبة؛ فأثناء بدء التشغيل يتجاهل الجهاز الطلب ولا يحدث شيء ظاهر.",
+installed_bring_to_front_confirm_ok: "اطلب من PS5 على أي حال",
+
 };
 
 export default ar;

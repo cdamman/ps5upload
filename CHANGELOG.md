@@ -4,6 +4,34 @@ What's new in ps5upload, written for humans.
 
 ---
 
+## 5.8.0
+
+**Scrolling on Linux is smooth again, and a game that starts behind the
+dashboard can be brought forward.**
+
+- **Linux scrolling was sluggish because the app turned off graphics
+  acceleration for everyone.** Both WebKitGTK rendering workarounds were
+  applied by default to rescue a blank window on some GPU setups — but
+  one of them, disabling accelerated compositing, makes the whole page
+  render in software. That is barely noticeable on a static window and
+  very noticeable on this app's long lists. Only the targeted workaround
+  is on by default now; the heavier one is still available if you need
+  it (`WEBKIT_DISABLE_COMPOSITING_MODE=1 ./PS5Upload.sh`), and the FAQ
+  says what it costs.
+- **"Bring to front" for a running game.** Starting a game and putting
+  it on screen are separate things on the PS5, and a game started from
+  here often comes up behind the dashboard. The button appears only
+  while a title is running, and asks the console to show it. It confirms
+  first — switching to the game on the console is still the reliable
+  way, and this only works once the game has finished loading.
+- **Play no longer waits around.** It returns as soon as the game is
+  confirmed started, instead of holding on while trying to raise it.
+- Closing a game and starting one are unchanged from 5.7.x; the
+  automatic foreground attempt that briefly existed during development
+  never shipped.
+
+---
+
 ## 5.7.1
 
 **Mount and Edit files stopped opening the same window, and a failed

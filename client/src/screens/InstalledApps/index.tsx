@@ -14,6 +14,7 @@ import {
   Square,
   CircleDot,
   Clock,
+  MonitorUp,
 } from "lucide-react";
 
 import { useNavigate } from "react-router";
@@ -184,6 +185,7 @@ function AppCard({
   onUninstall,
   onLaunch,
   onStop,
+  onBringToFront,
 }: {
   host: string;
   title: InstalledTitle;
@@ -202,6 +204,10 @@ function AppCard({
   onUninstall: (t: InstalledTitle) => void;
   onLaunch: (t: InstalledTitle) => void;
   onStop: (t: InstalledTitle) => void;
+  /** Re-issue the launch for an already-running title, which is what brings it
+   *  to the screen. Separate from onLaunch so the confirm/patient-launch
+   *  bookkeeping around a cold start doesn't run for a foreground nudge. */
+  onBringToFront: (t: InstalledTitle) => void;
 }) {
   const tr = useTr();
   const navigate = useNavigate();
@@ -308,23 +314,50 @@ function AppCard({
               // Play. Stop is the ONLY thing that ends a game, and it's always
               // explicit + confirmed — we never auto-close a running or
               // starting title.
-              <Button
-                variant="danger"
-                size="md"
-                loading={stopping}
-                leftIcon={<Square size={15} />}
-                className="flex-1 min-w-fit"
-                onClick={() => onStop(title)}
-                title={tr(
-                  "installed_stop_tooltip",
-                  undefined,
-                  "Close this running game on the PS5",
-                )}
-              >
-                {stopping
-                  ? tr("installed_stopping", undefined, "Closing…")
-                  : tr("installed_stop", undefined, "Close game")}
-              </Button>
+              <>
+                {/* A game started from here often comes up BEHIND the
+                    dashboard: on this console, starting a title and putting it
+                    on screen are separate things, and the second one is the
+                    console's to do. Re-issuing the launch once the game has
+                    finished loading is what raises it — which is why this is a
+                    button you press rather than something automatic. Doing it
+                    on a timer meant guessing when "loaded" is, and guessing
+                    wrong either did nothing or, in a retry loop, froze the
+                    console outright. You know when the game is up; the app
+                    doesn't. */}
+                <Button
+                  variant="secondary"
+                  size="md"
+                  loading={launching}
+                  leftIcon={<MonitorUp size={15} />}
+                  className="min-w-fit"
+                  onClick={() => onBringToFront(title)}
+                  title={tr(
+                    "installed_bring_to_front_tooltip",
+                    undefined,
+                    "Bring this running game to the screen. Use it once the game has finished loading — the PS5 ignores it while a title is still starting.",
+                  )}
+                >
+                  {tr("installed_bring_to_front", undefined, "Bring to front")}
+                </Button>
+                <Button
+                  variant="danger"
+                  size="md"
+                  loading={stopping}
+                  leftIcon={<Square size={15} />}
+                  className="flex-1 min-w-fit"
+                  onClick={() => onStop(title)}
+                  title={tr(
+                    "installed_stop_tooltip",
+                    undefined,
+                    "Close this running game on the PS5",
+                  )}
+                >
+                  {stopping
+                    ? tr("installed_stopping", undefined, "Closing…")
+                    : tr("installed_stop", undefined, "Close game")}
+                </Button>
+              </>
             ) : (
               <Button
                 variant="primary"
@@ -637,6 +670,81 @@ export default function InstalledAppsScreen({
     [host, guard, tr],
   );
 
+  /* Bring an already-running title to the screen.
+   *
+   * Mechanically this is just another launch request: the console raises a
+   * title that is already up when it receives one. It is NOT handleLaunch,
+   * because that path confirms, tracks "launching" state and then patiently
+   * polls for the process to appear — all meaningless here, since the game is
+   * already running and we simply want it on screen.
+   *
+   * Deliberately manual. A launch request lands differently depending on
+   * whether the title has finished loading — too early and the console pushes
+   * it back — and there is no readable "ready" signal to wait for. The user
+   * can see when the game is up; the app can only guess, and guessing on a
+   * timer is what previously froze a console. */
+  const handleBringToFront = useCallback(
+    async (t: InstalledTitle) => {
+      const probe = guard.capture();
+      // Confirm first, and steer toward the controller. Switching to the game
+      // on the console always works; this asks the PS5 to do it remotely and
+      // only lands if the title has finished loading. Recommending the
+      // reliable route — rather than presenting this as the normal way — is
+      // the honest framing, because the failure is silent: press it too early
+      // and nothing happens at all.
+      const ok = await confirmDialog({
+        title: tr(
+          "installed_bring_to_front_confirm_title",
+          { name: t.titleName },
+          `${t.titleName} is running but not on screen`,
+        ),
+        message: tr(
+          "installed_bring_to_front_confirm_body",
+          undefined,
+          "The most reliable way to switch to it is on the console itself — press the PS button and pick the game.\n\nThis asks the PS5 to bring it forward instead. It only works once the game has finished loading; while a title is still starting the console ignores the request and nothing visible happens.",
+        ),
+        confirmLabel: tr(
+          "installed_bring_to_front_confirm_ok",
+          undefined,
+          "Ask the PS5 anyway",
+        ),
+      });
+      if (!ok || probe.isStale()) return;
+      setLaunchingId(t.titleId);
+      try {
+        await appLaunch(transferAddr(probe.host), t.titleId);
+        if (probe.isStale()) return;
+        pushNotification(
+          "info",
+          withConsolePrefix(
+            probe.host,
+            tr("installed_bring_to_front", undefined, "Bring to front"),
+          ),
+          {
+            body: tr(
+              "installed_bring_to_front_sent",
+              { name: t.titleName },
+              `Asked the PS5 to show ${t.titleName}. If nothing happens it's still loading — try again in a moment.`,
+            ),
+          },
+        );
+      } catch (e) {
+        if (probe.isStale()) return;
+        pushNotification(
+          "error",
+          withConsolePrefix(
+            probe.host,
+            tr("installed_bring_to_front_failed", undefined, "Couldn't bring it to the screen"),
+          ),
+          { body: humanizePs5Error(e instanceof Error ? e.message : String(e)) },
+        );
+      } finally {
+        if (!probe.isStale()) setLaunchingId(null);
+      }
+    },
+    [guard, tr, confirmDialog],
+  );
+
   const handleStop = useCallback(
     async (t: InstalledTitle) => {
       if (!host?.trim()) return;
@@ -857,6 +965,7 @@ export default function InstalledAppsScreen({
     onUninstall: handleUninstall,
     onLaunch: handleLaunch,
     onStop: handleStop,
+    onBringToFront: handleBringToFront,
   });
 
   // #116: order/filter the Installed group. Least-played first when sorting

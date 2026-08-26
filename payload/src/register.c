@@ -31,6 +31,7 @@
 #include "register.h"
 #include "sony_api_lock.h"
 #include "proc_list.h"
+#include "shellui_rpc.h"
 #include "kernel_rw_lock.h"
 
 /* Serialization mutex `sony_api_lock` and the 200µs post-call grace
@@ -1567,6 +1568,14 @@ int unregister_title(const char *title_id, const char **err_reason_out,
  * launch concurrent with a register/launch/uninstall on another
  * thread can deadlock the same way. Pre-2.2.61 this entry point
  * skipped the mutex entirely. */
+/* The SetAppFocus / SetControllerFocus layer that used to live here is gone.
+ * Both calls returned 0 and changed nothing — from our process and from
+ * ShellUI's stack alike — while each one cost a ptrace attach to SceShellUI,
+ * the process that owns the whole UI. What actually raises a title is a launch
+ * request against it once it has settled, which the already-running branch of
+ * launch_title does on the caller's own thread when someone presses Play. */
+
+
 /* Did the launch we just asked for actually start the title?
  *
  * Sony's launch entry points do not reliably report success: a call can
@@ -1614,7 +1623,6 @@ int register_browser_launch(void) {
  * Sony's launcher does a caller-pid check that only ShellUI
  * satisfies. */
 /* shellui_rpc API — declarations come from shellui_rpc.h. */
-#include "shellui_rpc.h"
 
 int launch_title(const char *title_id, const char **err_reason_out,
                  char *reason_buf, size_t reason_cap) {
@@ -1733,12 +1741,14 @@ int launch_title(const char *title_id, const char **err_reason_out,
     (void)shellui_rpc_init();
     if (shellui_rpc_ready()) {
         int rc = shellui_rpc_launch_app(title_id, fg_user);
-        if (rc == 0) return 0;
+        if (rc == 0) {
+                return 0;
+        }
         if (rc == -2) {
             /* Soft-success: launch was dispatched, result uncertain
              * but game likely on screen. Don't fall through to
              * in-process which would race the running launch. */
-            return 0;
+                return 0;
         }
         if (rc > 0) {
             /* One auto-retry after a brief delay — heals the
@@ -1763,11 +1773,13 @@ int launch_title(const char *title_id, const char **err_reason_out,
                         "[payload2] launch %s: shellui rc=%d but the title is "
                         "running — suppressing the retry\n",
                         title_id, rc);
-                return 0;
+                        return 0;
             }
             usleep(250000);
             int rc2 = shellui_rpc_launch_app(title_id, fg_user);
-            if (rc2 == 0 || rc2 == -2) return 0;
+            if (rc2 == 0 || rc2 == -2) {
+                        return 0;
+            }
             if (rc2 > 0) {
                 /* Format into the CALLER's scratch buffer (see the
                  * header note). The mgmt server runs one thread per

@@ -16,11 +16,12 @@
 #    accelerated compositing + DMABUF renderer don't render on those
 #    GPU/compositor combos. The folder/.deb build can hit this too,
 #    but it's most common with the AppImage on gaming distros.
-#    Disabling both makes WebKit fall back to a path that renders
-#    correctly — negligible cost for this app's plain UI (no WebGL /
-#    heavy canvas). We set them only when the user hasn't already
-#    chosen a value, so anyone who wants the accelerated path back can
-#    run e.g. `WEBKIT_DISABLE_COMPOSITING_MODE=0 ./PS5Upload.sh`.
+#    Disabling the DMABUF renderer makes WebKit fall back to a path
+#    that renders correctly on those stacks, at no perceptible cost.
+#    If the window is STILL blank, also disable accelerated
+#    compositing: `WEBKIT_DISABLE_COMPOSITING_MODE=1 ./PS5Upload.sh`.
+#    That one is not the default because it forces software rendering
+#    of the whole page and makes scrolling sluggish for everyone.
 #
 #    If a white screen persists even with these set, escalate (see
 #    FAQ -> "white screen on Linux"): force X11 with `GDK_BACKEND=x11`,
@@ -34,9 +35,15 @@
 set -e
 here="$(cd "$(dirname "$0")" && pwd)"
 
-# Overridable WebKitGTK rendering workarounds — see note (2) above.
-: "${WEBKIT_DISABLE_COMPOSITING_MODE:=1}"
+# Overridable WebKitGTK rendering workaround — see note (2) above.
+#
+# Only DMABUF is disabled by default. Disabling accelerated COMPOSITING as
+# well used to be the default and made scrolling sluggish on every Linux
+# install, because it drops the page to software rendering — which this app
+# feels acutely, its main screens being long scrolling lists. It stays
+# available for anyone who needs it:
+#   WEBKIT_DISABLE_COMPOSITING_MODE=1 ./PS5Upload.sh
 : "${WEBKIT_DISABLE_DMABUF_RENDERER:=1}"
-export WEBKIT_DISABLE_COMPOSITING_MODE WEBKIT_DISABLE_DMABUF_RENDERER
+export WEBKIT_DISABLE_DMABUF_RENDERER
 
 exec env APPIMAGE_EXTRACT_AND_RUN=1 "$here/PS5Upload.AppImage" "$@"

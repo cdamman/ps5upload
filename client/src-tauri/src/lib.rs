@@ -93,9 +93,23 @@ pub fn run() {
     // path back with e.g. `WEBKIT_DISABLE_COMPOSITING_MODE=0 ...`.
     #[cfg(target_os = "linux")]
     {
-        if std::env::var_os("WEBKIT_DISABLE_COMPOSITING_MODE").is_none() {
-            std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
-        }
+        // DMABUF off by default: this is the targeted fix for the blank/white
+        // window on WebKitGTK 2.42+ with NVIDIA and some Mesa stacks, and it
+        // costs nothing perceptible.
+        //
+        // Compositing is deliberately NOT disabled here any more. Turning it
+        // off makes WebKitGTK render the whole page in software, and the
+        // earlier note that this was a "negligible cost for this app's plain
+        // UI" was wrong: the cost lands on SCROLLING, and this app's main
+        // screens are long lists — a library of 200 game rows, a file browser
+        // of thousands of entries. Linux users reported exactly that (sluggish
+        // scrolling on the .rpm build, smooth on Android, which composites
+        // normally).
+        //
+        // Anyone still hitting a white screen can set it themselves —
+        // `WEBKIT_DISABLE_COMPOSITING_MODE=1 ./PS5Upload.sh` — which the
+        // launcher and the FAQ both document. Trading everyone's scrolling for
+        // a rescue a minority need is the wrong default.
         if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
             std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
         }

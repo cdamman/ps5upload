@@ -2717,6 +2717,15 @@ library_edit_modal_title: "「{name}」を編集",
 library_edit_modal_intro: "作業中のマウント先を選んでください。その間このイメージは ShadowMount+ から取り出され、終了時に戻されます。それまでゲームは PS5 のホーム画面に表示されません。",
 library_mount_tooltip_smp: "このイメージを ShadowMount+ に渡します。マウントと登録が行われ、プレイできるようになります（読み取り専用）",
 
+installed_bring_to_front: "前面に表示",
+installed_bring_to_front_tooltip: "実行中のこのゲームを画面に表示します。ゲームの読み込みが終わってから使ってください。起動中は PS5 が無視します。",
+installed_bring_to_front_sent: "{name} を表示するよう PS5 に要求しました。何も起きない場合はまだ読み込み中です。少し待って再試行してください。",
+installed_bring_to_front_failed: "画面に表示できませんでした",
+
+installed_bring_to_front_confirm_title: "{name} は実行中ですが画面に出ていません",
+installed_bring_to_front_confirm_body: "確実に切り替えるには本体で操作してください。PS ボタンを押してゲームを選びます。\n\nこちらは代わりに PS5 へ前面表示を要求します。ゲームの読み込みが終わってからでないと効きません。起動中は本体が要求を無視し、見た目には何も起きません。",
+installed_bring_to_front_confirm_ok: "それでも PS5 に要求する",
+
 };
 
 export default ja;

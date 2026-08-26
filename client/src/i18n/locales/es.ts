@@ -2622,6 +2622,15 @@ library_edit_modal_title: "Editar «{name}»",
 library_edit_modal_intro: "Elige dónde montarla mientras trabajas. Se saca de ShadowMount+ durante ese tiempo y se devuelve al terminar, así que el juego queda oculto en la pantalla de inicio de la PS5 hasta entonces.",
 library_mount_tooltip_smp: "Entregar esta imagen a ShadowMount+, que la monta y registra para que puedas jugarla (solo lectura)",
 
+installed_bring_to_front: "Traer al frente",
+installed_bring_to_front_tooltip: "Trae este juego en ejecución a la pantalla. Úsalo cuando el juego haya terminado de cargar: mientras arranca, la PS5 lo ignora.",
+installed_bring_to_front_sent: "Se pidió a la PS5 que muestre {name}. Si no pasa nada, aún está cargando; inténtalo de nuevo en un momento.",
+installed_bring_to_front_failed: "No se pudo traer a la pantalla",
+
+installed_bring_to_front_confirm_title: "{name} se está ejecutando, pero no está en pantalla",
+installed_bring_to_front_confirm_body: "La forma más fiable de cambiar a él es en la propia consola: pulsa el botón PS y elige el juego.\n\nEsto pide a la PS5 que lo traiga al frente. Solo funciona cuando el juego ha terminado de cargar; mientras arranca, la consola ignora la petición y no pasa nada visible.",
+installed_bring_to_front_confirm_ok: "Pedírselo igualmente a la PS5",
+
 };
 
 export default es;

@@ -2683,6 +2683,15 @@ library_edit_modal_title: "„{name}“ bearbeiten",
 library_edit_modal_intro: "Wähle, wo es während der Arbeit eingehängt wird. Es wird so lange aus ShadowMount+ herausgenommen und danach zurückgelegt — das Spiel ist bis dahin vom PS5-Startbildschirm verschwunden.",
 library_mount_tooltip_smp: "Dieses Abbild an ShadowMount+ übergeben, das es einhängt und registriert, damit du es spielen kannst (schreibgeschützt)",
 
+installed_bring_to_front: "In den Vordergrund",
+installed_bring_to_front_tooltip: "Dieses laufende Spiel auf den Bildschirm holen. Erst benutzen, wenn das Spiel fertig geladen hat — solange ein Titel startet, ignoriert die PS5 das.",
+installed_bring_to_front_sent: "Die PS5 wurde gebeten, {name} anzuzeigen. Passiert nichts, lädt es noch — gleich nochmal versuchen.",
+installed_bring_to_front_failed: "Konnte es nicht in den Vordergrund holen",
+
+installed_bring_to_front_confirm_title: "{name} läuft, ist aber nicht auf dem Bildschirm",
+installed_bring_to_front_confirm_body: "Am zuverlässigsten wechselst du direkt an der Konsole dorthin — PS-Taste drücken und das Spiel auswählen.\n\nHiermit wird stattdessen die PS5 gebeten, es in den Vordergrund zu holen. Das klappt erst, wenn das Spiel fertig geladen hat; solange ein Titel startet, ignoriert die Konsole die Anfrage und es passiert sichtbar nichts.",
+installed_bring_to_front_confirm_ok: "Trotzdem die PS5 fragen",
+
 };
 
 export default de;

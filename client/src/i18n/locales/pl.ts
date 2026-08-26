@@ -2972,6 +2972,15 @@ library_edit_modal_title: "Edytuj „{name}”",
 library_edit_modal_intro: "Wybierz, gdzie zamontować go na czas pracy. Na ten czas obraz jest zabierany z ShadowMount+ i odkładany po zakończeniu — do tego momentu gra jest ukryta na ekranie głównym PS5.",
 library_mount_tooltip_smp: "Przekaż ten obraz do ShadowMount+, który zamontuje go i zarejestruje, byś mógł zagrać (tylko do odczytu)",
 
+installed_bring_to_front: "Na pierwszy plan",
+installed_bring_to_front_tooltip: "Pokaż tę uruchomioną grę na ekranie. Użyj, gdy gra skończy się wczytywać — dopóki tytuł startuje, PS5 to ignoruje.",
+installed_bring_to_front_sent: "Poproszono PS5 o pokazanie {name}. Jeśli nic się nie dzieje, gra wciąż się wczytuje — spróbuj za chwilę.",
+installed_bring_to_front_failed: "Nie udało się pokazać na ekranie",
+
+installed_bring_to_front_confirm_title: "{name} działa, ale nie jest na ekranie",
+installed_bring_to_front_confirm_body: "Najpewniej przełączysz się na nią na samej konsoli — naciśnij przycisk PS i wybierz grę.\n\nTo zamiast tego prosi PS5 o pokazanie jej. Zadziała dopiero, gdy gra skończy się wczytywać; dopóki tytuł startuje, konsola ignoruje prośbę i nic widocznego się nie dzieje.",
+installed_bring_to_front_confirm_ok: "Mimo to poproś PS5",
+
 };
 
 export default pl;

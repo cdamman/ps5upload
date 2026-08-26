@@ -2684,6 +2684,15 @@ library_edit_modal_title: "Edit isi \"{name}\"",
 library_edit_modal_intro: "Pilih lokasi pemasangan selama kamu bekerja. Image dikeluarkan dari ShadowMount+ selama itu dan dikembalikan saat selesai — jadi game tersembunyi dari layar utama PS5 sampai saat itu.",
 library_mount_tooltip_smp: "Serahkan image ini ke ShadowMount+, yang memasang dan mendaftarkannya agar bisa kamu mainkan (hanya-baca)",
 
+installed_bring_to_front: "Bawa ke depan",
+installed_bring_to_front_tooltip: "Bawa game yang sedang berjalan ini ke layar. Pakai setelah game selesai dimuat — selama judul masih start, PS5 mengabaikannya.",
+installed_bring_to_front_sent: "PS5 diminta menampilkan {name}. Kalau tidak terjadi apa-apa, game masih dimuat — coba lagi sebentar.",
+installed_bring_to_front_failed: "Tidak bisa dibawa ke layar",
+
+installed_bring_to_front_confirm_title: "{name} sedang berjalan tapi tidak di layar",
+installed_bring_to_front_confirm_body: "Cara paling andal untuk beralih ke sana adalah lewat konsolnya — tekan tombol PS lalu pilih game-nya.\n\nIni justru meminta PS5 membawanya ke depan. Baru berhasil setelah game selesai dimuat; selama judul masih start, konsol mengabaikan permintaan dan tidak ada yang terlihat berubah.",
+installed_bring_to_front_confirm_ok: "Tetap minta ke PS5",
+
 };
 
 export default id;

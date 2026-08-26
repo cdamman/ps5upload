@@ -2628,6 +2628,15 @@ library_edit_modal_title: "编辑“{name}”",
 library_edit_modal_intro: "选择工作期间挂载到哪里。这段时间镜像会从 ShadowMount+ 中取出，完成后放回——在此之前游戏不会出现在 PS5 主界面。",
 library_mount_tooltip_smp: "把此镜像交给 ShadowMount+，由它挂载并注册，让你可以游玩（只读）",
 
+installed_bring_to_front: "切到前台",
+installed_bring_to_front_tooltip: "把这个正在运行的游戏切到屏幕上。请在游戏加载完成后使用——标题还在启动时 PS5 会忽略。",
+installed_bring_to_front_sent: "已请求 PS5 显示 {name}。如果没有反应，说明还在加载，请稍后再试。",
+installed_bring_to_front_failed: "无法切到屏幕上",
+
+installed_bring_to_front_confirm_title: "{name} 正在运行，但不在屏幕上",
+installed_bring_to_front_confirm_body: "最可靠的切换方式是在主机上操作——按 PS 键并选择该游戏。\n\n此操作改为请求 PS5 把它切到前台。只有在游戏加载完成后才有效；标题还在启动时，主机会忽略请求，看上去什么也不会发生。",
+installed_bring_to_front_confirm_ok: "仍然请求 PS5",
+
 };
 
 export default zh_CN;

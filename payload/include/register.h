@@ -137,6 +137,12 @@ int list_registered_titles_json(char *out_json,
  * service isn't available on this firmware. */
 int register_browser_launch(void);
 
+
+
+
+
+
+
 /* Called once at payload init. Resolves dlopen handles and function
  * pointers for libSceAppInstUtil, libSceLncService, and libsqlite3.
  * Missing libraries are tolerated; individual APIs will fail with

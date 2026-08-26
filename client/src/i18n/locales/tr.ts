@@ -2682,6 +2682,15 @@ library_edit_modal_title: "\"{name}\" düzenle",
 library_edit_modal_intro: "Çalışırken nereye bağlanacağını seç. Bu süre boyunca ShadowMount+ içinden çıkarılır ve bitirdiğinde geri konur — o zamana kadar oyun PS5 ana ekranında görünmez.",
 library_mount_tooltip_smp: "Bu imajı ShadowMount+'a devret; onu bağlayıp kaydeder, böylece oynayabilirsin (salt okunur)",
 
+installed_bring_to_front: "Öne getir",
+installed_bring_to_front_tooltip: "Çalışan bu oyunu ekrana getir. Oyun yüklenmeyi bitirdikten sonra kullan — bir oyun açılırken PS5 bunu yok sayar.",
+installed_bring_to_front_sent: "PS5'ten {name} oyununu göstermesi istendi. Bir şey olmuyorsa hâlâ yükleniyordur — birazdan tekrar dene.",
+installed_bring_to_front_failed: "Ekrana getirilemedi",
+
+installed_bring_to_front_confirm_title: "{name} çalışıyor ama ekranda değil",
+installed_bring_to_front_confirm_body: "Ona geçmenin en güvenilir yolu konsolun kendisi — PS düğmesine basıp oyunu seç.\n\nBu ise PS5'ten onu öne getirmesini ister. Yalnızca oyun yüklenmeyi bitirdikten sonra işe yarar; bir oyun açılırken konsol isteği yok sayar ve gözle görülür bir şey olmaz.",
+installed_bring_to_front_confirm_ok: "Yine de PS5'e sor",
+
 };
 
 export default tr;

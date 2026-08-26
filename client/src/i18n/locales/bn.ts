@@ -2675,6 +2675,15 @@ library_edit_modal_title: "«{name}» সম্পাদনা",
 library_edit_modal_intro: "কাজ চলাকালীন কোথায় মাউন্ট হবে বেছে নিন। ওই সময়টুকু এটি ShadowMount+ থেকে সরানো থাকে এবং শেষ হলে ফিরিয়ে দেওয়া হয় — ততক্ষণ গেমটি PS5 হোম স্ক্রিনে লুকানো থাকে।",
 library_mount_tooltip_smp: "এই ইমেজটি ShadowMount+ কে দিন, যা এটি মাউন্ট ও নিবন্ধন করে খেলার উপযোগী করে (কেবল পঠনযোগ্য)",
 
+installed_bring_to_front: "সামনে আনুন",
+installed_bring_to_front_tooltip: "চলমান এই গেমটি পর্দায় আনুন। গেম লোড শেষ হওয়ার পর ব্যবহার করুন — টাইটেল চালু হওয়ার সময় PS5 এটি উপেক্ষা করে।",
+installed_bring_to_front_sent: "PS5-কে {name} দেখাতে বলা হয়েছে। কিছু না ঘটলে এটি এখনও লোড হচ্ছে — একটু পরে আবার চেষ্টা করুন।",
+installed_bring_to_front_failed: "পর্দায় আনা যায়নি",
+
+installed_bring_to_front_confirm_title: "{name} চলছে কিন্তু পর্দায় নেই",
+installed_bring_to_front_confirm_body: "এতে যাওয়ার সবচেয়ে নির্ভরযোগ্য উপায় কনসোলেই — PS বোতাম চেপে গেমটি বেছে নিন।\n\nএটি বরং PS5-কে সামনে আনতে বলে। গেম লোড শেষ হওয়ার পরেই কাজ করে; টাইটেল চালু হওয়ার সময় কনসোল অনুরোধ উপেক্ষা করে এবং দৃশ্যত কিছুই ঘটে না।",
+installed_bring_to_front_confirm_ok: "তবুও PS5-কে বলুন",
+
 };
 
 export default bn;

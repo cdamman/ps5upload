@@ -2677,6 +2677,15 @@ library_edit_modal_title: "Sửa \"{name}\"",
 library_edit_modal_intro: "Chọn nơi gắn kết trong lúc bạn làm việc. Ảnh đĩa được lấy khỏi ShadowMount+ trong thời gian đó và trả lại khi bạn xong — nên đến lúc đó game bị ẩn khỏi màn hình chính PS5.",
 library_mount_tooltip_smp: "Giao ảnh đĩa này cho ShadowMount+, nó sẽ gắn kết và đăng ký để bạn chơi (chỉ đọc)",
 
+installed_bring_to_front: "Đưa lên trước",
+installed_bring_to_front_tooltip: "Đưa game đang chạy này ra màn hình. Dùng khi game đã tải xong — trong lúc một tựa game đang khởi động, PS5 sẽ bỏ qua.",
+installed_bring_to_front_sent: "Đã yêu cầu PS5 hiển thị {name}. Nếu không có gì xảy ra thì game vẫn đang tải — thử lại sau giây lát.",
+installed_bring_to_front_failed: "Không đưa được ra màn hình",
+
+installed_bring_to_front_confirm_title: "{name} đang chạy nhưng không hiển thị",
+installed_bring_to_front_confirm_body: "Cách chuyển sang nó đáng tin cậy nhất là làm trên máy — nhấn nút PS rồi chọn game.\n\nThao tác này thay vào đó yêu cầu PS5 đưa nó lên trước. Chỉ hiệu quả khi game đã tải xong; trong lúc một tựa game đang khởi động, máy sẽ bỏ qua yêu cầu và không có gì thay đổi.",
+installed_bring_to_front_confirm_ok: "Vẫn yêu cầu PS5",
+
 };
 
 export default vi;

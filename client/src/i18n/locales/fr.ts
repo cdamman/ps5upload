@@ -2712,6 +2712,15 @@ library_edit_modal_title: "Modifier « {name} »",
 library_edit_modal_intro: "Choisissez où la monter pendant que vous travaillez. Elle est retirée de ShadowMount+ le temps nécessaire puis remise en place — le jeu reste donc masqué sur l'écran d'accueil de la PS5 jusque-là.",
 library_mount_tooltip_smp: "Confier cette image à ShadowMount+, qui la monte et l'enregistre pour que vous puissiez y jouer (lecture seule)",
 
+installed_bring_to_front: "Mettre au premier plan",
+installed_bring_to_front_tooltip: "Affiche ce jeu en cours à l'écran. À utiliser une fois le jeu chargé — tant qu'un titre démarre, la PS5 l'ignore.",
+installed_bring_to_front_sent: "La PS5 a été invitée à afficher {name}. Si rien ne se passe, il charge encore — réessayez dans un instant.",
+installed_bring_to_front_failed: "Impossible de l'afficher",
+
+installed_bring_to_front_confirm_title: "{name} tourne mais n'est pas à l'écran",
+installed_bring_to_front_confirm_body: "Le plus fiable est de basculer dessus depuis la console : appuyez sur le bouton PS et choisissez le jeu.\n\nCeci demande plutôt à la PS5 de le mettre au premier plan. Cela ne fonctionne qu'une fois le jeu chargé ; tant qu'un titre démarre, la console ignore la demande et rien ne se passe visiblement.",
+installed_bring_to_front_confirm_ok: "Demander quand même à la PS5",
+
 };
 
 export default fr;

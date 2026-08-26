@@ -2712,6 +2712,15 @@ library_edit_modal_title: "«{name}» संपादित करें",
 library_edit_modal_intro: "काम के दौरान इसे कहाँ माउंट करना है चुनें। उतने समय के लिए यह ShadowMount+ से बाहर रहता है और खत्म होने पर वापस रख दिया जाता है — तब तक गेम PS5 होम स्क्रीन से छिपा रहता है।",
 library_mount_tooltip_smp: "यह इमेज ShadowMount+ को सौंपें, जो इसे माउंट और रजिस्टर करके खेलने योग्य बनाता है (केवल पढ़ने के लिए)",
 
+installed_bring_to_front: "सामने लाएँ",
+installed_bring_to_front_tooltip: "इस चल रहे गेम को स्क्रीन पर लाएँ। गेम लोड हो जाने के बाद इसका उपयोग करें — जब तक टाइटल शुरू हो रहा है, PS5 इसे अनदेखा करता है।",
+installed_bring_to_front_sent: "PS5 से {name} दिखाने को कहा गया। कुछ न हो तो वह अभी लोड हो रहा है — थोड़ी देर बाद फिर कोशिश करें।",
+installed_bring_to_front_failed: "स्क्रीन पर नहीं ला सके",
+
+installed_bring_to_front_confirm_title: "{name} चल रहा है पर स्क्रीन पर नहीं है",
+installed_bring_to_front_confirm_body: "इस पर जाने का सबसे भरोसेमंद तरीका कंसोल पर ही है — PS बटन दबाएँ और गेम चुनें।\n\nयह इसके बजाय PS5 से इसे सामने लाने को कहता है। यह तभी काम करता है जब गेम लोड हो चुका हो; टाइटल शुरू होते समय कंसोल अनुरोध अनदेखा कर देता है और दिखने में कुछ नहीं होता।",
+installed_bring_to_front_confirm_ok: "फिर भी PS5 से कहें",
+
 };
 
 export default hi;

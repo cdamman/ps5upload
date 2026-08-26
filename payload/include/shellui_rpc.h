@@ -71,6 +71,8 @@ int shellui_rpc_pid(void);
  * first launch after a fresh register. */
 int shellui_rpc_launch_app(const char *title_id, int user_id_hint);
 
+
+
 /* Sensor reads. Each returns 0 on success, -1 on RPC failure or
  * when the underlying Sony stub returned non-zero. The output is
  * written to *out only on success. */
