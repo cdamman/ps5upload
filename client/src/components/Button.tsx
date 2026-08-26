@@ -59,8 +59,8 @@ export function Button({
   // long, that's a layout decision for the call site (truncate / give room),
   // never a reason to stack letters.
   const base =
-    "inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md font-medium " +
-    "transition-colors " +
+    "inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-[var(--radius-control)] font-semibold " +
+    "transition-[background-color,border-color,color,transform,box-shadow] active:translate-y-px " +
     "disabled:cursor-not-allowed disabled:opacity-50";
 
   // `max-md:min-h-11` enforces the 44px touch floor (mobile-design §4.1)
@@ -84,13 +84,13 @@ export function Button({
 
   const variants: Record<ButtonVariant, string> = {
     primary:
-      "bg-[var(--color-accent)] text-[var(--color-accent-contrast)] hover:opacity-90 active:opacity-80 border border-transparent",
+      "border border-transparent bg-[var(--color-accent)] text-[var(--color-accent-contrast)] shadow-sm hover:brightness-110",
     secondary:
-      "border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] hover:bg-[var(--color-surface-3)]",
+      "border border-[var(--color-border)] bg-[var(--color-surface-raised)] text-[var(--color-text)] shadow-sm hover:border-[var(--color-border-strong)] hover:bg-[var(--color-surface-3)]",
     ghost:
       "border border-transparent text-[var(--color-muted)] hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text)]",
     danger:
-      "border border-[var(--color-bad)] bg-[var(--color-surface)] text-[var(--color-bad)] hover:bg-[var(--color-bad-soft)]",
+      "border border-[var(--color-bad)] bg-[var(--color-surface-raised)] text-[var(--color-bad)] hover:bg-[var(--color-bad-soft)]",
   };
 
   return (

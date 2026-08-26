@@ -15,11 +15,16 @@ import { openExternalUrl as openExternal } from "../lib/openExternalUrl";
  *   1. numbered lists (single-level; not nested)
  *   > blockquotes (single line)
  *   --- horizontal rules
+ *   | pipe | tables | with a --- separator row
  *
  * Everything else falls through as plain text. We deliberately avoid
  * pulling in react-markdown + remark (~20 KB gzipped) for two files
- * with a predictable grammar — the tradeoff is missed features (tables,
- * nested lists, HTML pass-through), which neither doc uses.
+ * with a predictable grammar — the tradeoff is missed features (nested
+ * lists, HTML pass-through), which neither doc uses.
+ *
+ * Tables ARE handled: FAQ.md is rendered both here and on GitHub, so a
+ * table added for the GitHub view would otherwise show up in-app as raw
+ * pipe characters.
  *
  * Output is React nodes, so we never inject raw HTML — no XSS surface.
  */
@@ -88,7 +93,9 @@ function renderInline(text: string, keyPrefix: string): React.ReactNode[] {
 }
 
 interface Block {
-  kind: "h1" | "h2" | "h3" | "p" | "ul" | "ol" | "hr" | "code" | "blockquote";
+  kind: "h1" | "h2" | "h3" | "p" | "ul" | "ol" | "hr" | "code" | "blockquote" | "table";
+  /** table only: header cells followed by body rows. */
+  rows?: string[][];
   content: string;
   items?: string[];
   lang?: string;
@@ -136,6 +143,26 @@ function parseBlocks(md: string): Block[] {
     if (line.startsWith("> ")) {
       blocks.push({ kind: "blockquote", content: line.slice(2).trim() });
       i += 1;
+      continue;
+    }
+    // Pipe table: a header row, a `|---|---|` separator, then body rows.
+    // The separator is what distinguishes a table from a paragraph that
+    // merely contains a `|`, so both lines are required before we commit.
+    if (line.includes("|") && /^\s*\|?[\s:|-]*-[\s:|-]*\|?\s*$/.test(lines[i + 1] ?? "")) {
+      const splitRow = (row: string): string[] =>
+        row
+          .trim()
+          .replace(/^\|/, "")
+          .replace(/\|$/, "")
+          .split("|")
+          .map((c) => c.trim());
+      const rows: string[][] = [splitRow(line)];
+      i += 2; // header + separator
+      while (i < lines.length && lines[i].includes("|") && lines[i].trim() !== "") {
+        rows.push(splitRow(lines[i]));
+        i += 1;
+      }
+      blocks.push({ kind: "table", content: "", rows });
       continue;
     }
     if (/^\s*[-*+]\s+/.test(line)) {
@@ -222,6 +249,44 @@ export function MarkdownView({ source }: { source: string }) {
                 {renderInline(b.content, key)}
               </p>
             );
+          case "table": {
+            const [head, ...body] = b.rows ?? [];
+            if (!head) return null;
+            return (
+              // Horizontal scroll on the wrapper, not the page: a wide
+              // support matrix must not make the whole FAQ scroll sideways.
+              <div key={key} className="mb-5 overflow-x-auto">
+                <table className="w-full border-collapse text-[14px] leading-6">
+                  <thead>
+                    <tr>
+                      {head.map((cell, j) => (
+                        <th
+                          key={`${key}-h-${j}`}
+                          className="border-b border-[var(--color-border)] px-3 py-2 text-left font-semibold"
+                        >
+                          {renderInline(cell, `${key}-h-${j}`)}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {body.map((row, ri) => (
+                      <tr key={`${key}-r-${ri}`}>
+                        {row.map((cell, ci) => (
+                          <td
+                            key={`${key}-r-${ri}-${ci}`}
+                            className="border-b border-[var(--color-border)]/50 px-3 py-2 align-top"
+                          >
+                            {renderInline(cell, `${key}-r-${ri}-${ci}`)}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            );
+          }
           case "ul":
             return (
               <ul

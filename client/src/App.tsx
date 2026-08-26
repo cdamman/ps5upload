@@ -31,8 +31,7 @@ import HomeScreen from "./screens/Home";
 const MoreScreen = lazy(() => import("./screens/More"));
 const UploadScreen = lazy(() => import("./screens/Upload"));
 const InstallPackageScreen = lazy(() => import("./screens/InstallPackage"));
-const LibraryScreen = lazy(() => import("./screens/Library"));
-const InstalledAppsScreen = lazy(() => import("./screens/InstalledApps"));
+const GamesScreen = lazy(() => import("./screens/Games"));
 const SearchScreen = lazy(() => import("./screens/Search"));
 const VolumesScreen = lazy(() => import("./screens/Volumes"));
 const FileSystemScreen = lazy(() => import("./screens/FileSystem"));
@@ -53,7 +52,6 @@ const FwSpoofScreen = lazy(() => import("./screens/FwSpoof"));
 const FtpServerScreen = lazy(() => import("./screens/FtpServer"));
 const SmbBrowserScreen = lazy(() => import("./screens/SmbBrowser"));
 const PayloadsScreen = lazy(() => import("./screens/Payloads"));
-const NanoDnsScreen = lazy(() => import("./screens/NanoDns"));
 const FirstRunScreen = lazy(() => import("./screens/FirstRun"));
 const SavesScreen = lazy(() => import("./screens/Saves"));
 const ProcessesScreen = lazy(() => import("./screens/Processes"));
@@ -160,7 +158,7 @@ export default function App() {
           path="/games"
           element={
             <Suspense fallback={<ScreenLoader />}>
-              <LibraryScreen />
+              <GamesScreen />
             </Suspense>
           }
         />
@@ -175,15 +173,8 @@ export default function App() {
         />
         {/* v5: /games is now the canonical games grid. /library redirects
              for backward compatibility with deep links and bookmarks. */}
-        <Route path="/library" element={<Navigate to="/games" replace />} />
-        <Route
-          path="/installed"
-          element={
-            <Suspense fallback={<ScreenLoader />}>
-              <InstalledAppsScreen />
-            </Suspense>
-          }
-        />
+        <Route path="/library" element={<Navigate to="/games?tab=files" replace />} />
+        <Route path="/installed" element={<Navigate to="/games?tab=ready" replace />} />
         <Route
           path="/search"
           element={
@@ -357,14 +348,9 @@ export default function App() {
             </NativeOnlyRoute>
           }
         />
-        <Route
-          path="/nanodns"
-          element={
-            <Suspense fallback={<ScreenLoader />}>
-              <NanoDnsScreen />
-            </Suspense>
-          }
-        />
+        <Route path="/nanodns" element={<Navigate to="/payloads?tab=nanodns" replace />} />
+        <Route path="/nano-dns" element={<Navigate to="/payloads?tab=nanodns" replace />} />
+        <Route path="/shadowmount" element={<Navigate to="/payloads?tab=shadowmount" replace />} />
         <Route
           path="/first-run"
           element={

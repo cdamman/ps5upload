@@ -58,5 +58,8 @@ export default defineConfig({
     // Fail any test that reaches the network. See src/test-setup.ts for
     // why: unmocked API wrappers silently hit a running dev engine.
     setupFiles: ["./src/test-setup.ts"],
+    // Playwright owns real-browser journeys; Vitest must not import those
+    // files into its jsdom/node runner.
+    exclude: ["e2e/**", "**/node_modules/**", "**/.git/**"],
   },
 });

@@ -18,10 +18,11 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { NavLink } from "react-router";
-import { ChevronRight, LayoutGrid, Search, X } from "lucide-react";
+import { ChevronRight, LayoutGrid, Search, Star, X } from "lucide-react";
 
 import { PageHeader, Input, EmptyState } from "../../components";
 import { useTr } from "../../state/lang";
+import { useNavFavoritesStore } from "../../state/navFavorites";
 import { useLogsStore } from "../../state/logs";
 import { useUpdateStore } from "../../state/update";
 import { useThemeStore } from "../../state/theme";
@@ -31,6 +32,7 @@ import RosterPicker from "../../layout/RosterPicker";
 import NotificationInbox from "../../layout/NotificationInbox";
 import {
   NAV_ITEMS,
+  HOME_NAV_ITEM,
   groupNavItems,
   filterNavItems,
   type NavItem,
@@ -65,7 +67,7 @@ export default function MoreScreen() {
   const searching = query.trim().length > 0;
 
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 pb-6">
+    <div className="app-page max-w-4xl! pb-6!">
       <PageHeader
         icon={LayoutGrid}
         title={tr("more_title", undefined, "More")}
@@ -78,7 +80,7 @@ export default function MoreScreen() {
 
       {/* Sticky zone: console switcher + search. Sticks inside <main>'s
           scroll context — this screen adds no scroller of its own. */}
-      <div className="sticky top-0 z-10 -mx-4 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-4 pb-3 pt-1 shadow-sm">
+      <div className="sticky top-0 z-10 -mx-4 border-b border-[var(--color-border)] bg-[color-mix(in_oklab,var(--color-surface)_92%,transparent)] px-4 pb-3 pt-1 shadow-sm backdrop-blur-xl">
         <RosterPicker />
         <div className="mt-3">
           <Input
@@ -130,7 +132,7 @@ export default function MoreScreen() {
         />
       ) : searching ? (
         /* Flat results — grouping is noise once the list is narrowed. */
-        <ul className="mt-1">
+        <ul className="surface-panel mt-3 overflow-hidden divide-y divide-[var(--color-border)]">
           {matches.map((item) => (
             <MoreRow
               key={item.to}
@@ -146,7 +148,7 @@ export default function MoreScreen() {
             <h2 className="px-1 pb-1 text-xs font-semibold uppercase tracking-wider text-[var(--color-muted)]">
               {tr(group.section.key, undefined, group.section.fallback)}
             </h2>
-            <ul>
+            <ul className="surface-panel overflow-hidden divide-y divide-[var(--color-border)]">
               {group.items.map((item) => (
                 <MoreRow
                   key={item.to}
@@ -204,8 +206,14 @@ function MoreRow({
   const Icon = item.icon;
   const showErrors = item.to === "/logs" && errorCount > 0;
   const showUpdate = item.to === "/settings" && updateAvailable;
+  const favorites = useNavFavoritesStore((s) => s.favorites);
+  const toggleFavorite = useNavFavoritesStore((s) => s.toggle);
+  const starred = favorites.includes(item.to);
+  // Home is permanently in the sidebar, so offering to pin it is a lie.
+  const canFavorite = item.to !== HOME_NAV_ITEM.to;
+  const label = tr(item.key, undefined, item.fallback);
   return (
-    <li>
+    <li className="flex items-center">
       <NavLink
         to={item.to}
         className={({ isActive }) =>
@@ -213,11 +221,11 @@ function MoreRow({
             // 56px on touch (the §4.1 floor with room for the chevron);
             // tighter above md where the pointer is a mouse and the
             // extra height just costs rows-per-screen.
-            "flex min-h-14 w-full items-center gap-3 rounded-lg px-3 text-[15px] transition-colors md:min-h-10 md:text-sm",
+            "flex min-h-14 w-full items-center gap-3 px-3 text-[15px] transition-colors md:min-h-11 md:text-sm",
             "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)]",
             isActive
-              ? "bg-[var(--color-accent)] font-medium text-[var(--color-accent-contrast)]"
-              : "text-[var(--color-text)] active:bg-[var(--color-surface-3)]",
+              ? "bg-[var(--color-accent-soft)] font-semibold text-[var(--color-accent)]"
+              : "text-[var(--color-text)] hover:bg-[var(--color-surface-3)] active:bg-[var(--color-surface-3)]",
           ].join(" ")
         }
       >
@@ -253,6 +261,52 @@ function MoreRow({
           className="shrink-0 text-[var(--color-muted)]"
         />
       </NavLink>
+      {/* Sibling of the link, not a child: a <button> inside an <a> is
+          invalid markup and the click would navigate instead of toggling. */}
+      {canFavorite && (
+        <button
+          type="button"
+          onClick={() => toggleFavorite(item.to)}
+          aria-pressed={starred}
+          aria-label={
+            starred
+              ? tr(
+                  "nav_favorite_remove",
+                  { name: label },
+                  `Unpin ${label} from the sidebar`,
+                )
+              : tr(
+                  "nav_favorite_add",
+                  { name: label },
+                  `Pin ${label} to the sidebar`,
+                )
+          }
+          title={
+            starred
+              ? tr(
+                  "nav_favorite_remove",
+                  { name: label },
+                  `Unpin ${label} from the sidebar`,
+                )
+              : tr(
+                  "nav_favorite_add",
+                  { name: label },
+                  `Pin ${label} to the sidebar`,
+                )
+          }
+          className={`mr-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-[var(--color-surface-3)] ${
+            starred
+              ? "text-[var(--color-accent)]"
+              : "text-[var(--color-muted)] opacity-60 hover:opacity-100"
+          }`}
+        >
+          <Star
+            size={16}
+            aria-hidden
+            fill={starred ? "currentColor" : "none"}
+          />
+        </button>
+      )}
     </li>
   );
 }

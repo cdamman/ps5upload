@@ -92,6 +92,14 @@ export interface TaskError {
   recoverable: boolean;
 }
 
+/** A durable pointer to the feature store that actually owns an operation.
+ * The unified task list is a projection; commands must be delegated through
+ * this reference instead of mutating the projection's status directly. */
+export type TaskControlRef =
+  | { owner: "transfer"; host: string }
+  | { owner: "upload-queue"; host: string; itemId: string }
+  | { owner: "fs-bulk"; host: string };
+
 /** Per-kind specifics. Kept loose (record of string→unknown) so each
  *  feature can store what it needs without forcing a union. The typed
  *  accessors below provide narrow views for the common kinds. */
@@ -117,6 +125,8 @@ export interface Task {
    *  the engine uses to identify the underlying operation. Linked here
    *  so cancel/retry/status can reach the right engine endpoint. */
   engineJobId?: string;
+  /** Present only when the underlying operation exposes real controls. */
+  control?: TaskControlRef;
   payload: TaskPayload;
   /** Short user-readable headline (e.g. "Upload PPSA09519.exfat"). */
   label: string;
@@ -228,6 +238,7 @@ interface TaskState {
     consoleId: string;
     payload?: TaskPayload;
     engineJobId?: string;
+    control?: TaskControlRef;
     status?: TaskStatus;
     progress?: TaskProgress;
     maxAttempts?: number;
@@ -238,7 +249,7 @@ interface TaskState {
   updateTask: (
     id: string,
     patch: Partial<
-      Pick<Task, "label" | "progress" | "rate" | "eta" | "status" | "detail" | "engineJobId" | "lastError">
+      Pick<Task, "label" | "progress" | "rate" | "eta" | "status" | "detail" | "engineJobId" | "lastError" | "control">
     >,
   ) => void;
 
@@ -290,6 +301,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       consoleId: hostOf(init.consoleId),
       payload: init.payload ?? {},
       engineJobId: init.engineJobId,
+      control: init.control,
       status: init.status ?? "running",
       progress: init.progress,
       createdAt: new Date(now).toISOString(),

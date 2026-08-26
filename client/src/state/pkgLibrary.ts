@@ -35,6 +35,7 @@ import { log } from "./logs";
 import { pushNotification } from "./notifications";
 import { useActivityHistoryStore } from "./activityHistory";
 import { useTaskStore } from "./tasks";
+import { useToastStore } from "./toasts";
 import { parsePS5Firmware } from "../lib/ps5Firmware";
 
 /**
@@ -1716,20 +1717,41 @@ export async function runPkgInstall(
           recoverable: true,
         },
       });
+      showInstallFailureToast(name, result.errMessage || "Install was not confirmed.");
     }
     return result;
   } catch (error) {
+    const message = pkgError(error);
     useTaskStore.getState().finishTask(taskId, "failed", {
       progress: latestProgress,
       detail: localPs5Path,
       lastError: {
         code: "INSTALL_ERROR",
-        message: pkgError(error),
+        message,
         recoverable: true,
       },
     });
+    showInstallFailureToast(name, message);
     throw error;
   }
+}
+
+/** Install failures must remain visible when the user has navigated away from
+ * the originating screen. The task contains full diagnostics; this sticky
+ * alert provides the missing foreground signal and a direct recovery path. */
+function showInstallFailureToast(name: string, detail: string): void {
+  const compact = detail.length > 260 ? `${detail.slice(0, 257)}…` : detail;
+  useToastStore.getState().push({
+    tone: "critical",
+    message: `${name} was not verified as installed. ${compact}`,
+    action: {
+      label: "Open Tasks",
+      onClick: () => {
+        window.history.pushState({}, "", "/activity");
+        window.dispatchEvent(new PopStateEvent("popstate"));
+      },
+    },
+  });
 }
 
 /** AppShell and the Install page can both observe one native drag event while
@@ -2207,14 +2229,10 @@ const makePkgLibraryStore = () =>
         // `installing` flag — otherwise a wedged flag would lock the screen.
         patch({ status: "installing", lastResult: undefined });
 
-        // FW 12.xx heads-up: the main-payload InstallByPackage hands the install
-        // to Sony's installer from the jailbroken context, which briefly
-        // destabilizes SceShellUI on newer firmware — the PS5 screen goes black
-        // for a few seconds, then recovers with the install queued. It still
-        // completes + launches fine (HW-reported), so we DON'T switch to the DPI
-        // daemon (that risks an unlaunchable metadata-only install on 12.xx) —
-        // we just warn so the blip isn't alarming. Gated to FW >= 12 where it's
-        // observed; older firmware installs silently.
+        // High-firmware heads-up. AppInst can reject this path with
+        // 0x80B2116F even when connectivity, kstuff, and initialization all
+        // look healthy. We still attempt the verified path, but never call an
+        // rc=0/zero-byte fallback or label a black screen as normal.
         {
           const rt =
             useConnectionStore.getState().runtimeByHost[hostOf(host)] ?? null;
@@ -2223,7 +2241,7 @@ const makePkgLibraryStore = () =>
           if (major >= 12) {
             set({
               busyNotice:
-                "Installing… on FW 12.x the PS5 screen may go black for a few seconds — that's normal. Don't touch the console; the install finishes in the background.",
+                "Installing on FW 12.x… ps5upload will only report success after console-side verification. If AppInst rejects this firmware/package combination, the package stays staged for the PS5's Debug Settings Package Installer.",
             });
           }
         }
@@ -2429,10 +2447,14 @@ const makePkgLibraryStore = () =>
           );
         }
       } catch (e) {
+        const message = pkgError(e);
         patch({
           status: "idle",
-          lastResult: { ok: false, message: pkgError(e) },
+          lastResult: { ok: false, message },
         });
+        const entry = get().entries.find((candidate) => candidate.path === path);
+        const label = entry?.title || entry?.contentId || basenameOf(path);
+        pushNotification("error", `${label} install failed`, { body: message });
       } finally {
         set({ installing: false, busyNotice: null, installPending: false });
       }

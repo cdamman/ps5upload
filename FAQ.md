@@ -90,15 +90,22 @@ Game pkgs (UP / EP / JP / HP / CUSA / PPSA / PCSA / etc.) work fine.
 **Q: Which desktop OSes run ps5upload?**
 - **macOS** — Apple Silicon (arm64) and Intel (x86_64), shipped as
   `.dmg`.
-- **Windows** — x64 and ARM64, shipped as `.zip` containing a
-  portable `PS5Upload.exe`. No installer, no admin prompt — unzip
-  and run.
-- **Linux** — x64 and arm64, shipped as `.zip` containing
-  `PS5Upload.AppImage`. Distro-agnostic (works on Ubuntu, Debian,
-  Fedora, Arch, etc.) — `chmod +x` and double-click.
-- **Android** — `.apk` (sideload). Same interface, mobile-friendly;
-  manages your PS5 over Wi-Fi. See the **Android** section below for
-  setup, permissions, and uploading from your phone.
+- **Windows** — x64 and ARM64, shipped as a `-setup.exe` installer
+  **or** a `.zip` containing a portable `PS5Upload.exe` (no installer,
+  no admin prompt — unzip and run).
+- **Linux** — x64 and arm64, shipped as `.deb`, `.rpm`, and a `.zip`
+  containing `PS5Upload.AppImage`. Install the package for your distro,
+  or use the AppImage anywhere — `chmod +x` and double-click. If you
+  installed the `.deb` or `.rpm`, the built-in updater detects that and
+  offers the same package type rather than the AppImage.
+- **Android** — `.apk` (sideload), built for **ARM only** (`arm64-v8a`
+  and `armeabi-v7a`). There is no x86 / x86_64 Android build, so
+  Intel-based Chromebooks and emulators are not supported. Same
+  interface, mobile-friendly; manages your PS5 over Wi-Fi. See the
+  **Android** section below for setup, permissions, and uploading from
+  your phone.
+
+There is no 32-bit x86 (i386 / i686) build for any desktop OS.
 
 **Q: Which PS5 firmware works?**
 ps5upload is built against PS5 Payload SDK v0.42, which resolves
@@ -743,6 +750,19 @@ Under `/data/homebrew/` unless you pick a different drive in the Upload
 screen. Common presets are offered: `homebrew` (recommended),
 `exfat`, `ps5upload`.
 
+**Q: Why can an upload say there is not enough space when the PS5 still shows
+free space?**
+The raw filesystem number is not the same as space Sony's content allocator
+will let a homebrew process consume. Internal storage keeps a fixed system
+pool that `statfs` does not report accurately; filesystem metadata and other
+console activity also need headroom. The Volumes screen therefore shows both
+raw free space and **safe for new uploads**. ps5upload checks the expanded size
+of files, folders, ZIP, 7z and RAR transfers before sending, and repeats the
+check on the PS5 for retries/resumes using the transaction's actual durable
+progress. If the payload reports `preflight_insufficient_space`, free the
+amount shown in the error or choose another destination. Partial upload files
+are credited on Resume, so already-allocated data is not charged twice.
+
 **Q: What happens when the destination already has files?**
 The app asks: **Override**, **Resume**, or **Cancel**.
 - **Override** — wipe destination and start fresh.
@@ -804,15 +824,56 @@ supported (Windows's "Send to → Compressed (zipped) folder" always does
 the right thing). Deflate64, LZMA, BZip2, Zstd and AES-encrypted zips are
 rejected with a clear message.
 
-**Q: Does a `.rar` upload need free space on my PC?**
-No. `.zip`, `.7z` and `.rar` are all decompressed and sent at the same
-time, so nothing is written to your disk — you only need room for the
-archive you already have.
+**Q: Does an archive upload need free space on my PC?**
+It depends on the format.
+
+- **`.rar` and `.7z` — no.** Both are decompressed and sent at the same
+  time: bytes go straight from the decoder onto the network, so nothing
+  is written to your disk. You only need room for the archive you already
+  have.
+- **`.zip` — sometimes.** Each file inside the zip is decompressed before
+  it is sent. Anything under **512 MB** is held in memory, but a larger
+  file is written to your temp folder first and deleted once it has been
+  sent. Only one file is held at a time, so the space you need is the
+  size of the **single biggest file inside the archive** — not the whole
+  game. A zip containing one 20 GB `.pkg` needs 20 GB free in temp; the
+  same game as a `.rar` or `.7z` needs none.
+
+If your temp drive is small and the game is large, prefer `.rar` or
+`.7z`. You can also raise the in-memory limit with the
+`FTX2_ZIP_RAM_THRESHOLD_MB` environment variable, at the cost of more RAM.
 
 This changed in a recent version. Older builds extracted a `.rar` in full
 first, which meant a 180 GB game needed 180 GB free on top of the archive.
 If you set `FTX2_ARCHIVE_STAGE_MB` to work around that, you can remove it —
 it no longer does anything.
+
+**Q: Which archive formats work on which system?**
+
+| OS / arch | `.zip` | `.7z` | `.rar` |
+|---|---|---|---|
+| macOS x86_64 | Decompress first | **Stream** | **Stream** |
+| macOS arm64 | Decompress first | **Stream** | **Stream** |
+| Linux x86_64 | Decompress first | **Stream** | **Stream** |
+| Linux arm64 | Decompress first | **Stream** | **Stream** |
+| Windows x86_64 | Decompress first | **Stream** | **Stream** |
+| Windows arm64 | Decompress first | **Stream** | **Stream** |
+| Android arm64-v8a | Decompress first | **Stream** | not supported |
+| Android armeabi-v7a | Decompress first | **Stream** | not supported |
+| Android x86 / x86_64 | no build | no build | no build |
+| i686 / i386 (any OS) | no build | no build | no build |
+| Browser | not supported | not supported | not supported |
+
+- **Stream** — decompressed straight onto the network. No disk used.
+- **Decompress first** — each file inside is decompressed before it is
+  sent (see the question above for how much space that needs).
+- **not supported** — there is a build for that system, but it cannot
+  read that format. RAR is missing on Android because it needs the UnRAR
+  library, which is not part of the Android build.
+- **no build** — no ps5upload binary ships for that system at all.
+
+Streaming or not is a property of the format, not your computer: a `.7z`
+streams the same way on every system that can open one.
 
 **Q: Why does the Library sometimes show a game twice?**
 If the same title is present both as a folder on disk and inside a
@@ -990,6 +1051,40 @@ ms for the commit to land, then unmounts. Pre-fix the kernel
 unmount worked but app.db was left with stale rows pointing at the
 now-gone path, surfacing as ghost tiles or `0x80980103 invalid
 title id` on the next launch attempt.
+
+**Q: Can I edit what's inside a mounted image — replace files, add DLC,
+or apply a backport patch?**
+Yes. Mount the image **read-write**, then edit it in the **File System**
+tab like any other folder on the console.
+
+- **Library → the image → Mount**, and leave **"Mount read-only"**
+  unchecked. (In the upload flow the same choice is the *"Mount
+  read-only"* sub-option under *Mount after upload*.)
+- Browse to the mount — it appears under `/mnt/ps5upload/<name>`.
+- **Add files** copies files from your computer into the folder you're
+  looking at. The **Replace** button on a file row overwrites just that
+  file, keeping its name — that's how you drop in a patched `eboot.bin`
+  or a rebuilt `.prx`.
+- **Unmount when you're done** so the filesystem is flushed cleanly.
+
+This is what makes the backport workflow possible when a game ships as
+an image rather than a folder: the SDK Version Changer (step 2) rewrites
+`eboot.bin` and every `prx`/`sprx` **in place**, and BackPork (step 3)
+needs a `fakelib/` folder created *inside* the title. Neither can happen
+through a read-only mount. Adding DLC or replacing assets works the same
+way.
+
+**Read this part before you start.** Edits go straight into the image
+file — there is no undo and no staging copy. A bad `eboot.bin` or a
+corrupted `sce_sys/param.json` can leave the title unbootable, and if
+the image is your only copy of the game, it is gone. Copy the image
+first if it matters to you. Two more things worth knowing: the PS5 can
+write save data into a read-write mounted image on its own (which is why
+read-only is the default and the safe choice for anything you just want
+to *play*), and on some firmwares the kernel refuses a read-write mount
+of a UFS `.ffpkg` regardless of what you asked for — when that happens
+the app tells you the mount came back read-only, and writes will fail
+until you convert or re-create the image.
 
 **Q: Can I unmount while a game is running?**
 No — the kernel refuses with `EBUSY` because a process inside the

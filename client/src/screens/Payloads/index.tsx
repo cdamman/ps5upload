@@ -1,9 +1,14 @@
-import { Boxes, Rocket } from "lucide-react";
+import { Boxes, Globe, HardDrive, Rocket } from "lucide-react";
 
 import TabbedShell, { type TabbedShellTab } from "../../layout/TabbedShell";
 import { useTr } from "../../state/lang";
 import CatalogPanel from "./CatalogPanel";
 import SendPanel from "./SendPanel";
+import NanoDnsScreen from "../NanoDns";
+import SmpPanel from "../Library/SmpPanel";
+import { ConnectionGate } from "../../components";
+import { useConnectionStore } from "../../state/connection";
+import { mgmtAddr } from "../../lib/addr";
 
 /**
  * Payloads screen — two URL-routed tabs:
@@ -21,10 +26,11 @@ import SendPanel from "./SendPanel";
  * metadata and a panel switch.
  */
 
-type TabId = "catalog" | "send";
+type TabId = "catalog" | "send" | "shadowmount" | "nanodns";
 
 export default function PayloadsScreen() {
   const tr = useTr();
+  const host = useConnectionStore((state) => state.host);
   const tabs: ReadonlyArray<TabbedShellTab<TabId>> = [
     {
       id: "catalog",
@@ -48,7 +54,45 @@ export default function PayloadsScreen() {
         "Send any PS5 payload file — .elf, .bin, .js, .lua, or .jar (kstuff, custom homebrew loaders, browser-stage exploits, plugin scripts, BD-JB JARs) — to your PS5. Same flow as the Connection tab, just pointed at a file you choose. Note: BD-JB-style .jar payloads need a JAR-aware loader on a non-9021 port — set the port to whatever your loader listens on.",
       ),
     },
+    {
+      id: "shadowmount",
+      icon: HardDrive,
+      key: "payloads_tab_shadowmount",
+      fallback: "ShadowMount+",
+      description: tr(
+        "payloads_description_shadowmount",
+        undefined,
+        "Inspect ShadowMount+ status, mounted game images, configuration, and diagnostics on the selected PS5.",
+      ),
+    },
+    {
+      id: "nanodns",
+      icon: Globe,
+      key: "payloads_tab_nanodns",
+      fallback: "nanoDNS",
+      description: tr(
+        "payloads_description_nanodns",
+        undefined,
+        "Configure the nanoDNS payload, verify its running version, and apply safe config migrations.",
+      ),
+    },
   ];
+
+  const renderPanel = (id: TabId) => {
+    if (id === "send") return <SendPanel />;
+    if (id === "nanodns") return <NanoDnsScreen embedded />;
+    if (id === "shadowmount") {
+      return (
+        <ConnectionGate require="payload">
+          <SmpPanel
+            mgmtAddr={host?.trim() ? mgmtAddr(host.trim()) : null}
+            hideWhenUnavailable={false}
+          />
+        </ConnectionGate>
+      );
+    }
+    return <CatalogPanel />;
+  };
 
   return (
     <TabbedShell
@@ -57,7 +101,7 @@ export default function PayloadsScreen() {
       titleKey="payloads"
       titleFallback="Payloads"
       tabs={tabs}
-      renderPanel={(id) => (id === "send" ? <SendPanel /> : <CatalogPanel />)}
+      renderPanel={renderPanel}
     />
   );
 }

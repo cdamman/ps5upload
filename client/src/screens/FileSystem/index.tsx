@@ -15,6 +15,7 @@ import {
   Copy,
   ClipboardPaste,
   Download,
+  Upload,
   FileArchive,
   X,
   HardDrive,
@@ -24,7 +25,7 @@ import {
   Hash,
   BadgeCheck,
 } from "lucide-react";
-import { pickPath } from "../../lib/pickPath";
+import { pickPath, pickPaths } from "../../lib/pickPath";
 import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { isTauriEnv } from "../../lib/tauriEnv";
 import { PageHeader, Button, ConnectionGate, Spinner, ErrorCard } from "../../components";
@@ -48,6 +49,7 @@ import {
   jobStatus,
   startTransferDownload,
   startTransferDownloadZip,
+  startTransferFile,
   fetchVolumes,
   type Volume,
 } from "../../api/ps5";
@@ -279,7 +281,7 @@ export default function FileSystemScreen() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busyEntry, setBusyEntry] = useState<{
     name: string;
-    op: "rename" | "mkdir";
+    op: "rename" | "mkdir" | "upload";
   } | null>(null);
   // Lifted into Zustand so the in-flight bulk op survives navigation.
   // The async runner writes to the store; the screen reads from it.
@@ -958,6 +960,104 @@ export default function FileSystemScreen() {
     } finally {
       setBusyEntry(null);
     }
+  };
+
+  /** Copy local files INTO the directory being browsed.
+   *
+   *  This is what makes a read-write mounted disk image editable: mount the
+   *  image, browse to it, and drop replacement files straight in. Uploading
+   *  to a path that already exists overwrites it, so "replace one file" and
+   *  "add new files" are the same operation with a different destination —
+   *  `replaceRemoteName` pins the destination name for the replace case so a
+   *  patched file picked from disk under a different filename still lands on
+   *  top of the original.
+   *
+   *  Sequential on purpose: these land inside one mounted image, and the
+   *  payload writes a packed shard's records serially anyway. */
+  const runUpload = async (
+    srcPaths: string[],
+    replaceRemoteName?: string,
+  ) => {
+    if (srcPaths.length === 0) return;
+    const addr = `${host}:${PS5_PAYLOAD_PORT}`;
+    setError(null);
+    for (const src of srcPaths) {
+      const localName = src.split(/[\\/]/).pop() || "file";
+      const remoteName = replaceRemoteName ?? localName;
+      setBusyEntry({ name: remoteName, op: "upload" });
+      try {
+        const jobId = await startTransferFile(
+          src,
+          joinPath(path, remoteName),
+          addr,
+        );
+        // Poll to terminal before starting the next one, so a failure
+        // stops the batch instead of racing more writes onto a full or
+        // read-only mount.
+        for (;;) {
+          const snap = await jobStatus(jobId);
+          if (snap.status === "done") break;
+          if (snap.status === "failed") {
+            throw new Error(snap.error ?? "upload failed");
+          }
+          await new Promise((r) => setTimeout(r, 500));
+        }
+      } catch (e) {
+        const raw = e instanceof Error ? e.message : String(e);
+        const human = humanizePs5Error(raw) || raw;
+        setError(human);
+        pushNotification(
+          "error",
+          withConsolePrefix(
+            host,
+            tr("notif_fs_upload_failed", undefined, "Copy to PS5 failed"),
+          ),
+          { body: human },
+        );
+        setBusyEntry(null);
+        await refresh();
+        return;
+      }
+    }
+    setBusyEntry(null);
+    await refresh();
+  };
+
+  /** Toolbar: pick one or more local files and copy them into this folder. */
+  const addFilesHere = async () => {
+    const picked = await pickPaths({
+      title: tr(
+        "fs_add_files_dialog_title",
+        undefined,
+        "Pick files to copy onto the PS5",
+      ),
+    });
+    await runUpload(picked);
+  };
+
+  /** Row action: overwrite one existing file with a local one. */
+  const replaceEntry = async (entry: DirEntry) => {
+    const picked = await pickPath({
+      mode: "file",
+      title: tr(
+        "fs_replace_dialog_title",
+        { name: entry.name },
+        'Pick the file to replace "{name}" with',
+      ),
+    });
+    if (typeof picked !== "string") return;
+    const ok = await confirmDialog({
+      title: tr("fs_replace_confirm_title", undefined, "Replace this file?"),
+      message: tr(
+        "fs_replace_confirm_body",
+        { name: entry.name },
+        '"{name}" will be overwritten and the old contents are gone for good. If this is inside a mounted game image, a bad file can stop the game booting.',
+      ),
+      confirmLabel: tr("fs_replace_confirm_ok", undefined, "Replace"),
+      destructive: true,
+    });
+    if (!ok) return;
+    await runUpload([picked], entry.name);
   };
 
   // Bulk: delete all selected entries. Best-effort — surfaces the first
@@ -1664,6 +1764,15 @@ export default function FileSystemScreen() {
             <Button
               variant="secondary"
               size="sm"
+              leftIcon={<Upload size={12} />}
+              onClick={addFilesHere}
+              disabled={loading || !host?.trim() || busyEntry !== null}
+            >
+              {tr("fs_add_files", "Add files")}
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
               leftIcon={<FolderPlus size={12} />}
               onClick={() => setMkdirDraft("")}
               disabled={loading || !host?.trim()}
@@ -1987,7 +2096,9 @@ export default function FileSystemScreen() {
             <span className="font-medium">
               {busyEntry.op === "rename"
                 ? tr("fs_busy_renaming", undefined, "Renaming")
-                : tr("fs_busy_creating_folder", undefined, "Creating folder")}
+                : busyEntry.op === "upload"
+                  ? tr("fs_busy_uploading", undefined, "Copying to PS5")
+                  : tr("fs_busy_creating_folder", undefined, "Creating folder")}
             </span>
             <span className="text-[var(--color-muted)]">
               {busyEntry.name} · {formatDuration(elapsedMs / 1000)}
@@ -2187,6 +2298,22 @@ export default function FileSystemScreen() {
                   >
                     <Pencil size={12} />
                   </button>
+                  {!isDir && (
+                    <button
+                      type="button"
+                      onClick={() => replaceEntry(e)}
+                      disabled={busyEntry !== null}
+                      aria-label={tr("fs_replace", undefined, "Replace file")}
+                      title={tr(
+                        "fs_replace_tooltip",
+                        undefined,
+                        "Overwrite this file with one from your computer — how you patch a file inside a mounted game image",
+                      )}
+                      className="rounded-md border border-[var(--color-border)] p-1 hover:bg-[var(--color-surface-3)] disabled:opacity-40"
+                    >
+                      <Upload size={12} />
+                    </button>
+                  )}
                   {!isDir && e.size <= 256 * 1024 && (
                     <button
                       type="button"

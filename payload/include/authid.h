@@ -34,9 +34,7 @@
 /* ── Authid constants ───────────────────────────────────────────────────
  *
  * These are ucred auth_id values used by Sony's kernel to gate privileged
- * installer subsystem calls (BGFT, AppInstUtil). The default jailbreak
- * elevation sets authid to 0x4800000000000006 (debugger), which is correct
- * for ptrace + kernel R/W but rejected by Sony's install API gates. */
+ * installer subsystem calls (BGFT, AppInstUtil). */
 
 /* ShellCore's authid — required by sceAppInstUtilInstallByPackage and
  * sceAppInstUtilGetInstallStatus on FW < 11. Without it, these calls
@@ -116,10 +114,9 @@ static inline int ps5_parse_firmware_major(const char *kv) {
 /* Detect the PS5 firmware major version (9, 10, 11, 12, …) via the SAFE
  * kern.version sysctl. Returns 0 if unknown.
  *
- * Used to gate the InstallByPackage authid at the FW-11 "authority cliff":
- * below FW 11, InstallByPackage runs under ShellCore authid; at/above
- * FW 11, it requires SYSTEM authid (swapping to ShellCore registers the
- * title but lands no content — the "hollow dead-tile" bug). */
+ * Used only to select among hardware- and upstream-observed install contexts.
+ * Firmware is not itself a capability guarantee; every accepted install still
+ * requires status and on-disk verification. */
 static inline int ps5_detect_firmware_major(void) {
     char buf[256];
     size_t sz = sizeof(buf);

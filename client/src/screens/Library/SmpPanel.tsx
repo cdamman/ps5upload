@@ -17,17 +17,23 @@ import { useTr } from "../../state/lang";
  * first probe completes; renders a compact "not installed" chip when
  * SMP is absent; expands into a detailed view when present.
  *
- * Why mount this in Library: the artefacts SMP manages (mounted game
- * images under /mnt/shadowmnt) are exactly what a user opens this
- * tab to find. Surfacing SMP's mount state here means the user
- * doesn't need to context-switch into FTP to know "did SMP pick up
- * my new image?"
+ * This is the management surface for the ShadowMount+ payload. It lives in
+ * Payloads; Games only consumes the resulting mounted titles and links here
+ * when ShadowMount+ is required.
  *
  * Why read-only: we never write SMP's config or state. Restart-style
  * actions go through the same Send-payload flow the user could
  * trigger themselves on the Payloads tab.
  */
-export default function SmpPanel({ mgmtAddr }: { mgmtAddr: string | null }) {
+export default function SmpPanel({
+  mgmtAddr,
+  hideWhenUnavailable = true,
+}: {
+  mgmtAddr: string | null;
+  /** Contextual consumers can stay silent when SMP is absent. The dedicated
+   * Payloads tab sets this false so setup/status remains discoverable. */
+  hideWhenUnavailable?: boolean;
+}) {
   const tr = useTr();
   const [status, setStatus] = useState<SmpStatus | null>(null);
   const [loading, setLoading] = useState(false);
@@ -77,7 +83,13 @@ export default function SmpPanel({ mgmtAddr }: { mgmtAddr: string | null }) {
   // Compact "not installed" — single chip the user can click to
   // expand if they want details (e.g. seeing the error). Doesn't
   // take meaningful screen space when SMP isn't set up.
-  if (status && !status.installed && !status.running && !expanded) {
+  if (
+    hideWhenUnavailable &&
+    status &&
+    !status.installed &&
+    !status.running &&
+    !expanded
+  ) {
     return null;
   }
 

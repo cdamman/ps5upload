@@ -32,6 +32,7 @@ import { hostOf } from "../../lib/addr";
 import { useFsBulkOpStore, useFsDownloadOpStore } from "../../state/fsBulkOp";
 import { useTransferStore } from "../../state/transfer";
 import { useUploadQueueStore } from "../../state/uploadQueue";
+import { useTaskStore } from "../../state/tasks";
 import { profileNameForAddr, useRosterStore } from "../../state/roster";
 import { ConsoleChip } from "../../components/ConsoleChip";
 
@@ -50,10 +51,13 @@ export default function ActivityScreen() {
   const entries = useActivityHistoryStore((s) => s.entries);
   const clear = useActivityHistoryStore((s) => s.clear);
   const clearRunning = useActivityHistoryStore((s) => s.clearRunning);
+  const taskCount = useTaskStore((s) => s.tasks.length);
   // Canonical confirm dialog — replaces the hand-rolled modal this screen
   // used to maintain in parallel with ConfirmDialog (style drift hazard).
   const { confirm: confirmDialog, dialog: confirmDialogNode } = useConfirm();
-  const [view, setView] = useState<"list" | "timeline" | "telemetry">("list");
+  const [view, setView] = useState<
+    "tasks" | "history" | "timeline" | "telemetry"
+  >("tasks");
 
   const running = entries.filter((e) => e.outcome === "running");
   const past = entries.filter((e) => e.outcome !== "running");
@@ -77,39 +81,51 @@ export default function ActivityScreen() {
   };
 
   return (
-    <div className="p-6">
+    <div className="app-page">
       <PageHeader
         icon={ActivityIcon}
-        title={tr("transfer_log_title", undefined, "Transfer Log")}
+        title={tr("v5_tab_tasks", undefined, "Tasks")}
         description={tr(
           "activity_description",
           undefined,
           "Your last 100 operations across uploads, downloads, and file management. Persisted across app restarts.",
         )}
         right={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <div
-              className="flex rounded-md border border-[var(--color-border)] text-xs"
+              className="flex max-w-full overflow-x-auto rounded-[var(--radius-control)] border border-[var(--color-border)] bg-[var(--color-surface-2)] p-0.5 text-xs shadow-sm"
               role="group"
               aria-label={tr("activity_view_toggle", undefined, "View")}
             >
               <button
                 type="button"
-                onClick={() => setView("list")}
-                aria-pressed={view === "list"}
-                className={`rounded-l-md px-2 py-1 max-md:min-h-11 max-md:px-4 font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] ${
-                  view === "list"
+                onClick={() => setView("tasks")}
+                aria-pressed={view === "tasks"}
+                className={`rounded-md px-2.5 py-1.5 max-md:min-h-11 max-md:px-4 font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] ${
+                  view === "tasks"
                     ? "bg-[var(--color-accent)] text-[var(--color-accent-contrast)]"
                     : "text-[var(--color-muted)] hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text)]"
                 }`}
               >
-                {tr("activity_view_list", undefined, "List")}
+                {tr("v5_tab_tasks", undefined, "Tasks")}
+              </button>
+              <button
+                type="button"
+                onClick={() => setView("history")}
+                aria-pressed={view === "history"}
+                className={`rounded-md px-2.5 py-1.5 font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] ${
+                  view === "history"
+                    ? "bg-[var(--color-accent)] text-[var(--color-accent-contrast)]"
+                    : "text-[var(--color-muted)] hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text)]"
+                }`}
+              >
+                {tr("changelog_full_history", undefined, "History")}
               </button>
               <button
                 type="button"
                 onClick={() => setView("timeline")}
                 aria-pressed={view === "timeline"}
-                className={`px-2 py-1 font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] ${
+                className={`rounded-md px-2.5 py-1.5 font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] ${
                   view === "timeline"
                     ? "bg-[var(--color-accent)] text-[var(--color-accent-contrast)]"
                     : "text-[var(--color-muted)] hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text)]"
@@ -121,7 +137,7 @@ export default function ActivityScreen() {
                 type="button"
                 onClick={() => setView("telemetry")}
                 aria-pressed={view === "telemetry"}
-                className={`rounded-r-md px-2 py-1 max-md:min-h-11 max-md:px-4 font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] ${
+                className={`rounded-md px-2.5 py-1.5 max-md:min-h-11 max-md:px-4 font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] ${
                   view === "telemetry"
                     ? "bg-[var(--color-accent)] text-[var(--color-accent-contrast)]"
                     : "text-[var(--color-muted)] hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text)]"
@@ -130,7 +146,7 @@ export default function ActivityScreen() {
                 {tr("activity_view_telemetry", undefined, "Telemetry")}
               </button>
             </div>
-            {entries.length > 0 ? (
+            {view !== "tasks" && entries.length > 0 ? (
               <Button
                 variant="ghost"
                 size="sm"
@@ -151,16 +167,24 @@ export default function ActivityScreen() {
       {/* v5 telemetry dashboard — live sensor charts. */}
       {view === "telemetry" && <TelemetryDashboard />}
 
-      {/* v5 unified task list — active + recently-finished tasks from
-          the taskStore. Sits above the legacy activity history so live
-          operations are the first thing the user sees. */}
-      {view === "list" && (
-        <div className="mb-6">
-          <TaskList />
-        </div>
+      {/* The unified task projection and legacy operation history are separate
+          views. Stacking both produced duplicate rows for the same upload and
+          made it unclear which controls were authoritative. */}
+      {view === "tasks" && <TaskList />}
+      {view === "tasks" && taskCount === 0 && (
+        <EmptyState
+          icon={ActivityIcon}
+          size="hero"
+          title={tr("activity_empty_title", undefined, "No tasks yet")}
+          message={tr(
+            "activity_empty_message",
+            undefined,
+            "Uploads, installs, downloads, and file operations will appear here with their real controls.",
+          )}
+        />
       )}
 
-      {view !== "telemetry" && entries.length === 0 && (
+      {(view === "history" || view === "timeline") && entries.length === 0 && (
         <EmptyState
           icon={ActivityIcon}
           size="hero"
@@ -173,7 +197,7 @@ export default function ActivityScreen() {
         />
       )}
 
-      {view === "list" && running.length > 0 && (
+      {view === "history" && running.length > 0 && (
         <section className="mb-6">
           <header className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
             <Spinner size={14} />
@@ -206,7 +230,7 @@ export default function ActivityScreen() {
         </section>
       )}
 
-      {view === "list" && past.length > 0 && (
+      {view === "history" && past.length > 0 && (
         <section>
           <header className="mb-3 text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
             {tr("activity_past", undefined, "Recent")}

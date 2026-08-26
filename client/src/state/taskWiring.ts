@@ -70,6 +70,7 @@ export function installTaskWiring() {
           label: "Upload starting…",
           consoleId: host,
           status: "running",
+          control: { owner: "transfer", host },
         });
         transferTaskIds.set(host, id);
         continue;
@@ -87,6 +88,7 @@ export function installTaskWiring() {
             total: phase.totalBytes,
             unit: "bytes",
           },
+          engineJobId: phase.jobId,
         });
         continue;
       }
@@ -164,8 +166,14 @@ export function installTaskWiring() {
           consoleId: hostOf(item.addr),
           status: "running",
           payload: {
+            queueItemId: item.id,
             sourcePath: item.sourcePath,
             resolvedDest: item.resolvedDest,
+          },
+          control: {
+            owner: "upload-queue",
+            host: hostOf(item.addr),
+            itemId: item.id,
           },
         });
         queueTaskIds.set(item.id, id);
@@ -300,6 +308,7 @@ export function installTaskWiring() {
             total: cur.total,
             unit: "items",
           },
+          control: { owner: "fs-bulk", host },
         });
         bulkTaskIds.set(host, id);
         continue;

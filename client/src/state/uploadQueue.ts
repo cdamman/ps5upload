@@ -264,6 +264,9 @@ interface QueueState {
   /** True after the first hydrate() completes. Lets the UI distinguish
    *  "no items yet" from "still loading from disk." */
   loaded: boolean;
+  /** Last queue load/save failure. Non-null means restart durability is not
+   * currently guaranteed and must be shown in the queue UI. */
+  persistenceError: string | null;
 
   hydrate: () => Promise<void>;
   add: (item: AddQueueItem) => void;
@@ -278,6 +281,8 @@ interface QueueState {
   moveDown: (id: string) => void;
   clear: () => void;
   retryFailed: () => void;
+  /** Retry one failed row. Returns false when the row is missing/not failed. */
+  retryItem: (id: string) => boolean;
   setContinueOnFailure: (b: boolean) => void;
   /** Start every console that has pending work, each in its own parallel
    *  drain loop (== "Start all"). */
@@ -396,16 +401,15 @@ export const useUploadQueueStore = create<QueueState>((set, get) => {
         it.rarPassword ? { ...it, rarPassword: null } : it,
       );
       const doc: QueueDocument = { items: persistItems, continueOnFailure };
-      void uploadQueueSave(doc).catch((e) => {
-        // Persistence failure means the queue won't survive an app
-        // restart. Log so it surfaces in the dev console + the
-        // engine startup log on Windows; users debugging "my queue
-        // disappeared" can find this. A toast-level UI surface is
-        // future work — would need a new error channel that's
-        // throttled (we save on every mutation, so a transient
-        // disk-full would otherwise spam toasts).
-        console.error("[upload-queue] save failed:", e);
-      });
+      void uploadQueueSave(doc)
+        .then(() => set({ persistenceError: null }))
+        .catch((e) => {
+          const message = e instanceof Error ? e.message : String(e);
+          console.error("[upload-queue] save failed:", e);
+          set({
+            persistenceError: `Queue changes could not be saved: ${message}. Keep the app open and free disk space or fix permissions before retrying.`,
+          });
+        });
     }, SAVE_DEBOUNCE_MS);
   };
 
@@ -1086,6 +1090,7 @@ export const useUploadQueueStore = create<QueueState>((set, get) => {
     running: false,
     runningHosts: {},
     loaded: false,
+    persistenceError: null,
 
     async hydrate() {
       // Browser-only dev/test contexts: Tauri invoke is unavailable.
@@ -1149,6 +1154,7 @@ export const useUploadQueueStore = create<QueueState>((set, get) => {
           items,
           continueOnFailure: doc.continueOnFailure ?? false,
           loaded: true,
+          persistenceError: null,
         });
       } catch (e) {
         // load_json_or_default returns {} on missing file, so this
@@ -1158,7 +1164,11 @@ export const useUploadQueueStore = create<QueueState>((set, get) => {
         // engine.log and surface a banner via runStatus alongside
         // the empty queue.
         console.error("[upload-queue] hydrate failed:", e);
-        set({ loaded: true });
+        const message = e instanceof Error ? e.message : String(e);
+        set({
+          loaded: true,
+          persistenceError: `The saved upload queue could not be loaded: ${message}. The original queue file was left untouched.`,
+        });
       }
     },
 
@@ -1279,6 +1289,27 @@ export const useUploadQueueStore = create<QueueState>((set, get) => {
     retryFailed() {
       set((s) => ({ items: resetFailedToPending(s.items) }));
       scheduleSave();
+    },
+
+    retryItem(id) {
+      const item = get().items.find((candidate) => candidate.id === id);
+      if (!item || item.status !== "failed") return false;
+      set((s) => ({
+        items: s.items.map((candidate) =>
+          candidate.id === id
+            ? {
+                ...candidate,
+                status: "pending" as const,
+                error: null,
+                errorReason: null,
+                errorDetail: null,
+                completedAt: null,
+              }
+            : candidate,
+        ),
+      }));
+      scheduleSave();
+      return true;
     },
 
     setContinueOnFailure(b) {

@@ -51,6 +51,7 @@ import {
   smpManualInstall,
   powerStandby,
   fsDelete,
+  uploadQueueSave,
 } from "../api/ps5";
 import { useRestAfterUploadStore } from "./restAfterUpload";
 import { ensurePayloadCurrent } from "../lib/ensurePayloadCurrent";
@@ -71,6 +72,7 @@ const mockedEnsurePayload = vi.mocked(ensurePayloadCurrent);
 const mockedStandby = vi.mocked(powerStandby);
 const mockedPkgInstall = vi.mocked(runPkgInstall);
 const mockedFsDelete = vi.mocked(fsDelete);
+const mockedQueueSave = vi.mocked(uploadQueueSave);
 
 function installLocalStorageStub() {
   const store = new Map<string, string>();
@@ -561,6 +563,69 @@ describe("cancelItem (per-item cancel)", () => {
     expect(useUploadQueueStore.getState().runningHosts).toEqual({
       "192.168.1.20": true,
     });
+  });
+});
+
+describe("queue recovery and persistence visibility", () => {
+  beforeEach(() => {
+    installLocalStorageStub();
+    vi.useFakeTimers();
+    mockedQueueSave.mockReset().mockResolvedValue(undefined);
+    useUploadQueueStore.setState({
+      items: [],
+      running: false,
+      runningHosts: {},
+      continueOnFailure: true,
+      loaded: true,
+      persistenceError: null,
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("retries only the selected failed item", () => {
+    addItem("192.168.1.10:9113", "failed.bin");
+    addItem("192.168.1.10:9113", "pending.bin");
+    const [failed, pending] = useUploadQueueStore.getState().items;
+    useUploadQueueStore.setState({
+      items: [
+        {
+          ...failed,
+          status: "failed",
+          error: "network failed",
+          errorReason: "socket_closed",
+          errorDetail: "reset",
+          completedAt: 123,
+        },
+        pending,
+      ],
+    });
+
+    expect(useUploadQueueStore.getState().retryItem(failed.id)).toBe(true);
+    const [retried, untouched] = useUploadQueueStore.getState().items;
+    expect(retried).toMatchObject({
+      id: failed.id,
+      status: "pending",
+      error: null,
+      errorReason: null,
+      errorDetail: null,
+      completedAt: null,
+    });
+    expect(untouched.id).toBe(pending.id);
+    expect(useUploadQueueStore.getState().retryItem(pending.id)).toBe(false);
+  });
+
+  it("surfaces a failed save and clears the warning after a successful save", async () => {
+    mockedQueueSave.mockRejectedValueOnce(new Error("disk full"));
+    addItem("192.168.1.10:9113", "first.bin");
+    await vi.advanceTimersByTimeAsync(400);
+    expect(useUploadQueueStore.getState().persistenceError).toContain("disk full");
+
+    addItem("192.168.1.10:9113", "second.bin");
+    await vi.advanceTimersByTimeAsync(400);
+    expect(useUploadQueueStore.getState().persistenceError).toBeNull();
   });
 });
 

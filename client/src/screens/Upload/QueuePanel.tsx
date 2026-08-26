@@ -78,6 +78,7 @@ export function QueuePanel() {
   const running = useUploadQueueStore((s) => s.running);
   const runningHosts = useUploadQueueStore((s) => s.runningHosts);
   const loaded = useUploadQueueStore((s) => s.loaded);
+  const persistenceError = useUploadQueueStore((s) => s.persistenceError);
   const hydrate = useUploadQueueStore((s) => s.hydrate);
   const start = useUploadQueueStore((s) => s.start);
   const stop = useUploadQueueStore((s) => s.stop);
@@ -116,7 +117,7 @@ export function QueuePanel() {
     if (!loaded) void hydrate();
   }, [loaded, hydrate]);
 
-  if (items.length === 0) return null;
+  if (items.length === 0 && !persistenceError) return null;
 
   const pendingCount = items.filter((i) => i.status === "pending").length;
   const failedCount = items.filter((i) => i.status === "failed").length;
@@ -130,6 +131,18 @@ export function QueuePanel() {
 
   return (
     <section className="mb-4 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] p-5">
+      {persistenceError && (
+        <div className="mb-4">
+          <ErrorCard
+            title={tr(
+              "save_failed",
+              undefined,
+              "Save failed",
+            )}
+            detail={persistenceError}
+          />
+        </div>
+      )}
       <header className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-sm font-semibold">
           <ListOrdered size={14} />

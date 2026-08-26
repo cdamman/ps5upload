@@ -61,16 +61,18 @@ export default function RosterPicker() {
     : null;
 
   return (
-    <div className="border-b border-[var(--color-border)]" ref={wrapperRef}>
+    <div className="relative mx-2 mb-1" ref={wrapperRef}>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         // min-h-11 (44px) meets the touch-target floor (mobile-design
         // §4.1). It's only +3px over the natural height, so desktop is
         // visually unchanged — no need to make it conditional.
-        className="flex min-h-11 w-full items-center gap-2 px-4 py-2 text-left text-xs hover:bg-[var(--color-surface-3)]"
+        className="flex min-h-12 w-full items-center gap-2.5 rounded-[0.7rem] border border-[var(--color-border)] bg-[color-mix(in_oklab,var(--color-surface)_45%,transparent)] px-3 py-2 text-left text-xs shadow-sm hover:border-[var(--color-border-strong)] hover:bg-[var(--color-surface-3)]"
       >
-        <Cable size={12} className="shrink-0 text-[var(--color-muted)]" />
+        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-[var(--color-surface-3)] text-[var(--color-muted)]">
+          <Cable size={13} />
+        </span>
         <div className="min-w-0 flex-1 leading-tight">
           {active ? (
             <>
@@ -97,7 +99,7 @@ export default function RosterPicker() {
       </button>
 
       {open && (
-        <div className="border-t border-[var(--color-border)] bg-[var(--color-surface)] py-1">
+        <div className="elev-2 absolute left-0 right-0 top-[calc(100%+0.35rem)] z-40 overflow-hidden rounded-[0.7rem] border border-[var(--color-border)] bg-[var(--color-surface-raised)] py-1">
           {profiles.length > 1 && (
             <ul className="max-h-40 overflow-y-auto">
               {profiles.map((p) => (

@@ -33,7 +33,6 @@ import { openExternalUrl as openExternal } from "../../lib/openExternalUrl";
 import { safeGetItem, safeSetItem } from "../../lib/safeStorage";
 
 import { useConnectionStore, PS5_PAYLOAD_PORT } from "../../state/connection";
-import SmpPanel from "./SmpPanel";
 import RunningAppsPanel from "./RunningAppsPanel";
 import { useRunningAppsStore } from "../../state/runningApps";
 import {
@@ -140,7 +139,7 @@ function formatDuration(sec: number): string {
 
 // formatBytes moved to lib/format.ts — kept consistent across screens.
 
-export default function LibraryScreen() {
+export default function LibraryScreen({ embedded = false }: { embedded?: boolean }) {
   const tr = useTr();
   const host = useConnectionStore((s) => s.host);
   const guard = useStaleHostGuard();
@@ -370,8 +369,8 @@ export default function LibraryScreen() {
   const querying = query.trim() !== "";
 
   return (
-    <div className="p-6">
-      <PageHeader
+    <div className={embedded ? "" : "p-6"}>
+      {!embedded && <PageHeader
         icon={LibraryBig}
         title={tr("games_title", "Games")}
         count={entries?.length}
@@ -393,7 +392,21 @@ export default function LibraryScreen() {
             {tr("refresh", undefined, "Refresh")}
           </Button>
         }
-      />
+      />}
+      {embedded && (
+        <div className="mb-4 flex justify-end">
+          <Button
+            variant="secondary"
+            size="sm"
+            leftIcon={<RefreshCw size={12} />}
+            onClick={refresh}
+            disabled={loading || !host?.trim()}
+            loading={loading}
+          >
+            {tr("refresh", undefined, "Refresh")}
+          </Button>
+        </div>
+      )}
 
       {error && (
         <div className="mb-4">
@@ -403,12 +416,6 @@ export default function LibraryScreen() {
           />
         </div>
       )}
-
-      {/* ShadowMount+ awareness panel — auto-hides when SMP isn't
-          installed, expands inline when it is. Read-only. Mounts
-          here because SMP's mounted-image dirs (under /mnt/shadowmnt)
-          are exactly the things this Library tab lists. */}
-      <SmpPanel mgmtAddr={host?.trim() ? mgmtAddr(host.trim()) : null} />
 
       {/* Running apps with suspend/resume/kill controls. Auto-hides
           when nothing is running. Wires Phase 18 (app lifecycle RPCs)
@@ -3542,6 +3549,28 @@ function MountModal({
               </span>
             </span>
           </label>
+        )}
+
+        {/* Read-write is the whole point for anyone patching a game, but it
+            edits the image file in place with no undo. State both halves at
+            the moment of the choice rather than after something breaks. */}
+        {supportsReadOnly && !readOnly && (
+          <div className="mb-3 rounded-md border border-[var(--color-warn)] bg-[var(--color-surface)] p-2 text-xs text-[var(--color-warn)]">
+            <div className="mb-1 font-semibold">
+              {tr(
+                "library_mount_modal_rw_title",
+                undefined,
+                "Read-write — you can edit this image",
+              )}
+            </div>
+            <div className="opacity-90">
+              {tr(
+                "library_mount_modal_rw_body",
+                undefined,
+                "Mounted this way you can replace files, add DLC, or apply a backport patch — use the File Browser to edit the mount. Changes are written straight into the image file: a bad edit can leave the game unbootable and there is no undo, so copy the image first if it matters. The PS5 may also write save data into a mounted image on its own.",
+              )}
+            </div>
+          </div>
         )}
 
         {nameInvalid && (

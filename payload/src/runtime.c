@@ -77,6 +77,14 @@ extern int posix_fadvise(int fd, off_t offset, off_t len, int advice);
  * with the data-write loop on multi-GiB copies. */
 extern int posix_fallocate(int fd, off_t offset, off_t len);
 
+/* Capacity policy mirrored by ps5upload-core::volumes. The PS5 user-storage
+ * allocator can return ENOSPC while statfs(/data) still advertises roughly
+ * 70 GB. Keep 80 GiB out of large uploads on internal storage, plus 1 GiB on
+ * ordinary external/image filesystems for metadata and concurrent activity. */
+#define PS5UPLOAD2_GIB ((uint64_t)1024u * 1024u * 1024u)
+#define PS5UPLOAD2_INTERNAL_SPACE_RESERVE (80u * PS5UPLOAD2_GIB)
+#define PS5UPLOAD2_EXTERNAL_SPACE_RESERVE (1u * PS5UPLOAD2_GIB)
+
 #define FTX2_MAGIC 0x32585446u
 #define FTX2_VERSION 1u
 /* NOTE: These frame numbers, MAGIC, VERSION, and the two TX_FLAG_*
@@ -2295,6 +2303,7 @@ typedef struct {
     pthread_cond_t  cv_empty[2];  /* signaled when slot[i] becomes empty */
     int             fd;
     int             writer_error; /* set by writer on I/O failure */
+    int             writer_errno; /* errno captured on the writer thread */
 } piped_writer_t;
 
 /* Create a JOINABLE worker thread with a bounded stack. The pack workers,
@@ -2371,8 +2380,10 @@ static void *piped_writer_thread(void *arg) {
 
         if (len < 0) break; /* shutdown */
         if (write_full(pw->fd, buf, (size_t)len) != 0) {
+            int saved = errno ? errno : EIO;
             pthread_mutex_lock(&pw->lock);
             pw->writer_error = 1;
+            pw->writer_errno = saved;
             /* Mark BOTH slots empty so a producer waiting on the
              * other slot's cv_empty wakes up too. The prior code
              * only signaled cv_empty[i], which left a producer
@@ -2394,13 +2405,25 @@ static void *piped_writer_thread(void *arg) {
          * Done OUTSIDE the lock (between write and the empty-signal) so it adds
          * natural backpressure — the producer blocks on a full slot during the
          * flush, which is exactly the pacing we want. Disabled when the
-         * interval is 0. A flush failure isn't fatal here: COMMIT_TX still does
-         * a final fsync, and a real I/O error surfaces via write_full above. */
+         * interval is 0. A flush failure is terminal: delayed-allocation
+         * filesystems commonly report ENOSPC only from fsync, so ignoring it
+         * turns a deterministic disk-full into a later socket reset. */
 #if PS5UPLOAD2_WRITEBACK_FSYNC_BYTES > 0
         if (len > 0) {
             since_fsync += (uint64_t)len;
             if (since_fsync >= PS5UPLOAD2_WRITEBACK_FSYNC_BYTES) {
-                (void)fsync(pw->fd);
+                if (fsync(pw->fd) != 0) {
+                    int saved = errno ? errno : EIO;
+                    pthread_mutex_lock(&pw->lock);
+                    pw->writer_error = 1;
+                    pw->writer_errno = saved;
+                    pw->slot[0].len = 0;
+                    pw->slot[1].len = 0;
+                    pthread_cond_broadcast(&pw->cv_empty[0]);
+                    pthread_cond_broadcast(&pw->cv_empty[1]);
+                    pthread_mutex_unlock(&pw->lock);
+                    return NULL;
+                }
                 since_fsync = 0;
             }
         }
@@ -2485,6 +2508,9 @@ static int direct_writer_finish(runtime_tx_entry_t *entry) {
     pthread_mutex_unlock(&h->pw.lock);
     if (h->started) pthread_join(h->tid, NULL);
     writer_error = h->pw.writer_error;
+    if (writer_error && entry->last_io_errno == 0) {
+        entry->last_io_errno = h->pw.writer_errno ? h->pw.writer_errno : EIO;
+    }
     pthread_mutex_destroy(&h->pw.lock);
     pthread_cond_destroy(&h->pw.cv_full[0]);
     pthread_cond_destroy(&h->pw.cv_full[1]);
@@ -3101,7 +3127,17 @@ static int runtime_write_shard_to_path(runtime_tx_entry_t *entry,
             fprintf(stderr,
                     "[payload2] posix_fallocate %s rc=%d (%s); falling back to ftruncate\n",
                     path, prealloc_rc, strerror(prealloc_rc));
-            (void)ftruncate(fd, (off_t)preallocate_bytes);
+            if (ftruncate(fd, (off_t)preallocate_bytes) != 0) {
+                int saved = errno ? errno : EIO;
+                if (entry) entry->last_io_errno = saved;
+                close(fd);
+                if (owns_bufs) {
+                    free(bufs[0]);
+                    free(bufs[1]);
+                }
+                (void)drain_shard_data(client_fd, data_len);
+                return -1;
+            }
         }
     }
     t_open_us = now_us() - t_open_start;
@@ -3251,7 +3287,10 @@ static int runtime_write_shard_to_path(runtime_tx_entry_t *entry,
         pthread_join(writer_tid, NULL);
         t_join_us = now_us() - t_join_start;
     }
-    if (pw.writer_error) rc_ret = -1;
+    if (pw.writer_error) {
+        if (entry) entry->last_io_errno = pw.writer_errno ? pw.writer_errno : EIO;
+        rc_ret = -1;
+    }
 
     {
         uint64_t t_close_start = now_us();
@@ -3411,7 +3450,12 @@ static int runtime_write_shard_persistent(runtime_tx_entry_t *entry,
                         "[payload2] direct persistent posix_fallocate %s rc=%d (%s); "
                         "falling back to ftruncate\n",
                         entry->tmp_path, prealloc_rc, strerror(prealloc_rc));
-                (void)ftruncate(fd, (off_t)preallocate_bytes);
+                if (ftruncate(fd, (off_t)preallocate_bytes) != 0) {
+                    entry->last_io_errno = errno ? errno : EIO;
+                    close(fd);
+                    (void)drain_shard_data(client_fd, data_len);
+                    return -1;
+                }
             }
         }
         /* posix_fadvise(SEQUENTIAL) was experimented with here; measured
@@ -3511,6 +3555,7 @@ static int runtime_write_shard_persistent(runtime_tx_entry_t *entry,
             pthread_cond_wait(&h->pw.cv_empty[slot], &h->pw.lock);
         }
         if (h->pw.writer_error) {
+            entry->last_io_errno = h->pw.writer_errno ? h->pw.writer_errno : EIO;
             pthread_mutex_unlock(&h->pw.lock);
             rc_ret = -1;
             break;
@@ -5586,6 +5631,91 @@ static int is_user_storage_path(const char *path) {
     return 0;
 }
 
+/* Mirrors ps5upload-core::volumes::{safety_reserve_bytes,
+ * external_reserve_for_total}. The host falls back to the SAME rule when an
+ * older payload omits the published field, so the two must not drift.
+ *
+ * The external margin is a CAP scaled to the volume, not a flat charge: a
+ * flat 1 GiB on a 64 MiB mounted disk image reserves sixteen times its own
+ * capacity, drives allocatable to zero, and refuses every write to it
+ * (hardware-confirmed — a 29-byte write into a mounted 64 MiB image was
+ * rejected as "have 0 bytes"). The INTERNAL reserve is deliberately NOT
+ * scaled: it models the PS5 content allocator's hidden reserve, an absolute
+ * quantity validated against a live FW 12.00 capture. */
+static uint64_t capacity_reserve_for_mount(const char *mnt_on,
+                                           const char *mnt_from,
+                                           uint64_t total_bytes) {
+    uint64_t scaled;
+    if ((mnt_on && (strcmp(mnt_on, "/data") == 0 ||
+                    strcmp(mnt_on, "/user") == 0)) ||
+        (mnt_from && strstr(mnt_from, "ssd0.user") != NULL)) {
+        return PS5UPLOAD2_INTERNAL_SPACE_RESERVE;
+    }
+    /* A volume reporting no total reserves nothing — better to let the write
+     * be attempted than to block it on missing telemetry. */
+    scaled = total_bytes / 64u;
+    return scaled < PS5UPLOAD2_EXTERNAL_SPACE_RESERVE
+               ? scaled
+               : PS5UPLOAD2_EXTERNAL_SPACE_RESERVE;
+}
+
+/* statfs requires an existing path, while a single-file destination normally
+ * does not exist yet. Walk upward to the nearest existing parent without ever
+ * leaving the absolute path's root. */
+static int statfs_existing_ancestor(const char *path, struct statfs *out) {
+    char probe[512];
+    char *slash;
+    if (!path || path[0] != '/' || !out) return -1;
+    if (snprintf(probe, sizeof(probe), "%s", path) >= (int)sizeof(probe)) return -1;
+    for (;;) {
+        if (statfs(probe, out) == 0) return 0;
+        slash = strrchr(probe, '/');
+        if (!slash) return -1;
+        if (slash == probe) {
+            probe[1] = '\0';
+        } else {
+            *slash = '\0';
+        }
+        if (strcmp(probe, "/") == 0) return statfs(probe, out);
+    }
+}
+
+static uint64_t stat_allocated_bytes(const char *path) {
+    struct stat st;
+    if (!path || !path[0] || stat(path, &st) != 0 || st.st_blocks <= 0) return 0;
+    return (uint64_t)st.st_blocks * 512u;
+}
+
+/* Count blocks already owned by this transaction. Logical st_size is not
+ * usable here because ftruncate creates sparse full-length files; st_blocks
+ * correctly distinguishes that from posix_fallocate's real reservation. */
+static uint64_t runtime_tx_allocated_bytes(const runtime_tx_entry_t *entry) {
+    uint64_t allocated = 0;
+    if (!entry) return 0;
+    if (!entry->multi_file) return stat_allocated_bytes(entry->tmp_path);
+    if (entry->manifest_index && entry->manifest_blob) {
+        const manifest_index_entry_t *idx =
+            (const manifest_index_entry_t *)entry->manifest_index;
+        for (uint64_t i = 0; i < entry->manifest_index_count; i++) {
+            char file_path[512];
+            char tmp_path[528];
+            size_t plen = idx[i].path_len;
+            if (plen == 0 || plen >= sizeof(file_path)) continue;
+            if (json_copy_unescaped_string(
+                    entry->manifest_blob + idx[i].path_offset,
+                    entry->manifest_blob + idx[i].path_offset + plen,
+                    file_path, sizeof(file_path)) != 0) continue;
+            snprintf(tmp_path, sizeof(tmp_path), "%s.ps5up2-tmp", file_path);
+            {
+                uint64_t blocks = stat_allocated_bytes(tmp_path);
+                allocated = UINT64_MAX - allocated < blocks
+                                ? UINT64_MAX : allocated + blocks;
+            }
+        }
+    }
+    return allocated;
+}
+
 static int handle_fs_list_volumes(runtime_state_t *state, int client_fd,
                                    uint64_t trace_id) {
     const size_t RESP_CAP = 16u * 1024u;
@@ -5646,6 +5776,10 @@ static int handle_fs_list_volumes(runtime_state_t *state, int client_fd,
         uint64_t avail = ((int64_t)mnts[i].f_bavail > 0)
                              ? (uint64_t)mnts[i].f_bavail * bs
                              : bfree;
+        uint64_t safety_reserve =
+            capacity_reserve_for_mount(mnt_on, mnt_from, total);
+        uint64_t allocatable =
+            avail > safety_reserve ? avail - safety_reserve : 0;
         /* Reserve model: total is the FULL partition (f_blocks×f_bsize) and
          * the UFS root reserve (bfree-bavail) is left to fall into `used`
          * (used = total - avail). This matches the PS5 Settings → Storage
@@ -5727,6 +5861,8 @@ static int handle_fs_list_volumes(runtime_state_t *state, int client_fd,
                      "%s{\"path\":\"%s\",\"mount_from\":\"%s\","
                      "\"fs_type\":\"%s\","
                      "\"total_bytes\":%llu,\"free_bytes\":%llu,"
+                     "\"safety_reserve_bytes\":%llu,"
+                     "\"allocatable_bytes\":%llu,"
                      "\"writable\":%s,\"is_placeholder\":false,"
                      "\"source_image\":\"%s\"}",
                      first_volume ? "" : ",",
@@ -5735,6 +5871,8 @@ static int handle_fs_list_volumes(runtime_state_t *state, int client_fd,
                      mnts[i].f_fstypename,
                      (unsigned long long)total,
                      (unsigned long long)avail,
+                     (unsigned long long)safety_reserve,
+                     (unsigned long long)allocatable,
                      writable ? "true" : "false",
                      source_esc);
         if (n < 0 || (size_t)n >= RESP_CAP - off) {
@@ -14691,6 +14829,83 @@ static int handle_begin_tx_frame(runtime_state_t *state, int client_fd,
             }
         }
     }
+    /* Authoritative capacity gate. This runs after resume reconciliation and
+     * credits both journaled progress and real blocks already allocated to
+     * this transaction, so a fallocated tmp is not double-counted. */
+    if (entry->total_bytes > 0 && entry->dest_root[0]) {
+        struct statfs cfs;
+        if (statfs_existing_ancestor(entry->dest_root, &cfs) == 0) {
+            uint64_t bs = (uint64_t)cfs.f_bsize;
+            uint64_t bfree = (uint64_t)cfs.f_bfree * bs;
+            uint64_t free_bytes = ((int64_t)cfs.f_bavail > 0)
+                                      ? (uint64_t)cfs.f_bavail * bs : bfree;
+            uint64_t reserve = capacity_reserve_for_mount(
+                cfs.f_mntonname, cfs.f_mntfromname,
+                (uint64_t)cfs.f_blocks * bs);
+            uint64_t allocatable = free_bytes > reserve
+                                     ? free_bytes - reserve : 0;
+            uint64_t allocated = runtime_tx_allocated_bytes(entry);
+            uint64_t credited = entry->bytes_received > allocated
+                                  ? entry->bytes_received : allocated;
+            uint64_t remaining;
+            if (credited > entry->total_bytes) credited = entry->total_bytes;
+            remaining = entry->total_bytes - credited;
+            if (remaining > allocatable) {
+                uint64_t short_bytes = remaining - allocatable;
+                char dest_esc[1024];
+                int cap_len;
+                json_escape_into(entry->dest_root, dest_esc, sizeof(dest_esc));
+                cap_len = snprintf(
+                    resp, sizeof(resp),
+                    "{\"error\":\"preflight_insufficient_space\","
+                    "\"detail\":\"destination %s needs %llu additional bytes "
+                    "but only %llu are safely allocatable (%llu free, %llu "
+                    "reserved); short by %llu bytes\","
+                    "\"required_bytes\":%llu,\"remaining_bytes\":%llu,"
+                    "\"free_bytes\":%llu,\"safety_reserve_bytes\":%llu,"
+                    "\"allocatable_bytes\":%llu,\"short_bytes\":%llu}",
+                    dest_esc,
+                    (unsigned long long)remaining,
+                    (unsigned long long)allocatable,
+                    (unsigned long long)free_bytes,
+                    (unsigned long long)reserve,
+                    (unsigned long long)short_bytes,
+                    (unsigned long long)entry->total_bytes,
+                    (unsigned long long)remaining,
+                    (unsigned long long)free_bytes,
+                    (unsigned long long)reserve,
+                    (unsigned long long)allocatable,
+                    (unsigned long long)short_bytes);
+                fprintf(stderr,
+                        "[payload2] capacity reject tx %s dest=%s total=%llu "
+                        "credited=%llu remaining=%llu free=%llu reserve=%llu\n",
+                        entry->tx_id_hex, entry->dest_root,
+                        (unsigned long long)entry->total_bytes,
+                        (unsigned long long)credited,
+                        (unsigned long long)remaining,
+                        (unsigned long long)free_bytes,
+                        (unsigned long long)reserve);
+                if (is_resume) {
+                    pthread_mutex_lock(&state->state_mtx);
+                    if (state->active_transactions > 0)
+                        state->active_transactions -= 1;
+                    pthread_mutex_unlock(&state->state_mtx);
+                    snprintf(entry->state, sizeof(entry->state), "interrupted");
+                    (void)runtime_flush_tx_record(state, entry);
+                    runtime_release_tx_resources_ephemeral(entry);
+                    (void)runtime_save_tx_state(state);
+                } else {
+                    runtime_abort_tx_fatal(state, entry);
+                }
+                (void)runtime_append_tx_event(state, "begin_tx_insufficient_space");
+                free(begin_body);
+                if (cap_len < 0) return -1;
+                if ((size_t)cap_len >= sizeof(resp)) cap_len = (int)sizeof(resp) - 1;
+                return send_frame(client_fd, FTX2_FRAME_ERROR, 0,
+                                  hdr.trace_id, resp, (uint64_t)cap_len);
+            }
+        }
+    }
     (void)runtime_save_tx_state(state);
     (void)runtime_append_tx_event(state, "begin_tx");
     (void)runtime_flush_tx_record(state, entry);
@@ -14973,6 +15188,7 @@ static int handle_commit_tx_frame(runtime_state_t *state, int client_fd,
      * is left untouched. */
     int apply_failed = 0;
     const char *apply_failure_reason = NULL;
+    char apply_failure_reason_buf[64] = {0};
     char apply_failure_detail[256] = {0};
     uint64_t failed_renames = 0;
     {
@@ -14989,11 +15205,21 @@ static int handle_commit_tx_frame(runtime_state_t *state, int client_fd,
                  * partial/corrupt; refuse the rename and surface the
                  * error to the client. */
                 apply_failed = 1;
-                apply_failure_reason = "direct_writer_io_error";
-                snprintf(apply_failure_detail, sizeof(apply_failure_detail),
-                         "writer thread reported a disk write error mid-stream; "
-                         "destination preserved, partial at %s",
-                         entry->tmp_path);
+                if (entry->last_io_errno > 0) {
+                    snprintf(apply_failure_reason_buf,
+                             sizeof(apply_failure_reason_buf),
+                             "fs_write_failed_errno_%d", entry->last_io_errno);
+                    apply_failure_reason = apply_failure_reason_buf;
+                    snprintf(apply_failure_detail, sizeof(apply_failure_detail),
+                             "writer flush for %s failed: %s; destination preserved",
+                             entry->tmp_path, strerror(entry->last_io_errno));
+                } else {
+                    apply_failure_reason = "direct_writer_io_error";
+                    snprintf(apply_failure_detail, sizeof(apply_failure_detail),
+                             "writer thread reported a disk write error mid-stream; "
+                             "destination preserved, partial at %s",
+                             entry->tmp_path);
+                }
                 fprintf(stderr,
                         "[payload2] direct writer reported I/O error for tx %s — "
                         "refusing rename, destination unchanged\n",

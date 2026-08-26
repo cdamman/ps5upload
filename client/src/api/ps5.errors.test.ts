@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   UploadJobError,
   humanizeJobErrorReason,
+  volumeAllocatableBytes,
   volumeForPath,
   type Volume,
 } from "./ps5";
@@ -85,6 +86,25 @@ describe("humanizeJobErrorReason", () => {
   it("recognizes the protocol-corruption case", () => {
     const msg = humanizeJobErrorReason("direct_tx_corrupt");
     expect(msg).toMatch(/protocol|corruption|restart/i);
+  });
+});
+
+describe("volumeAllocatableBytes", () => {
+  const base: Volume = {
+    path: "/data",
+    fs_type: "bfs",
+    total_bytes: 1_000,
+    free_bytes: 400,
+    writable: true,
+  };
+
+  it("prefers reserve-aware payload telemetry", () => {
+    expect(volumeAllocatableBytes({ ...base, allocatable_bytes: 250 })).toBe(250);
+  });
+
+  it("keeps older payload responses compatible and clamps invalid values", () => {
+    expect(volumeAllocatableBytes(base)).toBe(400);
+    expect(volumeAllocatableBytes({ ...base, allocatable_bytes: -1 })).toBe(0);
   });
 });
 

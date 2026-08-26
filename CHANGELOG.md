@@ -4,6 +4,48 @@ What's new in ps5upload, written for humans.
 
 ---
 
+## 5.5.0
+
+**Uploads that can't fit are now refused before they start, big folders
+finish, and you can edit a mounted game image in place.**
+
+- **"It won't fit" is said up front, not four hours in.** The PS5 holds
+  back a large chunk of internal storage that the free-space number never
+  shows, so an upload could pass every check, run for seventeen minutes,
+  and die at 53% with a connection error that never mentioned the disk.
+  Uploads are now checked against the space actually usable, on both the
+  app and the console, and the destination picker shows **usable** space
+  instead of free space.
+- **If it does run out mid-upload, it says so.** That failure used to
+  surface as six identical "connection forcibly closed" messages. Now it
+  names the drive, the numbers, and stops retrying something that cannot
+  succeed.
+- **Folders with thousands of small files upload again.** Anything over
+  about 7,000 small files used to fail with an unreadable socket error
+  after all the data had already arrived. A 20,000-file folder now
+  completes.
+- **Edit a mounted disk image in place.** Mount an `.exfat` read-write and
+  the File Browser becomes an image editor: **Add files** copies files in
+  from your computer, and **Replace** overwrites one file keeping its name.
+  This is what lets you drop in DLC, swap assets, or apply a backport patch
+  when a game ships as an image instead of a folder. Edits are permanent
+  and there is no undo — the app now says so before you start.
+- **The sidebar is yours.** It used to assume five screens mattered to
+  everyone. Now only Home is pinned, and you star whatever you actually use
+  from **More**.
+- **Firmware 12 installs stop pretending.** The last-resort installer path
+  could report success after copying nothing at all. It is gone from the
+  automatic sequence; the app keeps your staged package and explains the
+  real error instead.
+- **Translation fixes.** "From" and "To" in the file move screens had been
+  translated as the *email* senses — German read "Mr.", Spanish "born in",
+  Japanese "start date". Several messages also showed raw `\n` and `\"`
+  instead of line breaks and quotes.
+- **The sidebar shows which version you are running**, so a bug report can
+  say so without hunting through About.
+
+---
+
 ## 5.4.19
 
 **Every way an archive can be split is now recognised — including the ones

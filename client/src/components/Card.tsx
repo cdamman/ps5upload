@@ -53,7 +53,7 @@ export function Card({
     : "border-[var(--color-border)]";
   const pad = padded ? "p-4" : "";
   const liftCls = interactive
-    ? "transition-shadow hover:shadow-md hover:elev-2 cursor-pointer text-left"
+    ? "transition-[transform,box-shadow,border-color] hover:-translate-y-px hover:border-[var(--color-border-strong)] hover:elev-2 cursor-pointer text-left"
     : "";
 
   const header = title && (
@@ -80,7 +80,7 @@ export function Card({
     </>
   );
 
-  const cls = `elev-1 rounded-lg border ${border} bg-[var(--color-surface-2)] ${pad} ${liftCls} ${className}`;
+  const cls = `elev-1 rounded-[var(--radius-panel)] border ${border} bg-[var(--color-surface-raised)] ${pad} ${liftCls} ${className}`;
 
   if (interactive && onClick) {
     return (

@@ -1,46 +1,42 @@
 import { useMemo } from "react";
 import { Link } from "react-router";
 import {
-  LayoutDashboard,
-  Cable,
-  Cpu,
-  Power,
   Activity as ActivityIcon,
+  ArrowRight,
   Bell,
+  Cable,
   CheckCircle2,
-  XCircle,
-  Upload,
-  PackageOpen,
-  Save,
-  Server,
+  Cpu,
   FolderTree,
   Gamepad2,
+  LayoutDashboard,
+  PackageOpen,
+  Power,
+  Save,
+  Server,
+  Upload,
+  WifiOff,
+  XCircle,
   type LucideIcon,
 } from "lucide-react";
+
 import { useConnectionStore } from "../../state/connection";
 import { useActivityHistoryStore } from "../../state/activityHistory";
 import { useNotificationsStore } from "../../state/notifications";
 import { useRunningAppsStore } from "../../state/runningApps";
 import { useSensors } from "../../state/sensors";
-import { Card, Badge, Spinner, ConsoleChip, Sparkline } from "../../components";
+import { Badge, Card, ConsoleChip, Sparkline, Spinner } from "../../components";
 import { useTr } from "../../state/lang";
+import {
+  evaluateOperationReadiness,
+  type Operation,
+} from "../../lib/operationReadiness";
 
 /**
- * v5 Home tab — at-a-glance dashboard with quick actions.
- *
- * Layout: responsive grid. On desktop, a 2-column layout with the
- * Connection card prominent. On mobile, single column.
- *
- * Widgets (v5 §5.2):
- *   1. Connection — engine/payload/kernel status
- *   2. Live sensors — CPU/SoC temps (when available)
- *   3. Quick actions — Upload, Install, Saves, FTP, etc.
- *   4. Recent activity — last 5 operations
- *   5. Notifications — last 5
- *
- * Data: reuses existing stores + RPCs. v5 §5.6 eventually replaces
- * the 5s poll with a single telemetry SSE stream; until then we keep
- * the existing cadence (which works and is well-tested).
+ * Product-level command center. The hierarchy is deliberate:
+ *  1. Can I use the console right now, and what should I do next?
+ *  2. What common operation do I want to start?
+ *  3. What is the console reporting, and what just happened?
  */
 export default function HomeScreen() {
   const tr = useTr();
@@ -62,295 +58,224 @@ export default function HomeScreen() {
   );
   const recentNotifs = useMemo(() => allNotifs.slice(0, 5), [allNotifs]);
   const runningTitleIds = useRunningAppsStore((s) => s.titleIds);
-
-  // CPU temp sparkline data — last 30 samples (~2.5 min at 5s cadence).
   const cpuHistory = useMemo(
     () =>
       history
-        .flatMap((s) =>
-          s.temps && s.temps.cpu_temp > 0 ? [s.temps.cpu_temp] : [],
+        .flatMap((sample) =>
+          sample.temps && sample.temps.cpu_temp > 0
+            ? [sample.temps.cpu_temp]
+            : [],
         )
         .slice(-30),
     [history],
   );
 
   const connected = engineStatus === "up" && payloadStatus === "up";
+  const readinessContext = {
+    host,
+    engineUp: engineStatus === "up",
+    helperUp: payloadStatus === "up",
+    kernelRw: ucredElevated,
+  };
+  const readinessFor = (operation: Operation) =>
+    evaluateOperationReadiness(operation, readinessContext);
 
   return (
-    <div className="mx-auto w-full max-w-6xl p-4 md:p-6">
-      {/* Page heading — concise. v5 spec wants "at-a-glance status + most
-          likely next actions". */}
-      <header className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight">
-            <LayoutDashboard size={24} aria-hidden />
-            {tr("v5_home_title", "Home")}
-          </h1>
-          <p className="mt-1 text-sm text-[var(--color-muted)]">
-            {tr(
-              "v5_home_subtitle",
-              "At-a-glance status and quick actions for your PS5.",
-            )}
-          </p>
+    <div className="app-page">
+      <header className="mb-6">
+        <div className="page-kicker">
+          <LayoutDashboard size={13} aria-hidden />
+          {tr("v5_home_command_center", "Command center")}
         </div>
-        {connected ? (
-          <Badge tone="good">
-            {tr("v5_home_connected", "Connected")}
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h1 className="text-[1.75rem] font-bold tracking-[-0.035em]">
+              {tr("v5_home_title", "Home")}
+            </h1>
+            <p className="mt-1 max-w-2xl text-sm text-[var(--color-muted)]">
+              {tr(
+                "v5_home_subtitle",
+                "Manage your console, move content, and monitor active work.",
+              )}
+            </p>
+          </div>
+          <Badge tone={connected ? "good" : "warn"} size="md" dot className="self-start">
+            {connected
+              ? tr("v5_home_connected", "Connected")
+              : tr("v5_home_setup_required", "Setup required")}
           </Badge>
-        ) : (
-          <Badge tone="bad">
-            {tr("v5_home_disconnected", "Not connected")}
-          </Badge>
-        )}
+        </div>
       </header>
 
-      {/* Responsive grid. On desktop: 3-col. Tablet: 2-col. Mobile: 1-col. */}
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {/* 1. Connection card — spans 1 col, prominent position. */}
-        <Card
-          className="xl:col-span-1"
-        >
-          <CardHeader
-            icon={Cable}
-            title={tr("v5_home_connection", "Connection")}
-          />
-          <div className="space-y-2">
-            <KvRow
-              label={tr("v5_home_host", "Host")}
-              value={host || "—"}
-            />
-            <KvRow
-              label={tr("v5_home_engine", "Engine")}
-              value={engineStatus === "up" ? "up" : "down"}
-              tone={
-                engineStatus === "up" ? "good" : "bad"
-              }
-            />
-            <KvRow
-              label={tr("v5_home_helper", "Helper")}
-              value={payloadVersion ? `v${payloadVersion}` : payloadStatus}
-              tone={payloadStatus === "up" ? "good" : "bad"}
-            />
-            <KvRow
-              label={tr("v5_home_kernel", "Kernel")}
-              value={ps5Kernel ?? "—"}
-              small
-            />
-            <KvRow
-              label={tr("v5_home_krw", "Kernel R/W")}
-              value={
-                ucredElevated === null
-                  ? "—"
-                  : ucredElevated
-                    ? tr("v5_home_available", "available")
-                    : tr("v5_home_missing", "missing")
-              }
-              tone={
-                ucredElevated === null
-                  ? undefined
-                  : ucredElevated
-                    ? "good"
-                    : "warn"
-              }
-            />
-          </div>
-        </Card>
-
-        {/* 2. Live sensors — CPU/SoC temps with sparkline. */}
-        <Card>
-          <CardHeader
-            icon={Cpu}
-            title={tr("v5_home_sensors", "Live sensors")}
-          />
-          {temps ? (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <KvRow
-                  label={tr("v5_home_cpu", "CPU")}
-                  value={`${temps.cpu_temp?.toFixed(0) ?? "?"}°C`}
-                  tone={
-                    (temps.cpu_temp ?? 0) >= 85
-                      ? "warn"
-                      : undefined
-                  }
-                />
-                {cpuHistory.length >= 2 && (
-                  <Sparkline
-                    data={cpuHistory}
-                    width={70}
-                    height={22}
-                    color={
-                      (temps.cpu_temp ?? 0) >= 85
-                        ? "var(--color-warn)"
-                        : "var(--color-text)"
-                    }
-                    fill
-                  />
+      <section
+        className={`dashboard-hero mb-4 ${connected ? "is-connected" : "is-offline"}`}
+      >
+        <span className="dashboard-hero-icon">
+          {connected ? <Cable size={21} /> : <WifiOff size={21} />}
+        </span>
+        <div className="min-w-0 flex-1">
+          <h2 className="text-base font-semibold tracking-tight">
+            {connected
+              ? tr("v5_home_console_ready", "Your PS5 is ready")
+              : tr("v5_home_connect_title", "Connect a PS5 to get started")}
+          </h2>
+          <p className="mt-0.5 text-xs leading-relaxed text-[var(--color-muted)] sm:text-sm">
+            {connected
+              ? tr(
+                  "v5_home_console_ready_desc",
+                  `Helper connected${host ? ` at ${host}` : ""}. Console operations are available.`,
+                )
+              : tr(
+                  "payload_not_connected_message",
+                  "Add your console address and send the helper once. We’ll verify every capability before enabling console actions.",
                 )}
-              </div>
-              <KvRow
-                label={tr("v5_home_soc", "SoC")}
-                value={`${temps.soc_temp?.toFixed(0) ?? "?"}°C`}
-                tone={
-                  (temps.soc_temp ?? 0) >= 85
-                    ? "warn"
-                    : undefined
-                }
-              />
-              {temps.m2_temp > 0 && (
-                <KvRow
-                  label={tr("v5_home_m2", "M.2 SSD")}
-                  value={`${temps.m2_temp.toFixed(0)}°C`}
-                />
-              )}
-              {power && (
-                <KvRow
-                  label={tr("v5_home_lifetime", "Lifetime")}
-                  value={`${power.operating_time_hours ?? 0}h, ${power.boot_count ?? 0} ${tr("v5_home_boots", "boots")}`}
-                />
-              )}
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 text-sm text-[var(--color-muted)]">
-              <Spinner size={14} />
-              {tr("v5_home_loading_sensors", "Reading sensors…")}
-            </div>
-          )}
-        </Card>
+          </p>
+        </div>
+        <Link
+          to="/connection"
+          className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-[var(--radius-control)] border border-[var(--color-border)] bg-[var(--color-surface-raised)] px-3.5 text-xs font-semibold shadow-sm transition-colors hover:border-[var(--color-border-strong)] hover:bg-[var(--color-surface-3)]"
+        >
+          {connected
+            ? tr("v5_home_manage_connection", "Manage connection")
+            : tr("v5_home_connect", "Connect PS5")}
+          <ArrowRight size={14} aria-hidden />
+        </Link>
+      </section>
 
-        {/* 3. Quick actions — deep-links to common tasks. */}
-        <Card>
-          <CardHeader
+      <div className="grid gap-4 xl:grid-cols-12">
+        <Card className="xl:col-span-7">
+          <SectionHeading
             icon={ActivityIcon}
             title={tr("v5_home_quick_actions", "Quick actions")}
+            description={tr(
+              "v5_home_quick_actions_desc",
+              "Start the jobs you use most.",
+            )}
           />
-          <div className="grid grid-cols-2 gap-2">
-            <QuickAction
-              to="/upload"
-              icon={Upload}
-              label={tr("v5_qa_upload", "Upload")}
-            />
-            <QuickAction
-              to="/install-package"
-              icon={PackageOpen}
-              label={tr("v5_qa_install", "Install PKG")}
-            />
-            <QuickAction
-              to="/saves"
-              icon={Save}
-              label={tr("v5_qa_saves", "Backup saves")}
-            />
-            <QuickAction
-              to="/ftp-server"
-              icon={Server}
-              label={tr("v5_qa_ftp", "Start FTP")}
-            />
-            <QuickAction
-              to="/files"
-              icon={FolderTree}
-              label={tr("v5_qa_files", "Files")}
-            />
-            <QuickAction
-              to="/games"
-              icon={Gamepad2}
-              label={tr("v5_qa_games", "Games")}
-            />
+          <div className="grid gap-2 sm:grid-cols-2">
+            <QuickAction to="/upload" icon={Upload} label={tr("v5_qa_upload", "Upload files")} readiness={readinessFor("upload")} />
+            <QuickAction to="/install-package" icon={PackageOpen} label={tr("v5_qa_install", "Install package")} readiness={readinessFor("install-package")} />
+            <QuickAction to="/files" icon={FolderTree} label={tr("v5_qa_files", "Browse files")} readiness={readinessFor("browse-console")} />
+            <QuickAction to="/games" icon={Gamepad2} label={tr("v5_qa_games", "Open library")} readiness={readinessFor("browse-console")} />
+            <QuickAction to="/saves" icon={Save} label={tr("v5_qa_saves", "Back up saves")} readiness={readinessFor("browse-console")} />
+            <QuickAction to="/ftp-server" icon={Server} label={tr("v5_qa_ftp", "Start FTP server")} readiness={readinessFor("manage-system")} />
           </div>
         </Card>
 
-        {/* 4. Running apps (if any). */}
-        {runningTitleIds.size > 0 && (
-          <Card>
-            <CardHeader
-              icon={Power}
-              title={tr(
-                "v5_home_running",
-                { n: runningTitleIds.size },
-                `Running (${runningTitleIds.size})`,
-              )}
+        <Card className="xl:col-span-5">
+          <SectionHeading
+            icon={Cpu}
+            title={tr("v5_home_console_status", "Console status")}
+            description={tr(
+              "v5_home_console_status_desc",
+              "Connection and live system health.",
+            )}
+          />
+          <div>
+            <MetricRow label={tr("v5_home_host", "Host")} value={host || "—"} />
+            <MetricRow label={tr("v5_home_engine", "Local engine")} value={engineStatus} tone={engineStatus === "up" ? "good" : "bad"} />
+            <MetricRow label={tr("v5_home_helper", "PS5 helper")} value={payloadVersion ? `v${payloadVersion}` : payloadStatus} tone={payloadStatus === "up" ? "good" : "warn"} />
+            <MetricRow
+              label={tr("v5_home_krw", "Kernel access")}
+              value={ucredElevated === null ? "—" : ucredElevated ? tr("v5_home_available", "Available") : tr("v5_home_missing", "Unavailable")}
+              tone={ucredElevated === null ? undefined : ucredElevated ? "good" : "warn"}
             />
-            <ul className="space-y-1 text-xs">
-              {Array.from(runningTitleIds).slice(0, 5).map((tid) => (
-                <li key={tid} className="font-mono">
-                  {tid}
-                </li>
-              ))}
-              {runningTitleIds.size > 5 && (
-                <li className="text-[var(--color-muted)]">
-                  + {runningTitleIds.size - 5} {tr("v5_home_more", "more")}
-                </li>
-              )}
-            </ul>
-          </Card>
-        )}
+          </div>
 
-        {/* 5. Recent activity — last 5 operations. */}
-        <Card>
-          <CardHeader
+          <div className="mt-4 rounded-xl border border-[var(--color-border)] bg-[color-mix(in_oklab,var(--color-surface)_45%,transparent)] p-3">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <div className="text-xs font-semibold">{tr("v5_home_sensors", "Live sensors")}</div>
+                <div className="mt-0.5 text-[0.6875rem] text-[var(--color-muted)]">
+                  {connected ? tr("v5_home_sensor_live", "Updates automatically") : tr("v5_home_sensor_waiting", "Available after connection")}
+                </div>
+              </div>
+              {temps && cpuHistory.length >= 2 && (
+                <Sparkline
+                  data={cpuHistory}
+                  width={82}
+                  height={26}
+                  color={(temps.cpu_temp ?? 0) >= 85 ? "var(--color-warn)" : "var(--color-accent)"}
+                  fill
+                />
+              )}
+            </div>
+            {temps ? (
+              <div className="grid grid-cols-2 gap-2">
+                <SensorMetric label={tr("v5_home_cpu", "CPU")} value={`${temps.cpu_temp?.toFixed(0) ?? "?"}°C`} />
+                <SensorMetric label={tr("v5_home_soc", "SoC")} value={`${temps.soc_temp?.toFixed(0) ?? "?"}°C`} />
+                {temps.m2_temp > 0 && <SensorMetric label={tr("v5_home_m2", "M.2 SSD")} value={`${temps.m2_temp.toFixed(0)}°C`} />}
+                {power && <SensorMetric label={tr("v5_home_lifetime", "Runtime")} value={`${power.operating_time_hours ?? 0}h`} />}
+              </div>
+            ) : connected ? (
+              <div className="flex items-center gap-2 text-xs text-[var(--color-muted)]">
+                <Spinner size={13} />
+                {tr("v5_home_loading_sensors", "Reading sensors…")}
+              </div>
+            ) : (
+              <div className="text-xs text-[var(--color-muted)]">
+                {tr("telemetry_not_connected_desc", "Connect to see temperatures and runtime.")}
+              </div>
+            )}
+          </div>
+
+          {ps5Kernel && (
+            <p className="mt-3 truncate font-mono text-[0.6875rem] text-[var(--color-muted)]" title={ps5Kernel}>{ps5Kernel}</p>
+          )}
+          {runningTitleIds.size > 0 && (
+            <div className="mt-3 flex items-center gap-2 text-xs">
+              <Power size={13} className="text-[var(--color-good)]" />
+              <span className="font-medium">{tr("v5_home_running", { n: runningTitleIds.size }, `${runningTitleIds.size} running`)}</span>
+              <span className="truncate font-mono text-[var(--color-muted)]">{Array.from(runningTitleIds).slice(0, 3).join(", ")}</span>
+            </div>
+          )}
+        </Card>
+
+        <Card className="xl:col-span-7">
+          <SectionHeading
             icon={ActivityIcon}
             title={tr("v5_home_recent_activity", "Recent activity")}
+            description={tr("v5_home_recent_activity_desc", "Latest operations across every console.")}
+            action={<InlineLink to="/activity" label={tr("v5_tab_tasks", "View tasks")} />}
           />
           {recentActivity.length === 0 ? (
-            <p className="text-sm text-[var(--color-muted)]">
-              {tr("v5_home_no_activity", "No recent activity.")}
-            </p>
+            <CompactEmpty icon={ActivityIcon} title={tr("v5_home_no_activity", "No activity yet")} body={tr("v5_home_no_activity_desc", "Uploads, installs, and file jobs will appear here.")} />
           ) : (
-            <ul className="space-y-1.5 text-xs">
-              {recentActivity.map((e) => (
-                <li
-                  key={e.id}
-                  className="flex items-start gap-2"
-                >
-                  {e.outcome === "done" && (
-                    <CheckCircle2
-                      size={12}
-                      aria-hidden
-                      className="mt-0.5 shrink-0 text-[var(--color-good)]"
-                    />
+            <ul className="divide-y divide-[var(--color-border)]">
+              {recentActivity.map((entry) => (
+                <li key={entry.id} className="flex min-h-10 items-center gap-2 py-2 text-xs">
+                  {entry.outcome === "done" ? (
+                    <CheckCircle2 size={14} className="shrink-0 text-[var(--color-good)]" />
+                  ) : entry.outcome === "failed" ? (
+                    <XCircle size={14} className="shrink-0 text-[var(--color-bad)]" />
+                  ) : entry.outcome === "running" ? (
+                    <Spinner size={13} className="shrink-0" />
+                  ) : (
+                    <ActivityIcon size={14} className="shrink-0 text-[var(--color-muted)]" />
                   )}
-                  {e.outcome === "failed" && (
-                    <XCircle
-                      size={12}
-                      aria-hidden
-                      className="mt-0.5 shrink-0 text-[var(--color-bad)]"
-                    />
-                  )}
-                  {e.outcome === "running" && (
-                    <Spinner size={12} className="mt-0.5 shrink-0" />
-                  )}
-                  <span className="min-w-0 flex-1 truncate">
-                    {e.label}
-                  </span>
-                  <ConsoleChip
-                    addr={e.addr}
-                    className="shrink-0 text-xs"
-                  />
+                  <span className="min-w-0 flex-1 truncate font-medium">{entry.label}</span>
+                  <ConsoleChip addr={entry.addr} className="shrink-0" />
                 </li>
               ))}
             </ul>
           )}
         </Card>
 
-        {/* 6. Recent notifications. */}
-        <Card>
-          <CardHeader
+        <Card className="xl:col-span-5">
+          <SectionHeading
             icon={Bell}
             title={tr("v5_home_notifications", "Notifications")}
+            description={tr("v5_home_notifications_desc", "Important results and warnings.")}
+            action={<InlineLink to="/notifications" label={tr("v5_home_view_all", "View all")} />}
           />
           {recentNotifs.length === 0 ? (
-            <p className="text-sm text-[var(--color-muted)]">
-              {tr("v5_home_no_notifications", "No notifications.")}
-            </p>
+            <CompactEmpty icon={Bell} title={tr("v5_home_no_notifications", "You’re all caught up")} body={tr("v5_home_no_notifications_desc", "New alerts will appear here.")} />
           ) : (
-            <ul className="space-y-1.5 text-xs">
-              {recentNotifs.map((n) => (
-                <li key={n.id}>
-                  <span className="font-medium">{n.title}</span>
-                  {n.body && (
-                    <span className="ml-1 text-[var(--color-muted)]">
-                      {n.body}
-                    </span>
-                  )}
+            <ul className="space-y-2">
+              {recentNotifs.map((notification) => (
+                <li key={notification.id} className="rounded-lg bg-[color-mix(in_oklab,var(--color-surface)_45%,transparent)] px-3 py-2 text-xs">
+                  <div className="font-semibold">{notification.title}</div>
+                  {notification.body && <div className="mt-0.5 line-clamp-2 text-[var(--color-muted)]">{notification.body}</div>}
                 </li>
               ))}
             </ul>
@@ -361,63 +286,72 @@ export default function HomeScreen() {
   );
 }
 
-function CardHeader({ icon: Icon, title }: { icon: LucideIcon; title: string }) {
+function SectionHeading({ icon: Icon, title, description, action }: { icon: LucideIcon; title: string; description: string; action?: React.ReactNode }) {
   return (
-    <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
-      <Icon size={16} aria-hidden className="text-[var(--color-muted)]" />
-      {title}
-    </h2>
+    <header className="mb-4 flex items-start gap-3">
+      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[0.6rem] bg-[var(--color-surface-3)] text-[var(--color-muted)]"><Icon size={15} /></span>
+      <div className="min-w-0 flex-1">
+        <h2 className="text-sm font-semibold tracking-tight">{title}</h2>
+        <p className="mt-0.5 text-[0.6875rem] text-[var(--color-muted)]">{description}</p>
+      </div>
+      {action}
+    </header>
   );
 }
 
-function KvRow({
-  label,
-  value,
-  tone,
-  small,
-}: {
-  label: string;
-  value: string;
-  tone?: "good" | "warn" | "bad";
-  small?: boolean;
-}) {
-  const toneCls =
-    tone === "good"
-      ? "text-[var(--color-good)]"
-      : tone === "warn"
-        ? "text-[var(--color-warn)]"
-        : tone === "bad"
-          ? "text-[var(--color-bad)]"
-          : "";
+function MetricRow({ label, value, tone }: { label: string; value: string; tone?: "good" | "warn" | "bad" }) {
+  const color = tone === "good" ? "text-[var(--color-good)]" : tone === "warn" ? "text-[var(--color-warn)]" : tone === "bad" ? "text-[var(--color-bad)]" : "text-[var(--color-text)]";
   return (
-    <div className="flex items-center justify-between text-sm">
+    <div className="metric-row">
       <span className="text-[var(--color-muted)]">{label}</span>
-      <span
-        className={`tabular-nums ${toneCls} ${small ? "max-w-[200px] truncate" : ""}`}
-        title={value}
-      >
-        {value}
-      </span>
+      <span className={`max-w-[65%] truncate font-medium tabular-nums ${color}`} title={value}>{value}</span>
     </div>
   );
 }
 
-function QuickAction({
-  to,
-  icon: Icon,
-  label,
-}: {
-  to: string;
-  icon: LucideIcon;
-  label: string;
-}) {
+function SensorMetric({ label, value }: { label: string; value: string }) {
   return (
-    <Link
-      to={to}
-      className="flex flex-col items-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-center transition-colors hover:border-[var(--color-accent)] hover:bg-[var(--color-surface-3)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)]"
-    >
-      <Icon size={20} aria-hidden className="text-[var(--color-accent)]" />
-      <span className="text-xs font-medium">{label}</span>
+    <div className="rounded-lg bg-[var(--color-surface-2)] px-2.5 py-2">
+      <div className="text-[0.625rem] uppercase tracking-wide text-[var(--color-muted)]">{label}</div>
+      <div className="mt-0.5 text-base font-semibold tabular-nums">{value}</div>
+    </div>
+  );
+}
+
+function QuickAction({ to, icon: Icon, label, readiness }: { to: string; icon: LucideIcon; label: string; readiness: { ready: boolean; blockers: string[]; warnings: string[] } }) {
+  const detail = readiness.ready ? readiness.warnings[0] || "Ready" : readiness.blockers[0] || "Unavailable";
+  const content = (
+    <>
+      <span className="action-tile-icon"><Icon size={17} aria-hidden /></span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-xs font-semibold">{label}</span>
+        <span className="mt-0.5 block truncate text-[0.625rem] text-[var(--color-muted)]">{detail}</span>
+      </span>
+      {readiness.ready && <ArrowRight size={14} className="shrink-0 text-[var(--color-muted)]" aria-hidden />}
+    </>
+  );
+  if (!readiness.ready) {
+    return <div aria-disabled="true" title={readiness.blockers.join(" ")} className="action-tile">{content}</div>;
+  }
+  return <Link to={to} className="action-tile">{content}</Link>;
+}
+
+function CompactEmpty({ icon: Icon, title, body }: { icon: LucideIcon; title: string; body: string }) {
+  return (
+    <div className="flex min-h-24 items-center gap-3 rounded-xl border border-dashed border-[var(--color-border)] bg-[color-mix(in_oklab,var(--color-surface)_30%,transparent)] px-4 py-3">
+      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[var(--color-surface-3)] text-[var(--color-muted)]"><Icon size={16} /></span>
+      <div>
+        <div className="text-xs font-semibold">{title}</div>
+        <div className="mt-0.5 text-[0.6875rem] text-[var(--color-muted)]">{body}</div>
+      </div>
+    </div>
+  );
+}
+
+function InlineLink({ to, label }: { to: string; label: string }) {
+  return (
+    <Link to={to} className="inline-flex shrink-0 items-center gap-1 text-[0.6875rem] font-semibold text-[var(--color-accent)] hover:underline">
+      {label}<ArrowRight size={12} />
     </Link>
   );
 }

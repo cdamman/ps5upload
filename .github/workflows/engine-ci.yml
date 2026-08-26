@@ -324,6 +324,14 @@ jobs:
         working-directory: client
         run: npm run build:vite
 
+      - name: Install Playwright Chromium
+        working-directory: client
+        run: npx playwright install --with-deps chromium
+
+      - name: Browser workflow smoke test
+        working-directory: client
+        run: npm run test:e2e
+
   # ─────────────────────────────────────────────────────────────────────
   # Repo scripts and hygiene. Runs the same parser/audit layer exposed by
   # `make lint-scripts` / `npm run scripts:check`.

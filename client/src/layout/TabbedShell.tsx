@@ -94,10 +94,13 @@ export default function TabbedShell<Id extends string>({
 
   const activeTab = coerceTabId<Id>(searchParams.get("tab"), tabs);
   const setActiveTab = (next: Id) => {
-    // Always writes the param (even for the default) so back-button
-    // history is consistent regardless of which tab the user landed
-    // on first. `replace` so tab changes don't pollute history.
-    setSearchParams({ tab: next }, { replace: true });
+    if (next === activeTab) return;
+    // A tab here is a full user-facing view, not a transient filter. Push it
+    // into history so the global Back/Forward controls restore the previous
+    // view. Preserve unrelated query state owned by the screen.
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set("tab", next);
+    setSearchParams(nextParams);
   };
   const onTabKey = makeTabKeyHandler<Id>(
     tabs.map((t) => t.id),

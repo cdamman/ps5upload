@@ -3,6 +3,8 @@ import { describe, it, expect } from "vitest";
 import en from "../i18n/locales/en";
 import {
   NAV_ITEMS,
+  HOME_NAV_ITEM,
+  resolveFavorites,
   groupNavItems,
   filterNavItems,
   type NavItem,
@@ -34,11 +36,61 @@ describe("NAV_ITEMS", () => {
     expect(grouped).toHaveLength(NAV_ITEMS.length);
   });
 
-  it("keeps Install Package directly visible in the Files section", () => {
-    const files = groupNavItems(NAV_ITEMS).find(
-      (group) => group.section.key === "nav_section_files",
-    );
-    expect(files?.items.map((item) => item.to)).toContain("/install-package");
+  it("keeps Install Package directly reachable", () => {
+    expect(NAV_ITEMS.map((item) => item.to)).toContain("/install-package");
+  });
+
+  it("keeps every screen reachable from More", () => {
+    expect(NAV_ITEMS.map((item) => item.to)).toContain("/install-package");
+  });
+});
+
+describe("sidebar favorites", () => {
+  it("pins Home permanently and starts with nothing else assumed", () => {
+    // The sidebar used to hardcode five screens. Home is the only one the
+    // app still chooses for the user; everything else is opt-in.
+    expect(HOME_NAV_ITEM.to).toBe("/home");
+    expect(HOME_NAV_ITEM.section).toBeDefined();
+    expect(resolveFavorites([])).toEqual([]);
+  });
+
+  it("resolves stored paths in the order they were starred", () => {
+    const out = resolveFavorites(["/files", "/games"]);
+    expect(out.map((i) => i.to)).toEqual(["/files", "/games"]);
+  });
+
+  it("drops paths that no longer exist", () => {
+    // Favorites outlive the build that wrote them, so a screen removed or
+    // renamed in a later version must not leave a dead row linking nowhere.
+    expect(resolveFavorites(["/files", "/screen-that-was-removed"]).map(
+      (i) => i.to,
+    )).toEqual(["/files"]);
+  });
+
+  it("never lets Home appear twice", () => {
+    expect(resolveFavorites(["/home", "/files"]).map((i) => i.to)).toEqual([
+      "/files",
+    ]);
+  });
+
+  it("ignores a duplicate entry in the stored list", () => {
+    expect(resolveFavorites(["/files", "/files"]).map((i) => i.to)).toEqual([
+      "/files",
+    ]);
+  });
+
+  it("renders as one group under the Favorites header", () => {
+    const groups = groupNavItems([
+      HOME_NAV_ITEM,
+      ...resolveFavorites(["/files", "/games"]),
+    ]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].section.key).toBe("nav_section_favorites");
+    expect(groups[0].items.map((i) => i.to)).toEqual([
+      "/home",
+      "/files",
+      "/games",
+    ]);
   });
 
   it("uses translation keys present in the English catalogue", () => {

@@ -1058,6 +1058,52 @@ describe("runPkgInstall — forwards deleteStaging to the engine", () => {
     expect(dpiArgs?.localPs5Path).toBe(localPs5Path);
   });
 
+  it("issue #277: firmware-12 INVALID_SLOT is never reported as accepted or installed", async () => {
+    mockedInvoke.mockReset();
+    mockedInvoke.mockImplementation(async (cmd: unknown) => {
+      if (cmd === "pkg_install_start") {
+        return {
+          err_code: 0x80b2116f,
+          err_message:
+            "PS5 AppInst/PlayGo rejected this firmware/package combination (0x80B2116F) — the staged pkg was kept; use Settings → System → Debug Settings → Game → Package Installer",
+          register_path: "none",
+          package_type: "PS4GD",
+        };
+      }
+      if (cmd === "dpi_ensure") return { ok: true };
+      if (cmd === "pkg_dpi_install") {
+        return {
+          ok: false,
+          rc: 0x80b2116f,
+          err_message:
+            "PS5 AppInst/PlayGo rejected this firmware/package combination (0x80B2116F) — the staged pkg was kept; use Settings → System → Debug Settings → Game → Package Installer",
+        };
+      }
+      if (cmd === "payload_bundled_path") {
+        return { ok: true, path: "/tmp/p.elf" };
+      }
+      return {};
+    });
+
+    const localPs5Path =
+      "/user/data/ps5upload/pkg_library/EP1004-CUSA08519_00-REDEMPTION000002.pkg";
+    const r = await runPkgInstall(
+      "192.168.50.200",
+      localPs5Path,
+      "EP1004-CUSA08519_00-REDEMPTION000002",
+      "PS4GD",
+      true,
+    );
+
+    expect(r.installed).toBe(false);
+    expect(r.acceptedUnverified).toBe(false);
+    expect(r.errMessage).toContain("0x80B2116F");
+    const dpiArgs = mockedInvoke.mock.calls.find(
+      (call) => call[0] === "pkg_dpi_install",
+    )?.[1] as { localPs5Path?: string } | undefined;
+    expect(dpiArgs?.localPs5Path).toBe(localPs5Path);
+  });
+
   it("confirms a staged DLC routed directly to DPI by exact fingerprint", async () => {
     const fingerprint = "a".repeat(64);
     const contentId = "UP9000-CUSA00900_00-SPDLCMESSENGER00";

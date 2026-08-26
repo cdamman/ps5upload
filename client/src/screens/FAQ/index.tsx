@@ -140,7 +140,11 @@ export default function FAQScreen() {
                   size="sm"
                   onClick={() => setLoadAttempt((n) => n + 1)}
                 >
-                  {tr("try_again", undefined, "Try again")}
+                  {/* NOT `try_again` — that key is the hint sentence "Try
+                      again in a moment." and rendered as a full sentence,
+                      period and all, on this button. This key is the bare
+                      imperative and is translated in every locale. */}
+                  {tr("errorboundary_try_again", undefined, "Try again")}
                 </Button>
               }
             />

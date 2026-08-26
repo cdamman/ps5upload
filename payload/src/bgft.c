@@ -1230,11 +1230,9 @@ int bgft_install_start(const char *url,
      * its rc==0 and returning first short-circuited the path that actually
      * works (InstallByPackage, Tier 1 below — klog shows the full
      * PlayGoCore transfer + prepromote, and /user/app/<id>/app.pkg lands
-     * with playgo locus=3). So AppInstallPkg stays the ABSOLUTE LAST RESORT
-     * (try_appinst_local_last_resort:), reached only when every real
-     * installer path has failed, and the engine verifies the content
-     * actually landed before reporting success (never trusts rc==0 — see
-     * ps5upload_core::pkg_install::verify_launchable). */
+     * with playgo locus=3). AppInstallPkg is therefore available only through
+     * the explicit host-driven diagnostic selector above; the automatic
+     * cascade never calls it. */
 
     /* ─── Tier ordering ──────────────────────────────────────────────
      *   1. **In-process AppInstUtil** (preferred): call
@@ -1364,11 +1362,8 @@ int bgft_install_start(const char *url,
      * symptom users report. Running it second meant a single InstallByPackage
      * rejection on 12.xx silently produced a dead tile AND reported success,
      * never reaching the two LAUNCHABLE fallbacks below (shellui-rpc, legacy
-     * BGFT IntDebug). It is now the ABSOLUTE LAST RESORT — see the
-     * `try_appinst_local_last_resort:` label at the end of this function. It
-     * is reached only after every launchable path has failed, and on success
-     * it tags g_last_register_path = "appinst-local" so the host warns the
-     * title may not launch instead of showing a clean success. */
+     * BGFT IntDebug). It is no longer part of the automatic cascade; only an
+     * explicit diagnostic method request can invoke it. */
 
     {
         /* Tier 2: ShellUI RPC fallback. Only reached when the in-process
@@ -1430,7 +1425,7 @@ int bgft_install_start(const char *url,
         *out_err_code = saved_app_err != 0
                           ? saved_app_err
                           : BGFT_ERR_LIB_NOT_LOADABLE;
-        goto try_appinst_local_last_resort;
+        goto fail_after_launchable_paths;
     }
 
     pthread_mutex_lock(&g_mtx);
@@ -1515,7 +1510,7 @@ int bgft_install_start(const char *url,
                 "[bgft] sceBgftServiceDownloadRegisterTask failed: 0x%08X "
                 "(content_id=%s, url=%s)\n",
                 (unsigned)rc, content_id, url);
-        goto try_appinst_local_last_resort;
+        goto fail_after_launchable_paths;
     }
 
     rc = g_bgft_start(task_id);
@@ -1527,67 +1522,26 @@ int bgft_install_start(const char *url,
         fprintf(stderr,
                 "[bgft] sceBgftServiceIntDownloadStartTask(%d) failed: 0x%08X\n",
                 task_id, (unsigned)rc);
-        goto try_appinst_local_last_resort;
+        goto fail_after_launchable_paths;
     }
 
     *out_task_id = task_id;
     pthread_mutex_unlock(&g_mtx);
     return 0;
 
-try_appinst_local_last_resort:
+fail_after_launchable_paths:
     (void)0; /* a label may not directly precede a declaration in C */
-    /* ─── Last resort: local-disk AppInstallPkg (may not launch) ──────────
-     * Reached only after EVERY launchable path failed: in-process
-     * InstallByPackage, shellui-rpc, and legacy BGFT IntDebug. As a final
-     * attempt we try sceAppInstUtilAppInstallPkg for a locally-staged pkg —
-     * an install the user can re-trigger beats no install at all. This call
-     * can register a title the launcher rejects ("can't start the game or
-     * app") on some firmwares, so on success we report register_path
-     * "appinst-local": the host treats that as "installed, but may not
-     * launch" and tells the user to re-install from the PS5's
-     * Settings → Package Installer if it won't boot.
-     *
-     * HTTP-sourced installs have nothing staged on local disk (url is an
-     * http(s):// URL, not a bare path), so this is skipped for them and we
-     * surface the launchable-tier failure code set by whichever path jumped
-     * here.
-     *
-     * CRITICAL — package-type gate: AppInstallPkg installs the pkg as a FRESH
-     * APP. For a base game (…GD) that's a recoverable "may not launch" tile, but
-     * for a PATCH (…DP) or DLC/add-on (…AC) it OVERWRITES and WIPES the base
-     * game instead of applying on top (HW-proven: a Bloodborne patch deleted the
-     * installed 26 GB base on FW 9.60). A patch/DLC must NEVER be installed this
-     * way — better to fail cleanly (base intact, user retries) than destroy a
-     * game. So this last resort is restricted to full-app packages. */
-    int last_resort_destructive_for_type = 0;
-    {
-        size_t pt_len = package_type ? strlen(package_type) : 0;
-        const char *pt_suffix = pt_len >= 2 ? package_type + pt_len - 2 : "";
-        /* …DP = (delta) patch, …AC = additional content / DLC. */
-        last_resort_destructive_for_type =
-            (strcmp(pt_suffix, "DP") == 0 || strcmp(pt_suffix, "AC") == 0);
-    }
-    if (url[0] == '/' && last_resort_destructive_for_type) {
-        fprintf(stderr,
-                "[bgft] NOT using appinst-local last-resort for package_type=%s "
-                "(it installs as a fresh app and would WIPE the base game) — "
-                "failing cleanly, base left intact\n",
-                package_type ? package_type : "?");
-    } else if (url[0] == '/') {
-        int32_t local_tid = -1;
-        uint32_t local_err = 0;
-        int local_rc = appinst_install_start_local(url, content_id,
-                                                    &local_tid, &local_err);
-        if (local_rc == 0) {
-            *out_task_id = local_tid;
-            *out_err_code = 0;
-            g_last_register_path = "appinst-local";
-            return 0;
-        }
-        fprintf(stderr,
-                "[bgft] appinst-local last-resort also failed (rc=0x%08X)\n",
-                (unsigned)local_err);
-    }
+    /* Never call sceAppInstUtilAppInstallPkg as an automatic fallback. It has
+     * two hardware-proven unsafe outcomes: patch/DLC can overwrite a base, and
+     * a base game can return rc=0 while copying zero bytes (issue #277,
+     * FW 12.40). Returning the launchable-tier error immediately lets the host
+     * try standalone DPI or show precise manual-installer guidance without
+     * manufacturing a task that can never progress. The explicit host-driven
+     * method selector above remains available for controlled diagnostics. */
+    fprintf(stderr,
+            "[bgft] appinst-local automatic fallback disabled; preserving "
+            "launchable-tier failure rc=0x%08X\n",
+            (unsigned)*out_err_code);
     /* *out_err_code already holds the launchable-tier failure code set by
      * the path that jumped here — surface that as the real cause. */
     return -1;

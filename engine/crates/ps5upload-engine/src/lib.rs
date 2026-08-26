@@ -91,6 +91,7 @@ use ps5upload_core::{
     users::{user_list, UserList},
     volumes::{list_volumes, VolumeList},
 };
+use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 
 /// Build a `TransferConfig` for the given address, applying `FTX2_INFLIGHT_SHARDS`
 /// and `FTX2_INFLIGHT_BYTES` env overrides if set. Invalid values fall back
@@ -549,6 +550,97 @@ async fn loopback_guard(
     (StatusCode::FORBIDDEN, "loopback only").into_response()
 }
 
+/// Reject browser-initiated cross-site access even when the peer itself is
+/// loopback. Without this, a malicious web page can target localhost and use
+/// permissive CORS (or a state-changing GET embedded as an image) to control
+/// the console through the engine. Native/Tauri proxies and CLI clients do not
+/// send browser fetch metadata and remain supported.
+fn browser_origin_allows(origin: &str, host: &str) -> bool {
+    let Some((origin_scheme, origin_rest)) = origin.split_once("://") else {
+        return false;
+    };
+    let origin_authority = origin_rest.split('/').next().unwrap_or("");
+    if origin_authority.eq_ignore_ascii_case(host) {
+        return true;
+    }
+    // Vite development serves the renderer on a different port, but both
+    // sides are still loopback. Production web UI is same-origin.
+    fn authority_name(authority: &str) -> &str {
+        let name = if let Some(bracketed) = authority.strip_prefix('[') {
+            bracketed.split(']').next().unwrap_or("")
+        } else {
+            authority.split(':').next().unwrap_or("")
+        };
+        name
+    }
+    fn loopback_name(authority: &str) -> bool {
+        let name = authority_name(authority);
+        name.eq_ignore_ascii_case("localhost") || name == "127.0.0.1" || name == "::1"
+    }
+    let origin_name = authority_name(origin_authority);
+    let tauri_renderer = origin_name.eq_ignore_ascii_case("tauri.localhost")
+        || ((origin_scheme.eq_ignore_ascii_case("tauri")
+            || origin_scheme.eq_ignore_ascii_case("asset"))
+            && origin_name.eq_ignore_ascii_case("localhost"));
+
+    // Tauri's renderer is intentionally cross-origin from its localhost
+    // sidecar (`http://tauri.localhost` / `tauri://localhost`). Browsers do
+    // not let arbitrary pages forge Origin, so this preserves the native app
+    // while foreign web origins remain denied. Vite uses loopback cross-port
+    // fetches during development and receives the same narrow exception.
+    tauri_renderer || (loopback_name(origin_authority) && loopback_name(host))
+}
+
+fn browser_request_allows(headers: &axum::http::HeaderMap, path: &str) -> bool {
+    if path.starts_with("/pkg-host/") {
+        return true;
+    }
+    let cross_site = headers
+        .get("sec-fetch-site")
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|v| v.eq_ignore_ascii_case("cross-site"));
+    let Some(host) = headers.get("host").and_then(|v| v.to_str().ok()) else {
+        return false;
+    };
+    let Some(origin) = headers.get("origin").and_then(|v| v.to_str().ok()) else {
+        // Browser image subresources do not normally send Origin. Tauri's
+        // renderer therefore reaches the loopback sidecar with
+        // `Sec-Fetch-Site: cross-site`, `Sec-Fetch-Dest: image`, and a trusted
+        // Referer. Permit that shape only for the two read-only cover routes;
+        // keeping the path + destination checks narrow prevents a foreign
+        // page from turning an embedded GET into access to another API route.
+        if cross_site
+            && matches!(path, "/api/ps5/app-icon" | "/api/ps5/game-icon")
+            && headers
+                .get("sec-fetch-dest")
+                .and_then(|v| v.to_str().ok())
+                .is_some_and(|v| v.eq_ignore_ascii_case("image"))
+        {
+            return headers
+                .get("referer")
+                .and_then(|v| v.to_str().ok())
+                .is_some_and(|referer| browser_origin_allows(referer, host));
+        }
+        // Other cross-site navigations and embedded GETs may also omit Origin
+        // but still carry Fetch Metadata. Native/CLI clients carry neither.
+        return !cross_site;
+    };
+    browser_origin_allows(origin, host)
+}
+
+async fn browser_origin_guard(req: Request, next: Next) -> impl IntoResponse {
+    let path = req.uri().path();
+    if browser_request_allows(req.headers(), path) {
+        return next.run(req).await.into_response();
+    }
+    eprintln!("[ps5upload-engine] refusing cross-site browser request to {path}");
+    (
+        StatusCode::FORBIDDEN,
+        "cross-site browser requests are not allowed",
+    )
+        .into_response()
+}
+
 /// Walk a directory and return `(total_bytes, planned_files)` — collects
 /// rel_path + size
 /// for each regular file so the UI can render per-file progress.
@@ -970,6 +1062,87 @@ fn now_ms() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_millis() as u64)
         .unwrap_or(0)
+}
+
+/// Fast host-side capacity gate for a fresh transaction. The payload repeats
+/// the check authoritatively at BEGIN_TX (including resumes), but doing it here
+/// lets the desktop job fail with a useful message before opening the transfer
+/// socket. A telemetry failure is deliberately non-fatal: an older payload or
+/// a temporarily busy management port must not make every upload impossible.
+fn preflight_capacity_failure(
+    addr: &str,
+    dest: &str,
+    required_bytes: u64,
+) -> Option<(String, String)> {
+    let mgmt = mgmt_addr_for(addr);
+    let volumes = match list_volumes(&mgmt) {
+        Ok(v) => v,
+        Err(e) => {
+            crate::log_warn!("capacity preflight unavailable: addr={addr} dest={dest} error={e:#}");
+            return None;
+        }
+    };
+    let Some(volume) = volumes.find_for_path(dest) else {
+        crate::log_warn!(
+            "capacity preflight found no volume: addr={addr} dest={dest}; payload will verify"
+        );
+        return None;
+    };
+    let allocatable = volume.allocatable_bytes();
+    if required_bytes <= allocatable {
+        return None;
+    }
+    let short = required_bytes.saturating_sub(allocatable);
+    let reserve = volume.safety_reserve_bytes();
+    Some((
+        format!(
+            "Destination volume `{}` does not have enough safely allocatable space: need {} bytes, have {} bytes ({} bytes short).",
+            volume.path, required_bytes, allocatable, short
+        ),
+        format!(
+            "{} reports {} bytes free; {} bytes are reserved for PS5/system and filesystem safety, leaving {} allocatable. Need {} more bytes.",
+            volume.path, volume.free_bytes, reserve, allocatable, short
+        ),
+    ))
+}
+
+// These are the exact pieces required to publish a terminal async job state;
+// wrapping them in a one-use context struct would only move the surface area.
+#[allow(clippy::too_many_arguments)]
+fn fail_job_if_capacity_insufficient(
+    jobs: &Arc<Mutex<HashMap<Uuid, JobState>>>,
+    events_tx: &broadcast::Sender<String>,
+    job_id: Uuid,
+    started_at_ms: u64,
+    addr: &str,
+    dest: &str,
+    required_bytes: u64,
+    is_resume: bool,
+) -> bool {
+    // On resume the host cannot distinguish sparse logical length from real
+    // allocated blocks. The payload has the transaction journal and performs
+    // the accurate remaining-allocation check at BEGIN_TX.
+    if is_resume {
+        return false;
+    }
+    let Some((error, detail)) = preflight_capacity_failure(addr, dest, required_bytes) else {
+        return false;
+    };
+    let completed_at_ms = now_ms();
+    set_job(
+        jobs,
+        events_tx,
+        job_id,
+        JobState::Failed {
+            started_at_ms,
+            completed_at_ms,
+            elapsed_ms: completed_at_ms.saturating_sub(started_at_ms),
+            error,
+            error_reason: Some("preflight_insufficient_space".to_string()),
+            error_detail: Some(detail),
+        },
+    );
+    true
 }
 
 // ─── Request / response types ─────────────────────────────────────────────────
@@ -3807,69 +3980,18 @@ async fn transfer_file_handler(
         cfg.progress_bytes_finalized = Some(Arc::clone(&progress_bytes_finalized));
         apply_per_request_bandwidth(&mut cfg, bandwidth_cap);
 
-        // Pre-flight free-space check. Catches the most common cause
-        // of mid-stream `direct_writer_io_error` failures (PS5
-        // destination drive ran out of space) before the user wastes
-        // an hour uploading bytes that can't fit. Runs inside this
-        // spawn_blocking task — the ~200-500 ms list_volumes round-
-        // trip doesn't slow the API response, and any failure
-        // surfaces as a Failed job with the standard error-card
-        // plumbing (humanized hint + raw detail).
-        //
-        // We skip the check on resume attempts (caller_supplied_tx_id):
-        // the destination already has shards from a prior attempt, so
-        // free_bytes < total_bytes is the EXPECTED state — the bytes
-        // we need to write are smaller than total minus what's
-        // already there. Skipping avoids a false-positive block on
-        // every Retry click for a long-running upload.
-        //
-        // Errors during the check (network blip, payload restarting)
-        // are non-fatal: we log and proceed with the upload. Better
-        // UX than refusing a transfer that might have succeeded.
-        if !caller_supplied_tx_id {
-            let mgmt = mgmt_addr_for(&addr);
-            match list_volumes(&mgmt) {
-                Ok(vlist) => {
-                    if let Some(vol) = vlist.find_for_path(&req.dest) {
-                        if vol.free_bytes < total_bytes {
-                            let short = total_bytes - vol.free_bytes;
-                            let completed_at_ms = now_ms();
-                            set_job(
-                                &jobs,
-                                &events_tx,
-                                job_id,
-                                JobState::Failed {
-                                    started_at_ms,
-                                    completed_at_ms,
-                                    elapsed_ms: completed_at_ms
-                                        .saturating_sub(started_at_ms),
-                                    error: format!(
-                                        "Destination volume `{}` has only {} bytes free, but the source file is {} bytes ({} short).",
-                                        vol.path, vol.free_bytes, total_bytes, short
-                                    ),
-                                    error_reason: Some(
-                                        "preflight_insufficient_space".to_string(),
-                                    ),
-                                    error_detail: Some(format!(
-                                        "{} short by {} bytes (have {}, need {}).",
-                                        vol.path, short, vol.free_bytes, total_bytes
-                                    )),
-                                },
-                            );
-                            fail_guard.mark_succeeded();
-                            return;
-                        }
-                    }
-                    // No matching volume: don't block — better to let
-                    // the upload try than to refuse on a stale or
-                    // incomplete volume table.
-                }
-                Err(e) => {
-                    eprintln!(
-                        "[preflight] free-space check failed for {addr}: {e:#}; proceeding with upload"
-                    );
-                }
-            }
+        if fail_job_if_capacity_insufficient(
+            &jobs,
+            &events_tx,
+            job_id,
+            started_at_ms,
+            &addr,
+            &req.dest,
+            total_bytes,
+            caller_supplied_tx_id,
+        ) {
+            fail_guard.mark_succeeded();
+            return;
         }
 
         // Resume-on-drop for single-file uploads: 1 fresh attempt +
@@ -4048,6 +4170,19 @@ async fn transfer_dir_handler(
             files_sent_count,
             total_bytes
         );
+        if fail_job_if_capacity_insufficient(
+            &jobs,
+            &events_tx,
+            job_id,
+            started_at_ms,
+            &addr,
+            &req.dest_root,
+            total_bytes,
+            caller_supplied_tx_id,
+        ) {
+            fail_guard.mark_succeeded();
+            return;
+        }
 
         let progress = Arc::new(AtomicU64::new(0));
         let progress_files = Arc::new(AtomicU64::new(0));
@@ -4609,6 +4744,19 @@ async fn transfer_zip_handler(
         let _stop_guard = TickerStopGuard::new(stop_ticker);
         let mut fail_guard =
             JobFailOnDropGuard::new(Arc::clone(&jobs), events_tx.clone(), job_id, started_at_ms);
+        if fail_job_if_capacity_insufficient(
+            &jobs,
+            &events_tx,
+            job_id,
+            started_at_ms,
+            &addr,
+            &req.dest_root,
+            total_bytes,
+            caller_supplied_tx_id,
+        ) {
+            fail_guard.mark_succeeded();
+            return;
+        }
         let mut cfg = make_transfer_config(&addr);
         // Make this transfer cancellable: register a flag the core checks at
         // every shard boundary, flipped by POST /api/jobs/{id}/cancel.
@@ -6090,6 +6238,19 @@ async fn transfer_7z_handler(
         // blip, or the payload's serial accept loop still draining the dropped
         // connection) burned both retries inside the first 1.5 s of backoff
         // and surfaced as "transfer_zip gave up after 2 retries".
+        if fail_job_if_capacity_insufficient(
+            &jobs,
+            &events_tx,
+            job_id,
+            started_at_ms,
+            &addr,
+            &req.dest_root,
+            total_bytes,
+            caller_supplied_tx_id,
+        ) {
+            fail_guard.mark_succeeded();
+            return;
+        }
         let result = transfer_7z_resumable(
             &cfg,
             tx_id,
@@ -6284,6 +6445,19 @@ async fn transfer_rar_handler(
         let _stop_guard = TickerStopGuard::new(stop_ticker);
         let mut fail_guard =
             JobFailOnDropGuard::new(Arc::clone(&jobs), events_tx.clone(), job_id, started_at_ms);
+        if fail_job_if_capacity_insufficient(
+            &jobs,
+            &events_tx,
+            job_id,
+            started_at_ms,
+            &addr,
+            &req.dest_root,
+            total_bytes,
+            caller_supplied_tx_id,
+        ) {
+            fail_guard.mark_succeeded();
+            return;
+        }
         let mut cfg = make_transfer_config(&addr);
         // Make this transfer cancellable: register a flag the core checks at
         // every shard boundary, flipped by POST /api/jobs/{id}/cancel.
@@ -6514,6 +6688,19 @@ async fn transfer_file_list_handler(
         let _stop_guard = TickerStopGuard::new(stop_ticker);
         let mut fail_guard =
             JobFailOnDropGuard::new(Arc::clone(&jobs), events_tx.clone(), job_id, started_at_ms);
+        if fail_job_if_capacity_insufficient(
+            &jobs,
+            &events_tx,
+            job_id,
+            started_at_ms,
+            &addr,
+            &req.dest_root,
+            total_bytes,
+            caller_supplied_tx_id,
+        ) {
+            fail_guard.mark_succeeded();
+            return;
+        }
         let mut cfg = make_transfer_config(&addr);
         // Make this transfer cancellable: register a flag the core checks at
         // every shard boundary, flipped by POST /api/jobs/{id}/cancel.
@@ -7428,6 +7615,20 @@ async fn transfer_dir_reconcile_handler(
             })
             .collect();
 
+        if fail_job_if_capacity_insufficient(
+            &jobs,
+            &events_tx,
+            job_id,
+            started_at_ms,
+            &addr,
+            &req.dest_root,
+            total_bytes,
+            caller_supplied_tx_id,
+        ) {
+            fail_guard.mark_succeeded();
+            return;
+        }
+
         let streams = req.streams.unwrap_or(1);
         let mut cfg = make_transfer_config(&addr);
         // Make this transfer cancellable: register a flag the core checks at
@@ -8010,6 +8211,23 @@ async fn run(cfg: EngineConfig) -> anyhow::Result<()> {
     #[cfg(feature = "webui")]
     let app = app.fallback(webui::spa_fallback);
 
+    let cors = CorsLayer::new()
+        .allow_origin(AllowOrigin::predicate(|origin, request| {
+            let Some(host) = request
+                .headers
+                .get(header::HOST)
+                .and_then(|value| value.to_str().ok())
+            else {
+                return false;
+            };
+            origin
+                .to_str()
+                .ok()
+                .is_some_and(|value| browser_origin_allows(value, host))
+        }))
+        .allow_methods(Any)
+        .allow_headers(Any);
+
     let app = app
         // .pkg install — sessions live in their own state because the
         // HTTP-host serving handler needs Mutex-guarded session lookup
@@ -8018,12 +8236,12 @@ async fn run(cfg: EngineConfig) -> anyhow::Result<()> {
         .merge(pkg_install::router(std::sync::Arc::new(
             pkg_install::PkgInstallState::default(),
         )))
-        // Permissive CORS — the only off-loopback route that ever
-        // sees a real request is `/pkg-host/*` (PS5 server-side fetch,
-        // no browser, no CORS preflight). For loopback Tauri-API hits,
-        // the loopback_guard above is the real auth gate; CORS just
-        // makes browser dev-tools curl reproducers easier.
-        .layer(tower_http::cors::CorsLayer::permissive())
+        // Tauri's renderer performs a few direct fetches to the sidecar for
+        // liveness, job polling and streamed resources. Emit CORS headers only
+        // for origins accepted by the same narrow trust rule as the guard
+        // below. The guard sits outside this layer, so foreign origins are
+        // rejected before CORS can answer either a simple request or preflight.
+        .layer(cors)
         // Explicit body-size cap. Axum's default DefaultBodyLimit is
         // 2 MiB, which is borderline for a TransferFileListReq carrying
         // tens of thousands of file paths and could silently change
@@ -8037,6 +8255,7 @@ async fn run(cfg: EngineConfig) -> anyhow::Result<()> {
         // Request trace — inside the loopback guard (so we don't log rejected
         // LAN probes), wrapping the handlers so it times the full request.
         .layer(middleware::from_fn(log_requests))
+        .layer(middleware::from_fn(browser_origin_guard))
         // Loopback-guard middleware MUST be applied last so it ends
         // up the OUTERMOST layer — axum wraps each `.layer()` around
         // the one below it. Pre-2.2.52 fix-round-2 the order was
@@ -8047,7 +8266,7 @@ async fn run(cfg: EngineConfig) -> anyhow::Result<()> {
         // and CORS posture were enumerable from the LAN. With the
         // guard outermost, an off-loopback peer hitting any
         // non-`/pkg-host/*` route is rejected immediately, before
-        // CORS / body-limit / handler.
+        // body-limit / handler.
         .layer(middleware::from_fn_with_state(guard_cfg, loopback_guard));
 
     // Bind `0.0.0.0` so the PS5 can fetch `/pkg-host/*` for fakepkg
@@ -8285,6 +8504,81 @@ mod loopback_guard_tests {
             parse_allow_ips(" 192.168.1.50 , ::1 ,, not-an-ip , 10.0.0.9"),
             vec![ip("192.168.1.50"), ip("::1"), ip("10.0.0.9")]
         );
+    }
+
+    #[test]
+    fn browser_guard_rejects_cross_site_fetches() {
+        let mut headers = axum::http::HeaderMap::new();
+        headers.insert("host", "127.0.0.1:19113".parse().unwrap());
+        headers.insert("sec-fetch-site", "cross-site".parse().unwrap());
+        assert!(!browser_request_allows(&headers, "/api/jobs"));
+        assert!(browser_request_allows(
+            &headers,
+            "/pkg-host/session/file.pkg"
+        ));
+    }
+
+    #[test]
+    fn browser_guard_allows_same_origin_and_loopback_dev() {
+        let mut headers = axum::http::HeaderMap::new();
+        headers.insert("host", "nas.local:19113".parse().unwrap());
+        headers.insert("origin", "http://nas.local:19113".parse().unwrap());
+        assert!(browser_request_allows(&headers, "/api/jobs"));
+
+        headers.insert("host", "127.0.0.1:19113".parse().unwrap());
+        headers.insert("origin", "http://localhost:1420".parse().unwrap());
+        headers.insert("sec-fetch-site", "cross-site".parse().unwrap());
+        assert!(browser_request_allows(&headers, "/api/jobs"));
+    }
+
+    #[test]
+    fn browser_guard_allows_tauri_renderer() {
+        let mut headers = axum::http::HeaderMap::new();
+        headers.insert("host", "127.0.0.1:19113".parse().unwrap());
+        headers.insert("origin", "http://tauri.localhost".parse().unwrap());
+        headers.insert("sec-fetch-site", "cross-site".parse().unwrap());
+        assert!(browser_request_allows(&headers, "/api/jobs"));
+
+        headers.insert("origin", "tauri://localhost".parse().unwrap());
+        assert!(browser_request_allows(&headers, "/api/jobs"));
+    }
+
+    #[test]
+    fn browser_guard_allows_tauri_cover_images_without_origin() {
+        let mut headers = axum::http::HeaderMap::new();
+        headers.insert("host", "127.0.0.1:19113".parse().unwrap());
+        headers.insert("referer", "http://tauri.localhost/library".parse().unwrap());
+        headers.insert("sec-fetch-site", "cross-site".parse().unwrap());
+        headers.insert("sec-fetch-dest", "image".parse().unwrap());
+
+        assert!(browser_request_allows(&headers, "/api/ps5/app-icon"));
+        assert!(browser_request_allows(&headers, "/api/ps5/game-icon"));
+    }
+
+    #[test]
+    fn browser_guard_keeps_originless_cross_site_access_narrow() {
+        let mut headers = axum::http::HeaderMap::new();
+        headers.insert("host", "127.0.0.1:19113".parse().unwrap());
+        headers.insert("referer", "http://tauri.localhost/library".parse().unwrap());
+        headers.insert("sec-fetch-site", "cross-site".parse().unwrap());
+        headers.insert("sec-fetch-dest", "image".parse().unwrap());
+
+        assert!(!browser_request_allows(&headers, "/api/jobs"));
+
+        headers.insert("referer", "https://evil.example/".parse().unwrap());
+        assert!(!browser_request_allows(&headers, "/api/ps5/app-icon"));
+
+        headers.insert("referer", "http://tauri.localhost/".parse().unwrap());
+        headers.insert("sec-fetch-dest", "empty".parse().unwrap());
+        assert!(!browser_request_allows(&headers, "/api/ps5/app-icon"));
+    }
+
+    #[test]
+    fn browser_guard_rejects_foreign_origin() {
+        let mut headers = axum::http::HeaderMap::new();
+        headers.insert("host", "127.0.0.1:19113".parse().unwrap());
+        headers.insert("origin", "https://evil.example".parse().unwrap());
+        assert!(!browser_request_allows(&headers, "/api/ps5/fs/delete"));
     }
 }
 

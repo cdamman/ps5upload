@@ -1,15 +1,16 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { NavLink } from "react-router";
-import { ChevronLeft, ChevronRight, LayoutGrid } from "lucide-react";
+import { ChevronLeft, ChevronRight, LayoutGrid, X } from "lucide-react";
 
-import { isTauriEnv } from "../lib/tauriEnv";
+import { getAppVersion } from "../lib/appVersion";
 import { safeGetItem, safeSetItem } from "../lib/safeStorage";
 import { useTr } from "../state/lang";
 import { useLogsStore } from "../state/logs";
 import { useUpdateStore } from "../state/update";
+import { useNavFavoritesStore } from "../state/navFavorites";
 import NotificationInbox from "./NotificationInbox";
 import RosterPicker from "./RosterPicker";
-import { NAV_ITEMS, groupNavItems } from "./navItems";
+import { HOME_NAV_ITEM, groupNavItems, resolveFavorites } from "./navItems";
 
 const COLLAPSED_KEY = "ps5upload.desktop-sidebar.collapsed.v1";
 
@@ -24,17 +25,38 @@ export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(
     () => safeGetItem(COLLAPSED_KEY) === "1",
   );
+  // Brand eyebrow. Resolved once on mount; `getAppVersion` hits the engine
+  // over HTTP in browser mode, so a failure has to degrade to an empty
+  // string rather than throw. The span below renders unconditionally so it
+  // keeps reserving its line — otherwise the title would shift vertically
+  // when the version lands, and shift again if the lookup failed.
+  const [appVersion, setAppVersion] = useState("");
+  useEffect(() => {
+    let cancelled = false;
+    getAppVersion()
+      .then((v) => {
+        if (!cancelled) setAppVersion(v);
+      })
+      .catch(() => {
+        if (!cancelled) setAppVersion("");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const errorCount = useLogsStore(
     (s) => s.entries.filter((e) => e.level === "error").length,
   );
   const updateAvailable = useUpdateStore((s) => s.phase.kind === "available");
+  const favorites = useNavFavoritesStore((s) => s.favorites);
+  const hintDismissed = useNavFavoritesStore((s) => s.hintDismissed);
+  const dismissHint = useNavFavoritesStore((s) => s.dismissHint);
+  // Home first and always; the rest is whatever the user starred in More.
   const groups = useMemo(
-    () =>
-      groupNavItems(
-        NAV_ITEMS.filter((item) => !item.hideInBrowser || isTauriEnv()),
-      ),
-    [],
+    () => groupNavItems([HOME_NAV_ITEM, ...resolveFavorites(favorites)]),
+    [favorites],
   );
+  const showFavoritesHint = favorites.length === 0 && !hintDismissed;
 
   const toggleCollapsed = () => {
     setCollapsed((current) => {
@@ -48,13 +70,13 @@ export default function Sidebar() {
     <aside
       data-testid="desktop-sidebar"
       data-collapsed={collapsed ? "true" : "false"}
-      className={`hidden min-h-0 shrink-0 flex-col border-r border-[var(--color-border)] bg-[var(--color-surface-2)] transition-[width] duration-200 md:flex ${
-        collapsed ? "w-16" : "w-64"
+      className={`hidden min-h-0 shrink-0 flex-col border-r border-[var(--color-border)] bg-[color-mix(in_oklab,var(--color-surface-2)_94%,var(--color-surface)_6%)] transition-[width] duration-200 md:flex ${
+        collapsed ? "w-[4.25rem]" : "w-[15.5rem]"
       }`}
     >
       <div
-        className={`flex h-14 shrink-0 items-center border-b border-[var(--color-border)] ${
-          collapsed ? "justify-center px-2" : "gap-2 px-3"
+        className={`flex h-[4.25rem] shrink-0 items-center ${
+          collapsed ? "justify-center px-2" : "gap-2 px-3.5"
         }`}
       >
         <NavLink
@@ -67,11 +89,19 @@ export default function Sidebar() {
           <img
             src="/logo-square.png"
             alt=""
-            className="h-8 w-8 shrink-0 rounded-md"
+            className="h-8 w-8 shrink-0 rounded-[0.6rem] shadow-sm"
           />
           {!collapsed && (
-            <span className="truncate text-sm font-bold tracking-tight">
-              PS5Upload
+            <span className="min-w-0">
+              <span className="block truncate text-sm font-bold tracking-[-0.02em]">
+                PS5Upload
+              </span>
+              {/* Deliberately NOT `uppercase` like the nav section headings:
+                  that would render "v5.4.19" as "V5.4.19". Tabular figures
+                  keep the digits from shifting when the version changes. */}
+              <span className="block truncate text-[0.6875rem] font-medium tabular-nums tracking-[0.01em] text-[var(--color-muted)]">
+                {appVersion ? `v${appVersion}` : "\u00a0"}
+              </span>
             </span>
           )}
         </NavLink>
@@ -85,7 +115,7 @@ export default function Sidebar() {
               "Collapse navigation",
             )}
             title={tr("sidebar_collapse", undefined, "Collapse navigation")}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-[var(--color-muted)] hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text)]"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--radius-control)] text-[var(--color-muted)] hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text)]"
           >
             <ChevronLeft size={18} aria-hidden />
           </button>
@@ -96,7 +126,7 @@ export default function Sidebar() {
 
       <nav
         aria-label={tr("v5_tab_primary_nav", undefined, "Primary")}
-        className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-2 py-2 [overscroll-behavior:contain]"
+        className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-2.5 py-3 [overscroll-behavior:contain]"
       >
         {groups.map((group, groupIndex) => (
           <section
@@ -111,11 +141,11 @@ export default function Sidebar() {
                 />
               )
             ) : (
-              <h2 className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">
+              <h2 className="px-2.5 pb-1.5 text-[0.625rem] font-bold uppercase tracking-[0.12em] text-[var(--color-muted)]">
                 {tr(group.section.key, undefined, group.section.fallback)}
               </h2>
             )}
-            <ul className="space-y-0.5">
+            <ul className="space-y-1">
               {group.items.map((item) => {
                 const Icon = item.icon;
                 const label = tr(item.key, undefined, item.fallback);
@@ -129,11 +159,11 @@ export default function Sidebar() {
                       aria-label={collapsed ? label : undefined}
                       className={({ isActive }) =>
                         [
-                          "relative flex min-h-10 items-center rounded-md text-sm transition-colors",
+                          "relative flex min-h-10 items-center rounded-[0.65rem] text-[0.8125rem] transition-[background-color,color,box-shadow]",
                           "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--color-accent)]",
                           collapsed ? "justify-center px-2" : "gap-2.5 px-2.5",
                           isActive
-                            ? "bg-[var(--color-accent-soft)] font-medium text-[var(--color-accent)]"
+                            ? "bg-[var(--color-accent-soft)] font-semibold text-[var(--color-accent)] shadow-[inset_3px_0_0_var(--color-accent)]"
                             : "text-[var(--color-muted)] hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text)]",
                         ].join(" ")
                       }
@@ -171,10 +201,39 @@ export default function Sidebar() {
             </ul>
           </section>
         ))}
+
+        {/* Shown only until the user stars something (or dismisses it).
+            Without it a fresh sidebar is a single Home row with no clue
+            that the rest of the app is one click away in More. Hidden
+            while collapsed — there is no room for prose in a 4.25rem rail. */}
+        {showFavoritesHint && !collapsed && (
+          <div className="mt-3 flex items-start gap-1.5 rounded-[0.65rem] border border-dashed border-[var(--color-border)] px-2.5 py-2 text-[0.6875rem] leading-snug text-[var(--color-muted)]">
+            <span className="min-w-0 flex-1">
+              {tr(
+                "nav_favorites_hint",
+                undefined,
+                "Star screens in More to pin them here.",
+              )}
+            </span>
+            <button
+              type="button"
+              onClick={dismissHint}
+              aria-label={tr(
+                "nav_favorites_hint_dismiss",
+                undefined,
+                "Dismiss",
+              )}
+              title={tr("nav_favorites_hint_dismiss", undefined, "Dismiss")}
+              className="shrink-0 rounded p-0.5 hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text)]"
+            >
+              <X size={12} aria-hidden />
+            </button>
+          </div>
+        )}
       </nav>
 
       <div
-        className={`flex shrink-0 items-center border-t border-[var(--color-border)] p-2 ${
+        className={`flex shrink-0 items-center border-t border-[var(--color-border)] p-2.5 ${
           collapsed ? "flex-col gap-1" : "gap-1"
         }`}
       >
@@ -184,7 +243,7 @@ export default function Sidebar() {
           aria-label={
             collapsed ? tr("v5_tab_more", undefined, "More") : undefined
           }
-          className={`flex h-10 items-center rounded-md text-sm text-[var(--color-muted)] hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text)] ${
+          className={`flex h-10 items-center rounded-[0.65rem] text-[0.8125rem] text-[var(--color-muted)] hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text)] ${
             collapsed ? "w-10 justify-center" : "min-w-0 flex-1 gap-2 px-2.5"
           }`}
         >

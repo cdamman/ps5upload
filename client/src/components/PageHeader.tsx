@@ -39,11 +39,13 @@ export function PageHeader({
   right?: React.ReactNode;
 }) {
   return (
-    <header className="mb-5">
-      <div className="mb-1 flex items-center justify-between gap-3">
+    <header className="mb-6">
+      <div className="mb-1 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex min-w-0 items-center gap-3">
-          <Icon size={22} className="shrink-0 text-[var(--color-accent)]" />
-          <h1 className="truncate text-2xl font-semibold tracking-tight">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[0.7rem] bg-[var(--color-accent-soft)] text-[var(--color-accent)]">
+            <Icon size={18} />
+          </span>
+          <h1 className="truncate text-2xl font-bold tracking-[-0.025em]">
             {title}
           </h1>
           {count !== undefined && (
@@ -53,10 +55,10 @@ export function PageHeader({
           )}
           {loading && <Spinner size={14} tone="accent" />}
         </div>
-        {right && <div className="shrink-0">{right}</div>}
+        {right && <div className="shrink-0 sm:pt-0.5">{right}</div>}
       </div>
       {description && (
-        <p className="text-sm leading-relaxed text-[var(--color-muted)]">
+        <p className="max-w-3xl text-sm leading-relaxed text-[var(--color-muted)] sm:pl-12">
           {description}
         </p>
       )}

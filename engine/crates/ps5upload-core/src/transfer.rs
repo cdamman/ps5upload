@@ -76,6 +76,23 @@ pub const DEFAULT_PACK_SIZE: usize = 4 * 1024 * 1024;
 /// record. 128 KiB tracks the observed PS5 `pthread_create` crossover cost
 /// (~4–6 ms) vs small-file write time (~µs).
 pub const DEFAULT_PACK_FILE_MAX: usize = 128 * 1024;
+/// Default cap on how many files may share one packed shard.
+///
+/// `DEFAULT_PACK_SIZE` bounds a packed shard by BYTES only, which says
+/// nothing about how much work the payload must do before it can ACK.
+/// The payload creates, writes and fsyncs every record in a shard
+/// serially — hardware-measured at ~4.3 ms/file on FW 5.10 — so a tree
+/// of tiny files packs thousands of records into one 4 MiB shard and the
+/// ACK lands long after the engine's 30-second `POST_BEGIN_DEFAULT_TIMEOUT`.
+/// Verified on a live console: 5,000 × 64 B files produced `shards_sent: 1`
+/// and took 21.4 s; 10,000 files timed out with "Resource temporarily
+/// unavailable (os error 35)" after all bytes had already landed in 3 s.
+///
+/// 2,000 records ≈ 8.6 s of payload-side apply work — comfortably inside
+/// the 30 s ACK budget with room for a slower USB drive or a busy console,
+/// while still coalescing aggressively enough to keep shard counts sane.
+/// Pinned by `packed_shard_file_count_stays_inside_ack_budget`.
+pub const DEFAULT_PACK_FILE_COUNT_MAX: usize = 2000;
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -103,6 +120,11 @@ pub struct TransferConfig {
     /// writer thread (packed records are written serially). Only files with
     /// `size < pack_file_max` are packing candidates.
     pub pack_file_max: usize,
+    /// Cap on records per packed shard. Bounds the payload-side apply work
+    /// one shard can represent, so the ACK arrives inside the engine's
+    /// read timeout even when the byte budget is nowhere near full. See
+    /// `DEFAULT_PACK_FILE_COUNT_MAX`. 0 = no count limit (bytes only).
+    pub pack_file_count_max: usize,
     /// Glob-ish patterns to exclude from `transfer_dir` walks. See
     /// `crate::excludes` for the pattern grammar. Empty = include
     /// everything; populated = skip matching files before they enter the
@@ -177,6 +199,7 @@ impl TransferConfig {
             inflight_bytes: DEFAULT_INFLIGHT_BYTES,
             pack_size: DEFAULT_PACK_SIZE,
             pack_file_max: DEFAULT_PACK_FILE_MAX,
+            pack_file_count_max: DEFAULT_PACK_FILE_COUNT_MAX,
             excludes: Vec::new(),
             progress_bytes: None,
             progress_files: None,
@@ -1285,9 +1308,14 @@ pub fn transfer_file_resumable(
     max_retries: u32,
     initial_flags: u32,
 ) -> Result<TransferResult> {
-    resumable_retry(max_retries, "transfer_file", initial_flags, |flags| {
-        transfer_file_with_flags(cfg, tx_id, dest, data, flags)
-    })
+    resumable_retry(
+        cfg,
+        dest,
+        max_retries,
+        "transfer_file",
+        initial_flags,
+        |flags| transfer_file_with_flags(cfg, tx_id, dest, data, flags),
+    )
 }
 
 fn transfer_file_path_with_flags(
@@ -1527,9 +1555,14 @@ pub fn transfer_file_path_resumable(
     max_retries: u32,
     initial_flags: u32,
 ) -> Result<TransferResult> {
-    resumable_retry(max_retries, "transfer_file_path", initial_flags, |flags| {
-        transfer_file_path_with_flags(cfg, tx_id, dest, src, flags)
-    })
+    resumable_retry(
+        cfg,
+        dest,
+        max_retries,
+        "transfer_file_path",
+        initial_flags,
+        |flags| transfer_file_path_with_flags(cfg, tx_id, dest, src, flags),
+    )
 }
 
 // ─── Directory transfer ───────────────────────────────────────────────────────
@@ -1603,15 +1636,18 @@ struct PackPlanner {
     body_size: usize,
     shard_seq: u64,
     target: usize,
+    /// Max records per shard; 0 = unbounded (byte budget only).
+    count_max: usize,
 }
 
 impl PackPlanner {
-    fn new(target: usize) -> Self {
+    fn new(target: usize, count_max: usize) -> Self {
         Self {
             records: Vec::new(),
             body_size: 0,
             shard_seq: 0,
             target,
+            count_max,
         }
     }
 
@@ -1626,8 +1662,20 @@ impl PackPlanner {
             .saturating_add(s)
     }
 
+    /// Close the current shard when EITHER budget would be blown: total body
+    /// bytes, or record count. The count guard is what keeps a tree of tiny
+    /// files from packing thousands of records — and thus tens of seconds of
+    /// payload-side apply work — behind a single ACK the engine waits only
+    /// 30 s for. Never closes an empty shard: one oversized record still has
+    /// to go somewhere.
     fn would_exceed(&self, rec_size: usize) -> bool {
-        !self.records.is_empty() && self.body_size.saturating_add(rec_size) > self.target
+        if self.records.is_empty() {
+            return false;
+        }
+        if self.count_max > 0 && self.records.len() >= self.count_max {
+            return true;
+        }
+        self.body_size.saturating_add(rec_size) > self.target
     }
 
     fn start(&mut self, shard_seq: u64) {
@@ -1838,7 +1886,7 @@ pub fn transfer_dir_with_flags(
     let mut next_seq: u64 = 1;
     let pack_enabled = cfg.pack_size > 0;
     let pack_threshold = if pack_enabled { cfg.pack_file_max } else { 0 };
-    let mut packer = PackPlanner::new(cfg.pack_size.max(4096));
+    let mut packer = PackPlanner::new(cfg.pack_size.max(4096), cfg.pack_file_count_max);
 
     for lf in &local_files {
         let meta = std::fs::metadata(lf).with_context(|| format!("stat {}", lf.display()))?;
@@ -2142,7 +2190,7 @@ pub fn transfer_file_list_with_flags(
     let mut next_seq: u64 = 1;
     let pack_enabled = cfg.pack_size > 0;
     let pack_threshold = if pack_enabled { cfg.pack_file_max } else { 0 };
-    let mut packer = PackPlanner::new(cfg.pack_size.max(4096));
+    let mut packer = PackPlanner::new(cfg.pack_size.max(4096), cfg.pack_file_count_max);
 
     for entry in entries {
         let meta = std::fs::metadata(&entry.src).with_context(|| format!("stat {}", entry.src))?;
@@ -2328,8 +2376,70 @@ pub fn transfer_file_list_with_flags(
 // Backoff between attempts is exponential (500 ms → 1 s → 2 s → 4 s
 // capped). Non-retryable errors short-circuit the loop.
 
+/// The payload's management port. Mirrors `mgmt_addr_for` in the engine.
+const PS5_MGMT_PORT: u16 = 9114;
+
+fn mgmt_addr_for_transfer(transfer_addr: &str) -> String {
+    match transfer_addr.rsplit_once(':') {
+        Some((host, _)) => format!("{host}:{PS5_MGMT_PORT}"),
+        None => format!("{transfer_addr}:{PS5_MGMT_PORT}"),
+    }
+}
+
+/// A destination is treated as full once its *allocatable* headroom is gone.
+///
+/// Raw `free_bytes` cannot be used for this. On a real FW 12.00 console that
+/// hit ENOSPC mid-upload, `statfs` still advertised **86 GB free** on `/data`
+/// long after the filesystem had started refusing writes — the PS5 holds back
+/// a large content-allocator reserve that `free_bytes` never reflects. The
+/// same capture showed the write stopping after 67.5 GB while
+/// `free - INTERNAL_STORAGE_SAFETY_RESERVE` predicted 67.6 GB, so
+/// `allocatable_bytes()` tracks the real limit and `free_bytes` does not.
+const CAPACITY_EXHAUSTED_FLOOR: u64 = 1024 * 1024 * 1024;
+
+/// Probe the destination volume after a dropped connection to tell
+/// "the PS5 ran out of room" apart from "the network blipped".
+///
+/// Returns a `{"error":..,"detail":..}` body when the destination is out of
+/// usable room. That shape is deliberate: the engine's `extract_payload_error`
+/// already mines the anyhow chain for it, so the job surfaces
+/// `error_reason = "insufficient_space"` with no engine-side change.
+///
+/// Telemetry failure returns `None` — a busy management port must never
+/// invent a disk-full verdict.
+fn capacity_exhausted_body(volume: &crate::volumes::Volume) -> Option<String> {
+    let allocatable = volume.allocatable_bytes();
+    if allocatable >= CAPACITY_EXHAUSTED_FLOOR {
+        return None;
+    }
+    // Built with serde_json rather than string formatting: a volume path is
+    // attacker-adjacent free text, and an unescaped quote would produce a body
+    // the engine's extractor silently fails to parse — turning this clear
+    // message back into the raw socket error it exists to replace.
+    let detail = format!(
+        "The PS5 ran out of usable space on {} while writing, so it closed the connection. \
+         {} reports {} bytes free, but {} bytes are held back by the console for system and \
+         filesystem overhead, leaving {} actually allocatable. Free up space on the PS5 (or \
+         pick another drive) and start the upload again — retrying now cannot succeed.",
+        volume.path,
+        volume.path,
+        volume.free_bytes,
+        volume.safety_reserve_bytes(),
+        allocatable,
+    );
+    Some(serde_json::json!({ "error": "insufficient_space", "detail": detail }).to_string())
+}
+
+fn destination_capacity_exhausted(cfg: &TransferConfig, dest: &str) -> Option<String> {
+    let mgmt = mgmt_addr_for_transfer(&cfg.addr);
+    let volumes = crate::volumes::list_volumes(&mgmt).ok()?;
+    capacity_exhausted_body(volumes.find_for_path(dest)?)
+}
+
 /// Shared retry-loop helper used by the resumable wrappers.
 fn resumable_retry<F>(
+    cfg: &TransferConfig,
+    dest: &str,
     max_retries: u32,
     label: &str,
     initial_flags: u32,
@@ -2370,6 +2480,27 @@ where
                     }
                     return Err(e);
                 }
+                // Before burning the remaining attempts, find out WHY the
+                // connection died. A payload that ran out of disk closes the
+                // socket exactly like a network drop does, and every retry
+                // then fails instantly on the first write — the reported case
+                // spent 17 minutes uploading, then emitted six identical
+                // "connection forcibly closed (os error 10054)" lines that
+                // never once mentioned the disk. Checking once here converts
+                // that into a single actionable error and stops retrying a
+                // condition that cannot clear on its own.
+                //
+                // Safe to place here specifically because the transfer socket
+                // is already dead: this adds a management-port round trip only
+                // while nothing is on the wire, so it cannot reintroduce the
+                // mgmt-poller/transfer contention that cost throughput before.
+                if let Some(space_err) = destination_capacity_exhausted(cfg, dest) {
+                    eprintln!(
+                        "[resume] {label} attempt {attempt} failed ({e:#}); destination is out of \
+                         usable space — not retrying"
+                    );
+                    return Err(e.context(space_err));
+                }
                 // 500ms → 1s → 2s → 4s → 8s → 16s (capped). The 16s cap (was
                 // 8s) widens the total retry window so it can outlast the
                 // payload's serial accept loop briefly being unable to take a
@@ -2404,9 +2535,14 @@ pub fn transfer_dir_resumable(
     max_retries: u32,
     initial_flags: u32,
 ) -> Result<TransferResult> {
-    resumable_retry(max_retries, "transfer_dir", initial_flags, |flags| {
-        transfer_dir_with_flags(cfg, tx_id, dest_root, src_dir, flags)
-    })
+    resumable_retry(
+        cfg,
+        dest_root,
+        max_retries,
+        "transfer_dir",
+        initial_flags,
+        |flags| transfer_dir_with_flags(cfg, tx_id, dest_root, src_dir, flags),
+    )
 }
 
 /// `transfer_file_list` with automatic resume-on-network-drop.
@@ -2419,9 +2555,14 @@ pub fn transfer_file_list_resumable(
     max_retries: u32,
     initial_flags: u32,
 ) -> Result<TransferResult> {
-    resumable_retry(max_retries, "transfer_file_list", initial_flags, |flags| {
-        transfer_file_list_with_flags(cfg, tx_id, dest_root, entries, flags)
-    })
+    resumable_retry(
+        cfg,
+        dest_root,
+        max_retries,
+        "transfer_file_list",
+        initial_flags,
+        |flags| transfer_file_list_with_flags(cfg, tx_id, dest_root, entries, flags),
+    )
 }
 
 /// Hard ceiling on parallel upload streams, independent of the user setting and
@@ -3401,6 +3542,7 @@ pub fn transfer_zip_with_opts(
     let pack_enabled = cfg.pack_size > 0;
     let pack_threshold = if pack_enabled { cfg.pack_file_max } else { 0 };
     let pack_target = cfg.pack_size.max(4096);
+    let pack_count_max = cfg.pack_file_count_max;
     // Inline packer — `PackPlanner` is file-source-specific, so the zip path
     // keeps its own small accumulator with the identical coalescing rule.
     let mut pack_records: Vec<ZipPackRecord> = Vec::new();
@@ -3411,7 +3553,12 @@ pub fn transfer_zip_with_opts(
         total_bytes += pf.size;
         if pack_enabled && (pf.size as usize) < pack_threshold {
             let rec_size = PACKED_RECORD_PREFIX_LEN + pf.dest_path.len() + pf.size as usize;
-            if !pack_records.is_empty() && pack_body + rec_size > pack_target {
+            // Same dual budget as `PackPlanner::would_exceed` — bytes OR
+            // record count. An archive of many tiny entries would otherwise
+            // pack thousands of records behind one ACK the engine waits
+            // only 30 s for.
+            let count_full = pack_count_max > 0 && pack_records.len() >= pack_count_max;
+            if !pack_records.is_empty() && (count_full || pack_body + rec_size > pack_target) {
                 planned_shards.push(ZipShard::Packed {
                     shard_seq: pack_seq,
                     records: std::mem::take(&mut pack_records),
@@ -3601,9 +3748,14 @@ pub fn transfer_zip_resumable(
     max_retries: u32,
     initial_flags: u32,
 ) -> Result<TransferResult> {
-    resumable_retry(max_retries, "transfer_zip", initial_flags, |flags| {
-        transfer_zip_with_opts(cfg, tx_id, dest_root, zip_path, ram_threshold, flags)
-    })
+    resumable_retry(
+        cfg,
+        dest_root,
+        max_retries,
+        "transfer_zip",
+        initial_flags,
+        |flags| transfer_zip_with_opts(cfg, tx_id, dest_root, zip_path, ram_threshold, flags),
+    )
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -3988,9 +4140,14 @@ pub fn transfer_7z_resumable(
     max_retries: u32,
     initial_flags: u32,
 ) -> Result<TransferResult> {
-    resumable_retry(max_retries, "transfer_7z", initial_flags, |flags| {
-        transfer_7z_with_opts(cfg, tx_id, dest_root, archive_path, flags)
-    })
+    resumable_retry(
+        cfg,
+        dest_root,
+        max_retries,
+        "transfer_7z",
+        initial_flags,
+        |flags| transfer_7z_with_opts(cfg, tx_id, dest_root, archive_path, flags),
+    )
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -4798,9 +4955,14 @@ mod rar_support {
         max_retries: u32,
         initial_flags: u32,
     ) -> Result<TransferResult> {
-        resumable_retry(max_retries, "transfer_rar", initial_flags, |flags| {
-            transfer_rar_streaming(cfg, tx_id, dest_root, archive_path, password, flags)
-        })
+        resumable_retry(
+            cfg,
+            dest_root,
+            max_retries,
+            "transfer_rar",
+            initial_flags,
+            |flags| transfer_rar_streaming(cfg, tx_id, dest_root, archive_path, password, flags),
+        )
     }
 
     #[cfg(test)]
@@ -5461,6 +5623,147 @@ mod retry_classification_tests {
             "commit ack timeout too generous — a stuck PS5 should surface \
              within an hour at most; got {:?}",
             COMMIT_TX_ACK_TIMEOUT,
+        );
+    }
+
+    #[test]
+    fn out_of_space_is_reported_instead_of_a_bare_socket_error() {
+        use crate::volumes::{Volume, INTERNAL_STORAGE_SAFETY_RESERVE_BYTES};
+        let full = Volume {
+            path: "/data".into(),
+            mount_from: "/user/data".into(),
+            fs_type: "nullfs".into(),
+            total_bytes: 947_229_556_736,
+            // Straight from the FW 12.00 report: statfs still advertises 86 GB
+            // free on a filesystem that has already started refusing writes.
+            free_bytes: 85_962_588_160,
+            writable: true,
+            is_placeholder: false,
+            source_image: String::new(),
+            safety_reserve_bytes: 0,
+            allocatable_bytes: 0,
+        };
+        assert!(
+            full.free_bytes > 80_000_000_000,
+            "the point of this case is that free_bytes looks healthy"
+        );
+        let body = capacity_exhausted_body(&full).expect("must flag a full destination");
+
+        // The engine mines this exact shape out of the anyhow chain, so it has
+        // to be valid JSON with both fields or the user is back to os error 10054.
+        let parsed: serde_json::Value = serde_json::from_str(&body).expect("valid JSON body");
+        assert_eq!(parsed["error"], "insufficient_space");
+        let detail = parsed["detail"].as_str().unwrap();
+        assert!(
+            detail.contains("/data"),
+            "detail names the volume: {detail}"
+        );
+        assert!(
+            detail.contains("ran out of usable space"),
+            "detail says what happened in words: {detail}"
+        );
+
+        // A destination with real headroom must NOT be blamed: a genuine
+        // network drop still has to retry.
+        let roomy = Volume {
+            free_bytes: 600_000_000_000,
+            ..full.clone()
+        };
+        assert!(
+            roomy.allocatable_bytes() > INTERNAL_STORAGE_SAFETY_RESERVE_BYTES,
+            "sanity: this volume really does have room"
+        );
+        assert!(
+            capacity_exhausted_body(&roomy).is_none(),
+            "a healthy volume must not be reported as full"
+        );
+    }
+
+    #[test]
+    fn packed_shard_file_count_stays_inside_ack_budget() {
+        // Hardware-measured on FW 5.10 (192.168.86.99): the payload applies
+        // a packed record in ~4.3 ms (create + write + fsync, serially).
+        // A shard's ACK is read under POST_BEGIN_DEFAULT_TIMEOUT, so the
+        // worst-case per-shard apply work must fit inside it with margin.
+        const MEASURED_APPLY_MICROS_PER_FILE: u64 = 4_300;
+        let worst_case = Duration::from_micros(
+            MEASURED_APPLY_MICROS_PER_FILE * DEFAULT_PACK_FILE_COUNT_MAX as u64,
+        );
+        assert!(
+            worst_case * 2 <= POST_BEGIN_DEFAULT_TIMEOUT,
+            "a full packed shard must apply in well under the {:?} shard-ACK \
+             timeout (2x margin for a slow USB drive or a busy console); \
+             {} files x {} us = {:?}",
+            POST_BEGIN_DEFAULT_TIMEOUT,
+            DEFAULT_PACK_FILE_COUNT_MAX,
+            MEASURED_APPLY_MICROS_PER_FILE,
+            worst_case,
+        );
+        // Lower bound: packing exists to cut shard count. A cap this small
+        // would make the round-trips dominate again. Both sides are consts,
+        // so this is checked at compile time rather than when the test runs.
+        const _: () = assert!(
+            DEFAULT_PACK_FILE_COUNT_MAX >= 500,
+            "pack file-count cap too aggressive — packing stops paying for itself"
+        );
+    }
+
+    #[test]
+    fn pack_planner_closes_shard_on_file_count_not_just_bytes() {
+        // The regression this guards: 10,000 x 64 B files all fit the 4 MiB
+        // byte budget, so the byte rule alone produced shards_sent: 1 and the
+        // transfer died on the 30 s shard-ACK timeout after every byte had
+        // already landed. Reproduced live before the fix.
+        let count_max = 2000;
+        let mut packer = PackPlanner::new(4 * 1024 * 1024, count_max);
+        packer.start(1);
+        let rec_size = PackPlanner::record_size("f.bin", 64);
+        let mut shards = 1;
+        for _ in 0..10_000 {
+            if packer.would_exceed(rec_size) {
+                let _ = packer.take();
+                packer.start(1);
+                shards += 1;
+            }
+            packer.push(PackRecord {
+                source: std::path::PathBuf::from("f.bin"),
+                dest_path: "f.bin".to_string(),
+                size: 64,
+            });
+        }
+        assert_eq!(
+            shards, 5,
+            "10k tiny files must split across ceil(10000/{count_max}) shards, \
+             not ride in one; got {shards}"
+        );
+
+        // The byte budget must still win when records are large enough to
+        // blow it before the count cap is reached.
+        let mut fat = PackPlanner::new(4 * 1024, count_max);
+        fat.start(1);
+        fat.push(PackRecord {
+            source: std::path::PathBuf::from("a.bin"),
+            dest_path: "a.bin".to_string(),
+            size: 4096,
+        });
+        assert!(
+            fat.would_exceed(PackPlanner::record_size("b.bin", 4096)),
+            "byte budget must still close a shard well before the count cap"
+        );
+
+        // count_max = 0 disables the count rule entirely.
+        let mut unbounded = PackPlanner::new(4 * 1024 * 1024, 0);
+        unbounded.start(1);
+        for _ in 0..count_max + 1 {
+            unbounded.push(PackRecord {
+                source: std::path::PathBuf::from("f.bin"),
+                dest_path: "f.bin".to_string(),
+                size: 1,
+            });
+        }
+        assert!(
+            !unbounded.would_exceed(PackPlanner::record_size("f.bin", 1)),
+            "count_max = 0 must fall back to the byte budget alone"
         );
     }
 }

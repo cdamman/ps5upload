@@ -45,11 +45,15 @@
 - **Native image mount** — attach `.exfat` and `.ffpkg` images on
   the PS5 (MDIOCATTACH + nmount) with no third-party helper. Every
   mount survives payload restarts and auto-reconciles on startup.
+  Mount read-write to **edit an image in place** — add DLC, swap
+  assets, or apply a backport patch to a game that ships as an image
+  rather than a folder. Edits go straight into the image file, so the
+  app warns before you start.
 - **Browse everything** — list games anywhere on the PS5 (including
   inside mounted images), disk images, files, and volumes. Run FS
-  ops (chmod, delete, move, copy, mkdir) with a real directory
-  tree. Bulk delete of a 200k-file folder shows live progress
-  with a working Stop button.
+  ops (add files, replace a file, chmod, delete, move, copy, mkdir)
+  with a real directory tree. Bulk delete of a 200k-file folder
+  shows live progress with a working Stop button.
 - **NAS / SMB upload** — browse a Windows share or Samba NAS from the
   app, download to this computer, or **upload a file or folder
   straight to the PS5** in one step (streamed to a host temp dir, then
@@ -88,12 +92,13 @@
   uploaded package with cover art and size; **Install**, **Reinstall**,
   or **Delete** any of them in a click — no re-uploading to install
   again. **Install all** does a whole set in one tap, in base → update →
-  DLC order. Installs run through the **DPI daemon**
-  (`sceAppInstUtilInstallByPackage` from a clean loader process), the
-  most reliable path on current firmware. Verified end-to-end on FW 9.60.
-  Game pkgs (CUSA / PPSA / PCSA / EP / UP) install cleanly; for system
-  pkgs (NPXS-prefix — Store updates, Settings) use the on-PS5 Settings →
-  Debug Settings → Game → Package Installer. **Stream (beta)** installs a
+  DLC order. Installs use Sony's game-package service and are only marked
+  complete after console-side verification; a clean rejection can fall back
+  to the standalone DPI daemon. Verified end-to-end on FW 9.60. FW 11.60+
+  has reported `0x80B2116F` AppInst/PlayGo incompatibilities, so ps5upload
+  keeps the staged package and directs users to the on-PS5 Settings → System →
+  Debug Settings → Game → Package Installer instead of claiming success.
+  **Stream (beta)** installs a
   `.pkg` straight from your PC over HTTP with no staging upload — handy
   when console storage is tight.
 - **Web browser access** — run the engine (or the official Docker image)

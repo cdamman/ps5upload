@@ -29,7 +29,6 @@ import {
   XCircle,
   Clock,
   Pause,
-  PlayCircle,
   X,
   RotateCcw,
 } from "lucide-react";
@@ -51,6 +50,7 @@ import {
 } from "../state/tasks";
 import { formatBytes, formatDuration } from "../lib/format";
 import { useRosterStore } from "../state/roster";
+import { commandTask, taskCapabilities } from "../state/taskControls";
 
 /** Render the icon for a TaskKind. */
 function KindIcon({ kind, size = 14 }: { kind: TaskKind; size?: number }) {
@@ -158,7 +158,6 @@ function statusLabel(
 function TaskRow({ task }: { task: Task }) {
   const tr = useTr();
   const removeTask = useTaskStore((s) => s.removeTask);
-  const finishTask = useTaskStore((s) => s.finishTask);
   const profiles = useRosterStore((s) => s.profiles);
   const [now, setNow] = useState(() => Date.now());
 
@@ -173,6 +172,7 @@ function TaskRow({ task }: { task: Task }) {
   const isActive = isActivatable(task.status);
   const isDone = task.status === "done";
   const isFailed = task.status === "failed" || task.status === "interrupted";
+  const capabilities = taskCapabilities(task);
 
   // Elapsed time
   const endMs = task.endedAtMs ?? now;
@@ -181,47 +181,31 @@ function TaskRow({ task }: { task: Task }) {
   // Rate display
   const rate = task.rate?.bytesPerSec ?? 0;
 
-  // Border color by status
-  const borderClass =
+  // A quiet status rail preserves scanability without turning every task
+  // into a full-color alert card.
+  const statusRailClass =
     task.status === "running"
-      ? "border-[var(--color-accent)]"
+      ? "border-l-[var(--color-accent)]"
       : isDone
-        ? "border-[var(--color-good)]"
+        ? "border-l-[var(--color-good)]"
         : isFailed
-          ? "border-[var(--color-bad)]"
-          : "border-[var(--color-border)]";
+          ? "border-l-[var(--color-bad)]"
+          : "border-l-[var(--color-border-strong)]";
 
   // Overflow menu items
   const menuItems: OverflowMenuItem[] = [];
-  if (isActive) {
+  if (capabilities.canCancel) {
     menuItems.push({
       label: tr("task_cancel", undefined, "Cancel"),
       icon: <X size={12} />,
-      onSelect: () => finishTask(task.id, "cancelled"),
+      onSelect: () => void commandTask(task, "cancel"),
     });
   }
-  if (task.status === "paused") {
-    menuItems.push({
-      label: tr("task_resume", undefined, "Resume"),
-      icon: <PlayCircle size={12} />,
-      onSelect: () =>
-        useTaskStore.getState().updateTask(task.id, { status: "running" }),
-    });
-  }
-  if (task.status === "running") {
-    menuItems.push({
-      label: tr("task_pause", undefined, "Pause"),
-      icon: <Pause size={12} />,
-      onSelect: () =>
-        useTaskStore.getState().updateTask(task.id, { status: "paused" }),
-    });
-  }
-  if (isFailed) {
+  if (capabilities.canRetry) {
     menuItems.push({
       label: tr("task_retry", undefined, "Retry"),
       icon: <RotateCcw size={12} />,
-      onSelect: () =>
-        useTaskStore.getState().updateTask(task.id, { status: "queued" }),
+      onSelect: () => void commandTask(task, "retry"),
     });
   }
   if (isTerminal(task.status)) {
@@ -235,15 +219,15 @@ function TaskRow({ task }: { task: Task }) {
   return (
     <li
       className={clsx(
-        "rounded-md border bg-[var(--color-surface-2)] p-3 text-xs",
-        borderClass,
+        "elev-1 rounded-[var(--radius-panel)] border border-l-[3px] border-[var(--color-border)] bg-[var(--color-surface-raised)] p-3.5 text-xs",
+        statusRailClass,
       )}
     >
       {/* Row 1: icon + label + console + time + menu */}
-      <div className="mb-1.5 flex items-center gap-2">
+      <div className="mb-2 flex items-center gap-2">
         <StatusIcon status={task.status} />
         <KindIcon kind={task.kind} />
-        <span className="min-w-0 flex-1 truncate font-medium">
+        <span className="min-w-0 flex-1 truncate text-[0.8125rem] font-semibold">
           {task.label}
         </span>
         <ConsoleChip
@@ -342,7 +326,7 @@ export function TaskList({ maxFinished = 20 }: { maxFinished?: number }) {
     <div className="space-y-4">
       {active.length > 0 && (
         <section>
-          <header className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
+          <header className="mb-2.5 flex items-center gap-2 text-[0.6875rem] font-bold uppercase tracking-[0.1em] text-[var(--color-muted)]">
             <Spinner size={14} />
             {tr("task_active", undefined, "Active")}
             <span className="text-xs">· {active.length}</span>
@@ -357,7 +341,7 @@ export function TaskList({ maxFinished = 20 }: { maxFinished?: number }) {
 
       {finished.length > 0 && (
         <section>
-          <header className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
+          <header className="mb-2.5 flex items-center gap-2 text-[0.6875rem] font-bold uppercase tracking-[0.1em] text-[var(--color-muted)]">
             {tr("task_recent", undefined, "Recently finished")}
             <span className="text-xs">· {finished.length}</span>
             <button

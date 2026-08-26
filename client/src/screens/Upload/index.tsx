@@ -35,6 +35,7 @@ import {
   fetchVolumes,
   pathKind,
   probeDestination,
+  volumeAllocatableBytes,
   type PlannedFile,
   type Volume,
   type ZipInspect,
@@ -3007,7 +3008,7 @@ function MountAfterUploadCard({
             <div className="mt-0.5 text-xs text-[var(--color-muted)]">
               {tr(
                 "upload_mount_readonly_desc",
-                "Recommended. Prevents the PS5 from writing save data into the image (which would silently corrupt the file on disk and break re-mount). Turn off only for editable scratch images.",
+                "Recommended. Prevents the PS5 from writing save data into the image (which would silently corrupt the file on disk and break re-mount). Turn it off when you intend to edit the image — replacing files, adding DLC, or applying a backport patch — and remember those edits are permanent.",
               )}
             </div>
           </div>
@@ -3085,17 +3086,25 @@ function DestinationCard({
     availableVolumes.length > 0
       ? availableVolumes.map((v) => v.path).sort()
       : [...FALLBACK_VOLUMES].sort();
-  // Build a {path → free-bytes} map so we can show "/mnt/ext1 (450 GB
-  // free)" inline. Only when we actually got the live list back.
-  const freeBytesByPath = new Map<string, number>();
+  // Build a {path → usable-bytes} map so we can show "/mnt/ext1 (450 GB
+  // usable)" inline. Only when we actually got the live list back.
+  //
+  // Deliberately the ALLOCATABLE figure, not raw free_bytes. On internal
+  // storage the PS5 holds back a large content-allocator reserve that
+  // statfs never reflects, so free_bytes overstates what an upload can
+  // actually use — a FW 12.00 report showed /data advertising 143 GB free
+  // while only ~63 GB was writable, and the 118 GiB upload it green-lit
+  // died at 53% after 17 minutes. Showing the number that actually governs
+  // is what lets someone pick a workable destination up front.
+  const usableBytesByPath = new Map<string, number>();
   for (const v of availableVolumes) {
-    freeBytesByPath.set(v.path, v.free_bytes);
+    usableBytesByPath.set(v.path, volumeAllocatableBytes(v));
   }
-  const formatFree = (bytes: number) => {
+  const formatUsable = (bytes: number) => {
     const gib = bytes / 1024 ** 3;
-    if (gib >= 1024) return `${(gib / 1024).toFixed(1)} TB free`;
-    if (gib >= 10) return `${gib.toFixed(0)} GB free`;
-    return `${gib.toFixed(1)} GB free`;
+    if (gib >= 1024) return `${(gib / 1024).toFixed(1)} TB usable`;
+    if (gib >= 10) return `${gib.toFixed(0)} GB usable`;
+    return `${gib.toFixed(1)} GB usable`;
   };
 
   return (
@@ -3114,13 +3123,13 @@ function DestinationCard({
           options={[]}
         >
           <option value="">
-            {tr("upload_dest_auto", "(auto — largest free)")}
+            {tr("upload_dest_auto", "(default — /data)")}
           </option>
           {dropdownPaths.map((p) => {
-            const free = freeBytesByPath.get(p);
+            const usable = usableBytesByPath.get(p);
             return (
               <option key={p} value={p}>
-                {free !== undefined ? `${p} (${formatFree(free)})` : p}
+                {usable !== undefined ? `${p} (${formatUsable(usable)})` : p}
               </option>
             );
           })}

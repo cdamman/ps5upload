@@ -140,6 +140,9 @@ CLAUDE.local.md
 *.playwright-mcp/
 playwright-report/
 test-results/
+/output/playwright/
+/output/research-*/
+/.playwright-cli/
 
 # ─── Dev screenshots / debug captures ────────────────────────────────────
 # Screenshots taken during UI debugging end up at the repo root.

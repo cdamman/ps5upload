@@ -44,7 +44,7 @@ function decodeBase64Text(base64: string): string {
 /** nanoDNS config editor — reads/writes the on-console nanodns.ini and shows
  *  how to point the PS5's DNS at it. nanoDNS reads its config at startup, so a
  *  save only takes effect after the payload is re-loaded (re-sent). */
-export default function NanoDnsScreen() {
+export default function NanoDnsScreen({ embedded = false }: { embedded?: boolean }) {
   const tr = useTr();
   const host = useConnectionStore((s) => s.host);
   const guard = useStaleHostGuard();
@@ -183,8 +183,8 @@ export default function NanoDnsScreen() {
   }, [host, text, guard, tr]);
 
   return (
-    <div className="flex flex-col gap-5 p-6">
-      <PageHeader
+    <div className={`flex flex-col gap-5 ${embedded ? "" : "p-6"}`}>
+      {!embedded && <PageHeader
         icon={Globe}
         title={tr("nanodns_title", undefined, "nanoDNS")}
         loading={loading}
@@ -205,7 +205,21 @@ export default function NanoDnsScreen() {
             {tr("refresh", undefined, "Refresh")}
           </Button>
         }
-      />
+      />}
+      {embedded && (
+        <div className="flex justify-end">
+          <Button
+            variant="secondary"
+            size="sm"
+            leftIcon={<RefreshCw size={12} />}
+            onClick={() => void refresh()}
+            disabled={loading || !host?.trim()}
+            loading={loading}
+          >
+            {tr("refresh", undefined, "Refresh")}
+          </Button>
+        </div>
+      )}
 
       {!host?.trim() ? (
         <EmptyState

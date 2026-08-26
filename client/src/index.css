@@ -80,6 +80,21 @@
   );
   --overlay-scrim: rgba(0, 0, 0, 0.45);
 
+  /* Product shell — one shared rhythm for every screen. */
+  --color-surface-raised: color-mix(
+    in oklab,
+    var(--color-surface-2) 92%,
+    var(--color-text) 8%
+  );
+  --color-accent-glow: color-mix(
+    in oklab,
+    var(--color-accent) 22%,
+    transparent
+  );
+  --radius-control: 0.625rem;
+  --radius-panel: 0.875rem;
+  --content-max: 76rem;
+
   /* ── Density tokens (v5 §17) ─────────────────────────────────────────
    * Default = "comfortable". The data-density attribute overrides these
    * (see below). Components reference var(--row-min) / var(--card-pad)
@@ -259,6 +274,142 @@ body,
  * scroll chaining (a scroll reaching the edge propagating to body). */
 body {
   overscroll-behavior-y: contain;
+}
+
+/* Shared content frame. Screens can opt into this without inheriting a
+ * rigid layout, while the shell gets a consistent readable line length. */
+.app-page {
+  width: 100%;
+  max-width: var(--content-max);
+  margin-inline: auto;
+  padding: 1.5rem;
+}
+
+.page-kicker {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.45rem;
+  color: var(--color-accent);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.surface-panel {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface-raised);
+  box-shadow: var(--edge-highlight), var(--shadow-1);
+}
+
+.dashboard-hero {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  overflow: hidden;
+  padding: 1.1rem 1.25rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
+  background:
+    linear-gradient(105deg, var(--color-surface-raised), var(--color-surface-2));
+  box-shadow: var(--edge-highlight), var(--shadow-1);
+}
+
+.dashboard-hero::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: -100% -8% -100% 58%;
+  opacity: 0.7;
+  background: radial-gradient(circle, var(--color-accent-glow), transparent 62%);
+  pointer-events: none;
+}
+
+.dashboard-hero.is-offline::after {
+  background: radial-gradient(
+    circle,
+    color-mix(in oklab, var(--color-warn) 13%, transparent),
+    transparent 62%
+  );
+}
+
+.dashboard-hero-icon {
+  display: grid;
+  width: 2.75rem;
+  height: 2.75rem;
+  flex: none;
+  place-items: center;
+  border: 1px solid color-mix(in oklab, var(--color-accent) 25%, var(--color-border));
+  border-radius: 0.8rem;
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+}
+
+.dashboard-hero.is-offline .dashboard-hero-icon {
+  border-color: color-mix(in oklab, var(--color-warn) 28%, var(--color-border));
+  background: var(--color-warn-soft);
+  color: var(--color-warn);
+}
+
+.action-tile {
+  display: flex;
+  min-height: 4.25rem;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+  background: color-mix(in oklab, var(--color-surface) 54%, transparent);
+  text-align: left;
+  transition:
+    transform 140ms ease,
+    border-color 140ms ease,
+    background-color 140ms ease;
+}
+
+.action-tile:not([aria-disabled="true"]):hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in oklab, var(--color-accent) 55%, var(--color-border));
+  background: var(--color-surface-3);
+}
+
+.action-tile[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.56;
+}
+
+.action-tile-icon {
+  display: grid;
+  width: 2.35rem;
+  height: 2.35rem;
+  flex: none;
+  place-items: center;
+  border-radius: 0.65rem;
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+}
+
+.action-tile[aria-disabled="true"] .action-tile-icon {
+  background: var(--color-surface-3);
+  color: var(--color-muted);
+}
+
+.metric-row {
+  display: flex;
+  min-height: 2.25rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid color-mix(in oklab, var(--color-border) 68%, transparent);
+  font-size: 0.8125rem;
+}
+
+.metric-row:last-child {
+  border-bottom: 0;
 }
 
 /* The window atmosphere — painted on #root so it sits under the app shell.
@@ -479,6 +630,22 @@ button {
  * and a border utility; this adds the elevation + machined top edge. */
 .elev-1 {
   box-shadow: var(--edge-highlight), var(--shadow-1);
+}
+
+@media (max-width: 767px) {
+  .app-page {
+    padding: 1rem;
+  }
+
+  .dashboard-hero {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    padding: 1rem;
+  }
+
+  .dashboard-hero > :last-child {
+    width: 100%;
+  }
 }
 
 .elev-2 {
@@ -746,9 +913,9 @@ input[type="radio"] {
  * the theme system (all colors are CSS vars). */
 .input {
   width: 100%;
-  border-radius: 0.375rem;
+  border-radius: var(--radius-control);
   border: 1px solid var(--color-border);
-  background: var(--color-surface);
+  background: var(--color-surface-raised);
   padding: 0.375rem 0.625rem;
   font-size: 0.875rem;
   color: var(--color-text);
@@ -784,9 +951,9 @@ input[type="radio"] {
 }
 .select {
   width: 100%;
-  border-radius: 0.375rem;
+  border-radius: var(--radius-control);
   border: 1px solid var(--color-border);
-  background: var(--color-surface);
+  background: var(--color-surface-raised);
   padding: 0.375rem 0.625rem;
   font-size: 0.875rem;
   color: var(--color-text);

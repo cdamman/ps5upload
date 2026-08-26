@@ -296,6 +296,13 @@ function MountedImageCard({
             </div>
           )}
         </div>
+        {/* A read-write image mount is a live, editable game file. Badge it
+            so nobody forgets which mode they picked minutes ago. */}
+        {v.writable && (
+          <Badge tone="warn" variant="soft" size="md">
+            {tr("volumes_mounted_rw", undefined, "read-write")}
+          </Badge>
+        )}
         <Badge tone="accent" variant="soft" size="md">
           {tr("volumes_mounted", undefined, "mounted")}
         </Badge>
@@ -346,6 +353,7 @@ function MountedImageCard({
  *  internal/USB drives the user shouldn't be unmounting from here. */
 function StorageCard({ volume: v }: { volume: Volume }) {
   const tr = useTr();
+  const uploadSafeBytes = v.allocatable_bytes;
   const pct =
     v.total_bytes > 0
       ? Math.max(0, Math.min(100, 100 - (v.free_bytes / v.total_bytes) * 100))
@@ -382,6 +390,19 @@ function StorageCard({ volume: v }: { volume: Volume }) {
               {tr("volumes_pct_used_storage", undefined, "% used")}
             </span>
           </div>
+          {uploadSafeBytes !== undefined &&
+            uploadSafeBytes < v.free_bytes && (
+              <div className="mb-2 text-xs text-[var(--color-muted)]">
+                {tr(
+                  "volumes_upload_safe_capacity",
+                  {
+                    safe: formatStorageBytes(uploadSafeBytes),
+                    reserve: formatStorageBytes(v.safety_reserve_bytes ?? 0),
+                  },
+                  "{safe} safe for new uploads · {reserve} kept as system/filesystem headroom",
+                )}
+              </div>
+            )}
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--color-surface-3)]">
             <div
               className={`h-full transition-[width] duration-300 ${

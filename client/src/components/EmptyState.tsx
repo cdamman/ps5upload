@@ -76,7 +76,7 @@ export function EmptyState({
     return (
       <div
         role={role}
-        className={`rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-surface-2)] p-12 text-center ${fillCls}`}
+        className={`rounded-[var(--radius-panel)] border border-dashed border-[var(--color-border)] bg-[var(--color-surface-raised)] p-12 text-center ${fillCls}`}
       >
         {heroNode}
         {title && <Heading className="mb-1.5 text-lg font-semibold">{title}</Heading>}
@@ -93,7 +93,7 @@ export function EmptyState({
   return (
     <div
       role={role}
-      className="rounded-lg border border-dashed border-[var(--color-border)] bg-[var(--color-surface-2)] p-6 text-center text-sm text-[var(--color-muted)]"
+      className="rounded-[var(--radius-panel)] border border-dashed border-[var(--color-border)] bg-[var(--color-surface-raised)] p-6 text-center text-sm text-[var(--color-muted)]"
     >
       {heroNode}
       {title && <Heading className="mb-1.5 text-base font-semibold">{title}</Heading>}

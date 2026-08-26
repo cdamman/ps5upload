@@ -32,7 +32,10 @@ vi.mock("./RosterPicker", () => ({
 import Sidebar from "./Sidebar";
 
 describe("Sidebar", () => {
-  it("defaults to labeled navigation with Install Package directly visible", () => {
+  it("assumes nothing beyond Home, and always keeps More reachable", () => {
+    // safeStorage is mocked empty above, so this is a first run: no
+    // favorites stored. The sidebar used to hardcode five screens; now it
+    // picks exactly one for the user and offers the rest via More.
     const html = renderToStaticMarkup(
       <MemoryRouter initialEntries={["/home"]}>
         <Sidebar />
@@ -40,8 +43,58 @@ describe("Sidebar", () => {
     );
 
     expect(html).toContain('data-collapsed="false"');
-    expect(html).toContain("Files");
-    expect(html).toContain("Install Package");
-    expect(html).toContain('href="/install-package"');
+    expect(html).toContain('href="/home"');
+    // Not assumed on the user's behalf any more.
+    expect(html).not.toContain('href="/games"');
+    expect(html).not.toContain('href="/files"');
+    expect(html).not.toContain('href="/console"');
+    expect(html).not.toContain('href="/tasks"');
+    // The escape hatch must survive, or an empty Favorites list would
+    // strand the user on Home with no way to reach anything else.
+    expect(html).toContain('href="/more"');
+    expect(html).not.toContain('href="/install-package"');
+  });
+
+  it("shows the hint that explains how to fill the sidebar", () => {
+    const html = renderToStaticMarkup(
+      <MemoryRouter initialEntries={["/home"]}>
+        <Sidebar />
+      </MemoryRouter>,
+    );
+    expect(html).toContain("Star screens in More");
+  });
+
+  it("renders stored favorites after Home", () => {
+    vi.resetModules();
+    vi.doMock("../state/navFavorites", () => ({
+      useNavFavoritesStore: (
+        selector: (state: {
+          favorites: string[];
+          hintDismissed: boolean;
+          dismissHint: () => void;
+        }) => unknown,
+      ) =>
+        selector({
+          favorites: ["/files", "/games"],
+          hintDismissed: true,
+          dismissHint: () => {},
+        }),
+    }));
+    return import("./Sidebar").then(({ default: Pinned }) => {
+      const html = renderToStaticMarkup(
+        <MemoryRouter initialEntries={["/home"]}>
+          <Pinned />
+        </MemoryRouter>,
+      );
+      expect(html).toContain('href="/home"');
+      expect(html).toContain('href="/files"');
+      expect(html).toContain('href="/games"');
+      // Hint retires once something is pinned.
+      expect(html).not.toContain("Star screens in More");
+      // Order follows the stored list, not NAV_ITEMS order.
+      expect(html.indexOf('href="/files"')).toBeLessThan(
+        html.indexOf('href="/games"'),
+      );
+    });
   });
 });

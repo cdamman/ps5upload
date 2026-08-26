@@ -9,7 +9,7 @@
  * did, and why the mobile sheet was broken).
  *
  * Data and pure helpers only — no React, no styling. Consumers:
- *   - `Sidebar.tsx`        desktop rail + drawer
+ *   - `Sidebar.tsx`        focused desktop primary navigation
  *   - `screens/More`       mobile full-screen nav
  */
 import type { LucideIcon } from "lucide-react";
@@ -25,7 +25,6 @@ import {
   CircleUserRound,
   Gauge,
   Boxes,
-  Globe,
   Save,
   Image as ImageIcon,
   Video as VideoIcon,
@@ -82,13 +81,9 @@ export type TrFn = (
   fallback?: string,
 ) => string;
 
-// v4.0.0 sidebar regroup. Consolidated from 6 sections with a duplicate
-// "System" header into clean sections: Setup → Files → Browse → System →
-// Diagnostics → Help. The old sidebar had two separate "System" blocks
-// which was confusing — all system-management items now live under a
-// single System heading.
+// More-menu information architecture. Group by the job a user is trying to
+// complete, not by which protocol or implementation owns the screen.
 export const NAV_ITEMS: NavItem[] = [
-  // ─ Setup: orient, connect, get started ─
   {
     to: "/whats-new",
     key: "whats_new",
@@ -97,27 +92,50 @@ export const NAV_ITEMS: NavItem[] = [
     section: { key: "nav_section_setup", fallback: "Setup" },
   },
   { to: "/connection", key: "connect", fallback: "Connection", icon: Cable },
-  {
-    to: "/payloads",
-    key: "payloads",
-    fallback: "Payloads",
-    icon: Boxes,
-    hideInBrowser: true,
-  },
-  {
-    to: "/dashboard",
-    key: "dashboard",
-    fallback: "Dashboard",
-    icon: LayoutDashboard,
-  },
 
-  // ─ Files: upload, install, manage saves & captures ─
+  // Move data and inspect storage.
   {
     to: "/upload",
     key: "upload",
     fallback: "Upload",
     icon: Upload,
-    section: { key: "nav_section_files", fallback: "Files" },
+    section: { key: "nav_section_files", fallback: "Files & storage" },
+  },
+  {
+    to: "/files",
+    key: "v5_tab_files",
+    fallback: "File System",
+    icon: FolderTree,
+  },
+  { to: "/search", key: "search", fallback: "Search", icon: Search },
+  { to: "/volumes", key: "volumes", fallback: "Volumes", icon: HardDrive },
+  {
+    to: "/disk-usage",
+    key: "disk_usage",
+    fallback: "Disk usage",
+    icon: PieChart,
+  },
+  {
+    to: "/smb-browser",
+    key: "smb_title",
+    fallback: "SMB Browser",
+    icon: Network,
+  },
+  {
+    to: "/ftp-server",
+    key: "ftp_title",
+    fallback: "FTP Server",
+    icon: Server,
+  },
+  { to: "/backup", key: "backup", fallback: "Backup", icon: Archive },
+
+  // Play, install, and manage game-related content.
+  {
+    to: "/games",
+    key: "v5_tab_games",
+    fallback: "Games",
+    icon: LibraryBig,
+    section: { key: "nav_section_games_mods", fallback: "Games & content" },
   },
   {
     to: "/install-package",
@@ -133,41 +151,37 @@ export const NAV_ITEMS: NavItem[] = [
     icon: ImageIcon,
   },
   { to: "/videos", key: "videos", fallback: "Video clips", icon: VideoIcon },
-
-  // ─ Browse PS5: navigate what's on the console ─
   {
-    to: "/games",
-    key: "library",
-    fallback: "Library",
-    icon: LibraryBig,
-    section: { key: "nav_section_browse", fallback: "Browse PS5" },
+    to: "/local-image",
+    key: "local_image",
+    fallback: "Edit Game Image",
+    icon: HardDrive,
   },
   {
-    to: "/installed",
-    key: "installed_apps",
-    fallback: "Installed Apps",
+    to: "/game-activity",
+    key: "game_activity_title",
+    fallback: "Game Activity",
+    icon: Clock,
+  },
+  {
+    to: "/cheats",
+    key: "cheats_title",
+    fallback: "Cheats",
     icon: Gamepad2,
   },
+  { to: "/fakelib", key: "fakelib_title", fallback: "Fakelib", icon: Boxes },
   {
-    to: "/files",
-    key: "file_system",
-    fallback: "File System",
-    icon: FolderTree,
-  },
-  { to: "/search", key: "search", fallback: "Search", icon: Search },
-  { to: "/volumes", key: "volumes", fallback: "Volumes", icon: HardDrive },
-  {
-    to: "/disk-usage",
-    key: "disk_usage",
-    fallback: "Disk usage",
-    icon: PieChart,
+    to: "/sdk-changer",
+    key: "sdk_changer_title",
+    fallback: "SDK Changer",
+    icon: Layers,
   },
 
-  // ─ System: observe + manage the PS5 itself ─
+  // Observe and manage the selected console.
   {
     to: "/console",
-    key: "hardware",
-    fallback: "Hardware",
+    key: "v5_tab_console",
+    fallback: "Console",
     icon: Cpu,
     section: { key: "nav_section_console", fallback: "Console" },
   },
@@ -184,12 +198,6 @@ export const NAV_ITEMS: NavItem[] = [
     icon: CircleUserRound,
   },
   { to: "/fan-curve", key: "fan_curve", fallback: "Fan Curve", icon: Fan },
-  {
-    to: "/local-image",
-    key: "local_image",
-    fallback: "Edit Game Image",
-    icon: HardDrive,
-  },
   {
     to: "/health",
     key: "health",
@@ -208,31 +216,18 @@ export const NAV_ITEMS: NavItem[] = [
     fallback: "Notifications",
     icon: Bell,
   },
+
+  // Interfaces belonging to payloads, together in one workspace.
   {
-    to: "/cheats",
-    key: "cheats_title",
-    fallback: "Cheats",
-    icon: Gamepad2,
-    section: { key: "nav_section_games_mods", fallback: "Games & Mods" },
-  },
-  {
-    to: "/game-activity",
-    key: "game_activity_title",
-    fallback: "Game Activity",
-    icon: Clock,
-  },
-  {
-    to: "/fakelib",
-    key: "fakelib_title",
-    fallback: "Fakelib",
+    to: "/payloads",
+    key: "payloads",
+    fallback: "Payloads",
     icon: Boxes,
+    section: { key: "nav_section_payload_tools", fallback: "Payload tools" },
+    hideInBrowser: true,
   },
-  {
-    to: "/sdk-changer",
-    key: "sdk_changer_title",
-    fallback: "SDK Changer",
-    icon: Layers,
-  },
+
+  // Expert-only controls.
   {
     to: "/fw-spoof",
     key: "fw_spoof_title",
@@ -240,27 +235,13 @@ export const NAV_ITEMS: NavItem[] = [
     icon: ShieldAlert,
     section: { key: "nav_section_advanced", fallback: "Advanced" },
   },
-  {
-    to: "/ftp-server",
-    key: "ftp_title",
-    fallback: "FTP Server",
-    icon: Server,
-  },
-  {
-    to: "/smb-browser",
-    key: "smb_title",
-    fallback: "SMB Browser",
-    icon: Network,
-  },
-  { to: "/backup", key: "backup", fallback: "Backup", icon: Archive },
-  { to: "/nanodns", key: "nanodns", fallback: "nanoDNS", icon: Globe },
   { to: "/shell", key: "shell", fallback: "Shell", icon: TerminalSquare },
 
   // ─ Diagnostics: history, logs, debugging ─
   {
     to: "/tasks",
-    key: "transfer_log_title",
-    fallback: "Transfer Log",
+    key: "v5_tab_tasks",
+    fallback: "Tasks",
     icon: ActivityIcon,
     section: { key: "nav_section_diagnostics", fallback: "Diagnostics" },
   },
@@ -290,6 +271,50 @@ export const NAV_ITEMS: NavItem[] = [
   },
   { to: "/about", key: "about", fallback: "About", icon: Info },
 ];
+
+/** The one destination that is always in the sidebar.
+ *
+ * Home is deliberately not a favorite: it cannot be unstarred, so the
+ * sidebar can never end up empty and there is always a way back to a
+ * known screen. Everything else is the user's choice — see
+ * `resolveFavorites`. The section label lives here so `groupNavItems`
+ * has a header to open the group with.
+ */
+export const HOME_NAV_ITEM: NavItem = {
+  to: "/home",
+  key: "v5_tab_home",
+  fallback: "Home",
+  icon: LayoutDashboard,
+  section: { key: "nav_section_favorites", fallback: "Favorites" },
+};
+
+/**
+ * Resolve stored favorite route paths into real nav items.
+ *
+ * Unknown paths are DROPPED rather than rendered. Favorites are persisted
+ * per-machine and outlive the build that wrote them, so a screen that is
+ * later renamed or removed would otherwise stay pinned in someone's
+ * sidebar forever, linking nowhere. Order follows the stored list (the
+ * order the user starred things in), and Home is filtered out so it can
+ * never appear twice.
+ */
+export function resolveFavorites(paths: readonly string[]): NavItem[] {
+  const byPath = new Map(NAV_ITEMS.map((item) => [item.to, item]));
+  const seen = new Set<string>([HOME_NAV_ITEM.to]);
+  const out: NavItem[] = [];
+  for (const path of paths) {
+    if (seen.has(path)) continue;
+    const item = byPath.get(path);
+    if (!item) continue;
+    seen.add(path);
+    // Strip any section header the item carries in the More list — inside
+    // Favorites it is a plain row under the Favorites header, not the start
+    // of a new group.
+    const { section: _section, ...rest } = item;
+    out.push(rest);
+  }
+  return out;
+}
 
 /**
  * Collapse a flat item list into sections.

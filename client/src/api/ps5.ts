@@ -824,11 +824,24 @@ export interface Volume {
   fs_type: string;
   total_bytes: number;
   free_bytes: number;
+  /** Space deliberately excluded from large-upload capacity (the internal
+   * PS5 allocator hides a fixed reserve from statfs; external filesystems keep
+   * a smaller metadata/activity margin). Present on current payloads. */
+  safety_reserve_bytes?: number;
+  /** Bytes a new upload may safely allocate after the reserve above. */
+  allocatable_bytes?: number;
   writable: boolean;
   is_placeholder?: boolean;
   /** For `/mnt/ps5upload/*` mounts, the backing image file. Empty
    *  string on storage drives or on mounts predating the tracker. */
   source_image?: string;
+}
+
+/** Capacity suitable for a new allocation. Older payloads do not publish the
+ * reserve-aware field, so retain their raw-free behavior as a compatibility
+ * fallback; the engine still applies its own conservative preflight. */
+export function volumeAllocatableBytes(volume: Volume): number {
+  return Math.max(0, volume.allocatable_bytes ?? volume.free_bytes);
 }
 
 /** Enumerate the PS5's mounted storage volumes (internal + extended), with
@@ -860,12 +873,12 @@ export async function installFreeBytes(
       real.find((v) => v.path === "/user") ??
       real.find((v) => v.path === "/data");
     if (internal) {
-      free += Math.max(0, internal.free_bytes);
+      free += volumeAllocatableBytes(internal);
       counted = true;
     }
     for (const v of real) {
       if (v.path.startsWith("/mnt/ext")) {
-        free += Math.max(0, v.free_bytes);
+        free += volumeAllocatableBytes(v);
         counted = true;
       }
     }

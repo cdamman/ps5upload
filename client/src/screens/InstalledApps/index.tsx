@@ -450,7 +450,11 @@ function Section({
 
 // ── Screen ───────────────────────────────────────────────────────────────────
 
-export default function InstalledAppsScreen() {
+export default function InstalledAppsScreen({
+  embedded = false,
+}: {
+  embedded?: boolean;
+}) {
   const tr = useTr();
   const host = useConnectionStore((s) => s.host);
   // Kernel R/W = a jailbroken entry point (kstuff) is active. Without it,
@@ -872,8 +876,8 @@ export default function InstalledAppsScreen() {
   }, [installed, onlyUnplayed, sortByPlaytime, playByHost, host]);
 
   return (
-    <div className="flex flex-col gap-5 p-6">
-      <PageHeader
+    <div className={`flex flex-col gap-5 ${embedded ? "" : "p-6"}`}>
+      {!embedded && <PageHeader
         icon={Gamepad2}
         title={tr("installed_apps_title", undefined, "Installed Apps")}
         loading={loading}
@@ -894,7 +898,21 @@ export default function InstalledAppsScreen() {
             {tr("refresh", undefined, "Refresh")}
           </Button>
         }
-      />
+      />}
+      {embedded && (
+        <div className="flex justify-end">
+          <Button
+            variant="secondary"
+            size="sm"
+            leftIcon={<RefreshCw size={12} />}
+            onClick={() => void refresh()}
+            disabled={loading || !host?.trim()}
+            loading={loading}
+          >
+            {tr("refresh", undefined, "Refresh")}
+          </Button>
+        </div>
+      )}
 
       <ConnectionGate require="payload">
         {/* kstuff status — games can't install or launch without kernel R/W.

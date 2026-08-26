@@ -917,7 +917,11 @@ export default function SettingsScreen() {
             top-level route (/audit-log) under Diagnostics. AuditLogPanel
             removed too. */}
         <Section
-          title={tr("settings_section_schedules", undefined, "Schedules")}
+          title={tr(
+            "settings_section_schedules",
+            undefined,
+            "In-app reminders",
+          )}
           full
         >
           <SchedulesPanel />
@@ -975,7 +979,7 @@ function SchedulesPanel() {
         {tr(
           "schedules_caveat",
           undefined,
-          "Schedules fire only while ps5upload is open. For true overnight automation, set a system cron job that hits the engine HTTP API instead.",
+          "These are in-app reminders, not background automation. They fire only while ps5upload is open; closing the app stops them. For unattended overnight actions, use a trusted local system scheduler or keep the app open.",
         )}
       </p>
       {schedules.length > 0 && (
@@ -1064,7 +1068,11 @@ function SchedulesPanel() {
           ]}
           block={false}
           className="text-xs"
-          aria-label={tr("settings_section_schedules", undefined, "Schedules")}
+          aria-label={tr(
+            "settings_section_schedules",
+            undefined,
+            "In-app reminders",
+          )}
         />
         <button
           type="button"

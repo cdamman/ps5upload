@@ -45,6 +45,7 @@ import { LiveRegion } from "../components/LiveRegion";
 import { SkipNav } from "../components/SkipNav";
 import { TabBottomNav } from "./TabNav";
 import Sidebar from "./Sidebar";
+import NavigationControls from "./NavigationControls";
 import { useWindowStatePersistence } from "../lib/windowState";
 import { mgmtAddr, hostOf } from "../lib/addr";
 import { safeGetItem, safeSetItem } from "../lib/safeStorage";
@@ -758,19 +759,22 @@ function useRoutePersistence() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Debounced write of the current pathname.
+  // Debounced write of the current view, including a workspace tab encoded in
+  // the query string (for example /games?tab=files). Restoring only pathname
+  // made every workspace reopen its default view and discarded the user's
+  // place even though Back/Forward treated the tabs as distinct history.
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (SKIP_RESTORE_ROUTES.has(location.pathname)) return;
     const id = window.setTimeout(() => {
       try {
-        safeSetItem(LAST_ROUTE_KEY, location.pathname);
+        safeSetItem(LAST_ROUTE_KEY, `${location.pathname}${location.search}`);
       } catch {
         // best-effort
       }
     }, 500);
     return () => window.clearTimeout(id);
-  }, [location.pathname]);
+  }, [location.pathname, location.search]);
 }
 
 function AndroidStorageAccessBanner() {
@@ -990,11 +994,12 @@ export default function AppShell() {
       <LocalPathPicker />
       {/* v5 mobile top bar — kept slim; primary nav is the bottom
           tab bar. Only renders below md. */}
-      <div className="h-top-bar flex items-center gap-2 border-b border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 pb-2 pt-[calc(env(safe-area-inset-top)_+_0.5rem)] md:hidden">
+      <div className="h-top-bar flex items-center gap-2 border-b border-[var(--color-border)] bg-[var(--color-surface-raised)] px-3 pb-2 pt-[calc(env(safe-area-inset-top)_+_0.5rem)] shadow-sm md:hidden">
+        <NavigationControls />
         <img
           src="/logo-square.png"
           alt="PS5Upload"
-          className="h-8 w-8 rounded-md"
+          className="h-8 w-8 rounded-[0.6rem]"
         />
         <span className="text-base font-bold tracking-tight">PS5Upload</span>
       </div>
@@ -1008,7 +1013,7 @@ export default function AppShell() {
         <main
           id="main"
           tabIndex={-1}
-          className="flex min-w-0 flex-1 flex-col overflow-hidden outline-none"
+          className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[color-mix(in_oklab,var(--color-surface)_96%,var(--color-surface-2)_4%)] outline-none"
         >
           {/* Console tab strip — one tab per PS5; switches the viewed console
               while every console's uploads/installs keep running in their own
@@ -1017,6 +1022,12 @@ export default function AppShell() {
           {/* Slim, dismissible "update available" bar (the auto-check already
               ran on mount). Pinned above the scroll area so it stays visible. */}
           <UpdateToast />
+          {/* Browser-style history for a desktop app: route and workspace-tab
+              changes are first-class views, so users can retrace a workflow
+              without reopening More or rebuilding a search. */}
+          <div className="hidden h-10 items-center border-b border-[var(--color-border)] bg-[var(--color-surface-raised)] px-3 md:flex">
+            <NavigationControls />
+          </div>
           {/* Vertical scroll only. overflow-x-hidden is a backstop: the
               index.css width safety net makes content fit, but this guarantees
               the page can never scroll sideways. Nested blocks that are meant
